@@ -1,0 +1,131 @@
+# ========================
+# OS & Editor
+# ========================
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# ========================
+# Frontend (Vue + Pinia + Vite + Node.js)
+# ========================
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/.nuxt/
+frontend/.output/
+frontend/.cache/
+frontend/coverage/
+frontend/*.local
+
+# ========================
+# Backend (Python + FastAPI + LangChain + uv)
+# ========================
+backend/__pycache__/
+backend/*.py[cod]
+backend/*.so
+backend/.venv/
+backend/.env
+backend/.pytest_cache/
+backend/.coverage
+backend/.mypy_cache/
+backend/.pyre/
+backend/.pytype/
+backend/htmlcov/
+backend/dist/
+backend/build/
+backend/*.egg-info/
+backend/*.egg
+backend/uv.lock
+
+# ========================
+# Python packaging & tools
+# ========================
+*.py[cod]
+__pycache__/
+*.egg-info/
+.eggs/
+*.egg
+.Python
+develop-eggs/
+downloads/
+eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.whl
+.installed.cfg
+MANIFEST
+
+# ========================
+# Environments
+# ========================
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+env/
+
+# ========================
+# Testing & Coverage
+# ========================
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+coverage.xml
+nosetests.xml
+*.cover
+
+# ========================
+# Type checkers
+# ========================
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+
+# ========================
+# LangChain / LangGraph
+# ========================
+.langgraph_api/
+
+# ========================
+# uv
+# ========================
+uv.lock
+
+# ========================
+# Jupyter
+# ========================
+.ipynb_checkpoints/
+
+# ========================
+# Documentation
+# ========================
+docs/_build/
+/site
+
+# ========================
+# Logs
+# ========================
+*.log
+
+# ========================
+# Claude Code
+# ========================
+.claude/
