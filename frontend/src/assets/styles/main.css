@@ -1,3 +1,4 @@
+@import './fonts.css';
 @import './variables.css';
 
 *, *::before, *::after {
@@ -8,7 +9,7 @@
 
 html, body {
   height: 100%;
-  font-family: var(--font-family);
+  font-family: var(--font-family-base);
   font-size: var(--font-size-md);
   color: var(--foreground-primary);
   background: var(--surface-primary);
