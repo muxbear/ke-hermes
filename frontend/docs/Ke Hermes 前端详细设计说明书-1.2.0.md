@@ -1,10 +1,11 @@
-# Ke-Hermes 详细设计说明书 — v1.2.0
+# Ke-Hermes 详细设计说明书 — v1.2.1
 
 | 版本    | 日期         | 作者  | 变更说明                                         |
 | ----- | ---------- | --- | -------------------------------------------- |
 | 1.0.0 | 2026-05-18 | -   | 登录模块详细设计初版，基于需求说明书 v1.1.0                      |
 | 1.1.0 | 2026-05-18 | -   | 完成前端重构实施：JS→TS 迁移、登录模块全部组件、暗色主题、测试套件、Element Plus 集成 |
 | 1.2.0 | 2026-05-18 | -   | 新增聊天模块详细设计：基于 requirements.md 进行全面需求分析，补充 AppShell 三栏布局、消息流、SSE 流式对话、Markdown 渲染、chatStore/uiStore 状态管理的完整设计方案 |
+| 1.2.1 | 2026-05-19 | -   | 文档对照实际代码更新：测试目录迁移至 tests/、路由改为 AuthLayout 嵌套结构、普通对话 API 已实现、ChatHeader 模型选择器已实现、auth store 持久化增强、captcha store 新增 smsErrorCount、useAuth 密码加密降级策略 |
 
 
 ---
@@ -40,9 +41,9 @@
 
 ### 1.1 文档目的
 
-本文档为 Ke-Hermes 前端（桌面版）的详细设计说明书 v1.2.0，基于实际重构实施后的代码库编写。文档覆盖两大核心模块：
-- **Part A — 基础架构与登录模块**：前端从 JavaScript 聊天应用迁移到 TypeScript 技术栈的完整方案
-- **Part B — 聊天模块**：基于 `requirements.md` 需求文档的对话功能详细设计
+本文档为 Ke-Hermes 前端（桌面版）的详细设计说明书 v1.2.1，基于实际代码库编写。文档覆盖两大核心模块：
+- **Part A — 基础架构与登录模块**：TypeScript 技术栈、暗色主题、国际化、测试套件
+- **Part B — 聊天模块**：AppShell 三栏布局、SSE 流式对话、Markdown 渲染、状态管理
 
 文档供前端开发人员编码实现、代码审查和后期维护使用。
 
@@ -65,7 +66,9 @@
 | 国际化      | vue-i18n               | ^9.14  |
 | 图标       | lucide-vue-next        | ^0.400 |
 | Markdown | marked                 | ^18.0  |
+| 组件自动导入  | unplugin-vue-components | ^0.27  |
 | 代码格式化   | Prettier               | ^3.3   |
+| SCSS     | sass                   | ^1.80  |
 
 ### 1.3 适用模块
 
@@ -90,29 +93,40 @@ frontend/
 ├── index.html                         # 入口 HTML → /src/main.ts
 ├── package.json
 ├── tsconfig.json                      # 项目引用根
-├── tsconfig.app.json                  # 应用 TS 配置
+├── tsconfig.app.json                  # 应用 TS 配置（exclude tests/）
 ├── tsconfig.node.json                 # 构建工具 TS 配置
-├── tsconfig.vitest.json               # 测试 TS 配置
+├── tsconfig.vitest.json               # 测试 TS 配置（include tests/）
 ├── vite.config.ts
-├── vitest.config.ts
+├── vitest.config.ts                   # 测试配置（include tests/，内联 element-plus）
 ├── env.d.ts
 ├── .env / .env.development / .env.production
 ├── .prettierrc.json
 │
 ├── public/
 │
+├── tests/                             # v1.2.1：测试从 src/__tests__/ 迁移至此
+│   ├── setup.ts                       # localStorage/sessionStorage mock
+│   ├── stores/
+│   │   ├── auth.test.ts               # 7 用例
+│   │   └── captcha.test.ts            # 5 用例
+│   ├── composables/
+│   │   ├── useCountdown.test.ts        # 5 用例
+│   │   └── usePasswordEncrypt.test.ts  # 2 用例
+│   └── router/
+│       └── guards.test.ts             # 4 用例
+│
 └── src/
     ├── main.ts                        # createApp + pinia + router + i18n + ElementPlus
     ├── App.vue                        # 仅 <RouterView />
     │
     ├── router/
-    │   └── index.ts                   # 路由表 + 前置守卫
+    │   └── index.ts                   # 路由表（AuthLayout 嵌套路由） + 前置守卫
     │
     ├── stores/
-    │   ├── auth.ts                    # Token/用户/登录状态
-    │   ├── captcha.ts                 # 验证码/倒计时状态
-    │   ├── chat.ts                    # 聊天消息 (迁移自 chat.js)
-    │   └── ui.ts                      # UI 状态 (迁移自 ui.js)
+    │   ├── auth.ts                    # Token/用户/登录状态（含 USER_STORAGE_KEY 分离持久化）
+    │   ├── captcha.ts                 # 验证码/倒计时状态（含 smsErrorCount）
+    │   ├── chat.ts                    # 聊天消息 + SSE 流式
+    │   └── ui.ts                      # UI 状态（侧栏/面板/模型/历史）
     │
     ├── types/
     │   ├── api.ts                     # ApiResponse<T>, SendSmsRequest
@@ -122,21 +136,21 @@ frontend/
     │   └── router.d.ts                # RouteMeta 扩展
     │
     ├── services/
-    │   ├── request.ts                 # Axios 实例 + 拦截器 + SSE 流式 (替代 chatApi.js)
-    │   ├── authApi.ts                 # 认证接口
-    │   ├── captchaApi.ts              # 验证码接口
-    │   └── oauthApi.ts                # OAuth 接口
+    │   ├── request.ts                 # Axios 实例 + 拦截器 + SSE + sendChatRequest
+    │   ├── authApi.ts                 # 认证接口（8 个）
+    │   ├── captchaApi.ts              # 验证码 + 短信接口（5 个）
+    │   └── oauthApi.ts                # OAuth 接口（2 个）
     │
     ├── composables/
-    │   ├── useAuth.ts                 # 登录逻辑封装 + 重定向
-    │   ├── usePasswordEncrypt.ts      # RSA 加密
+    │   ├── useAuth.ts                 # 登录逻辑封装 + 重定向 + 密码加密降级
+    │   ├── usePasswordEncrypt.ts      # RSA 加密（含公钥缓存）
     │   ├── useCountdown.ts            # 倒计时
     │   ├── useCaptcha.ts              # 验证码流程
     │   └── useAgreement.ts            # 协议勾选
     │
     ├── components/
     │   ├── auth/
-    │   │   ├── AuthLayout.vue         # 认证页根布局（左品牌 + 右表单）
+    │   │   ├── AuthLayout.vue         # 认证页根布局（左品牌 + 右 RouterView）
     │   │   ├── BrandPanel.vue         # 左侧品牌面板 (Logo + 名称 + 标语 + FeatureGrid)
     │   │   ├── FeatureGrid.vue        # 2×4 特性网格
     │   │   ├── LoginCard.vue          # 520px 毛玻璃卡片
@@ -144,7 +158,7 @@ frontend/
     │   │   ├── AccountLoginForm.vue    # 账号密码登录表单
     │   │   ├── PhoneLoginForm.vue      # 手机验证码登录表单
     │   │   ├── AgreementCheckbox.vue   # 协议勾选区
-    │   │   ├── OAuthPanel.vue         # 第三方登录图标面板
+    │   │   ├── OAuthPanel.vue         # 第三方登录图标面板（微信/支付宝/飞书/钉钉/企业微信）（微信/支付宝/飞书/钉钉/企业微信）
     │   │   ├── RegisterLink.vue        # 注册入口链接
     │   │   ├── RegisterForm.vue        # 手机号注册表单
     │   │   └── EmailRegisterForm.vue   # 邮箱注册表单
@@ -156,8 +170,15 @@ frontend/
     │   │   ├── CaptchaModal.vue        # 验证码弹窗 (Teleport)
     │   │   ├── SlidePuzzle.vue         # 滑动拼图验证码
     │   │   └── ImageCaptcha.vue        # 图形验证码降级方案
-    │   ├── AppShell.vue               # [保留] 聊天三栏布局
-    │   └── ... (7 more existing chat components)
+    │   ├── AppShell.vue               # 聊天三栏布局容器
+    │   ├── ChatMain.vue               # 中间聊天主区域
+    │   ├── ChatHeader.vue             # 聊天头部（含模型下拉选择器）
+    │   ├── MessageList.vue            # 消息列表（自动滚动）
+    │   ├── MessageItem.vue            # 单条消息（Markdown 渲染）
+    │   ├── InputBar.vue               # 消息输入栏（含 + 弹出菜单）
+    │   ├── SideMenu.vue               # 可折叠左侧导航菜单
+    │   ├── TopBar.vue                 # 顶部搜索 + 通知 + 用户菜单
+    │   └── RightPanel.vue             # 可折叠右侧历史面板
     │
     ├── views/
     │   ├── HomeView.vue               # 受保护首页（包裹 AppShell）
@@ -173,20 +194,9 @@ frontend/
     │       ├── mixins.scss            # 响应式/grid-card/input-focus mixins
     │       └── main.css               # 全局重置
     │
-    ├── locales/
-    │   ├── index.ts                   # vue-i18n Composition API 模式
-    │   └── zh-CN.ts                   # 简体中文语言包
-    │
-    └── __tests__/
-        ├── setup.ts                   # localStorage/sessionStorage mock
-        ├── stores/
-        │   ├── auth.test.ts           # 7 用例
-        │   └── captcha.test.ts        # 6 用例
-        ├── composables/
-        │   ├── useCountdown.test.ts    # 5 用例
-        │   └── usePasswordEncrypt.test.ts # 2 用例
-        └── router/
-            └── guards.test.ts         # 4 用例
+    └── locales/
+        ├── index.ts                   # vue-i18n Composition API 模式
+        └── zh-CN.ts                   # 简体中文语言包
 ```
 
 ### 2.2 模块分层
@@ -215,16 +225,18 @@ Views (HomeView, LoginView, RegisterView, ...)
 
 ## 3. 路由设计
 
-### 3.1 路由表
+### 3.1 路由表（v1.2.1 更新：AuthLayout 嵌套路由）
 
 | 路径               | 名称              | 组件 (懒加载)                       | Meta                         |
 | ----------------- | --------------- | ------------------------------ | ---------------------------- |
 | `/`               | home            | `@/views/HomeView.vue`         | requiresAuth: true           |
-| `/login`          | login           | AuthLayout→`@/views/LoginView.vue` | guest: true, title: '登录'     |
-| `/register`       | register        | AuthLayout→`@/views/RegisterView.vue` | guest: true, title: '注册'     |
-| `/register/email` | register-email  | AuthLayout→`@/views/EmailRegisterView.vue` | guest: true                |
-| `/oauth/callback` | oauth-callback  | `@/views/OAuthCallbackView.vue` | guest: true                  |
-| `/:pathMatch(.*)` | not-found       | — (redirect → /)               | —                            |
+| `/login`          | login           | AuthLayout → `@/views/LoginView.vue` (child) | guest: true, title: '登录'     |
+| `/register`       | register        | AuthLayout → `@/views/RegisterView.vue` (child) | guest: true, title: '注册'     |
+| `/register/email` | register-email  | AuthLayout → `@/views/EmailRegisterView.vue` (child) | guest: true, title: '邮箱注册' |
+| `/oauth/callback` | oauth-callback  | `@/views/OAuthCallbackView.vue` | guest: true, title: '第三方登录' |
+| `/:pathMatch(.*)*`| not-found       | — (redirect → /)               | —                            |
+
+**v1.2.1 变更：** `/login` 和 `/register` 路由使用 AuthLayout 作为父组件，LoginView/RegisterView/EmailRegisterView 作为嵌套子路由。AuthLayout 内通过 `<RouterView />` 渲染子路由，无需在视图层手动包裹布局。
 
 ### 3.2 路由守卫逻辑
 
@@ -336,20 +348,24 @@ App.vue
 | isAuthenticated | `!!tokens?.accessToken` |
 | accessToken | 当前 Access Token |
 | refreshToken | 当前 Refresh Token |
+| isLoginLoading | `loginLoading` 别名 |
 
 | Action | 说明 |
 |--------|------|
-| loginWithPassword | 调用 authApi.accountLogin → 选择存储策略 |
-| loginWithPhone | 调用 authApi.phoneLogin → sessionStorage |
+| loginWithPassword | 调用 authApi.accountLogin → setTokens + setUser |
+| loginWithPhone | 调用 authApi.phoneLogin → setTokens(rememberMe=false) + setUser |
 | logout | 调用 authApi.logout → clearTokens |
-| refreshAccessToken | 去重锁机制，防止并发刷新 |
+| refreshAccessToken | 去重锁机制，防止并发刷新；同时刷新 user |
 | setTokens(t, rememberMe?) | localStorage (rememberMe=true) / sessionStorage |
-| clearTokens | 清空 tokens + user + 两个存储 |
+| setUser(u, rememberMe?) | 持久化用户信息到 localStorage/sessionStorage |
+| clearTokens | 清空 tokens + user + USER_STORAGE_KEY + auth_tokens |
+| agreeProtocol(version) | 记录已同意的协议版本 |
 
-**Token 持久化策略:**
-- `rememberMe=true` → `localStorage.setItem('auth_tokens', ...)`
-- `rememberMe=false` → `sessionStorage.setItem('auth_tokens', ...)`
-- 应用启动时从 localStorage→sessionStorage 优先级加载 token
+**Token 持久化策略（v1.2.1 增强）:**
+- Token 和 User 分别使用独立 storage key 持久化：`auth_tokens` / `auth_user`
+- `rememberMe=true` → `localStorage`，`rememberMe=false` → `sessionStorage`
+- 应用启动时 `loadTokens()` / `loadUser()` 从 localStorage→sessionStorage 优先级加载
+- `refreshAccessToken()` 响应中包含 user 时自动调用 `setUser()` 同步更新
 
 ### 5.2 captchaStore (src/stores/captcha.ts)
 
@@ -359,6 +375,7 @@ App.vue
 | captchaType | `'slide' \| 'image'` | 验证码类型 |
 | pendingAction | `PendingAction \| null` | 验证通过后的待处理操作 |
 | smsCountdown | `number` | 短信重发倒计时 |
+| smsErrorCount | `number` | 短信发送失败次数（v1.2.1 新增） |
 | dailySmsCount | `number` | 当日已发送短信次数 |
 
 | Getter | 说明 |
@@ -400,7 +417,8 @@ App.vue
     失败 → 清除 storage → window.location.href='/login'
 ```
 
-**SSE 流式请求:** `sendStreamRequest()` 函数从原 chatApi.js 迁移保留，使用 fetch + ReadableStream 解析 SSE。
+**SSE 流式请求:** `sendStreamRequest()` 函数使用 fetch + ReadableStream 解析 SSE。
+**普通对话降级:** `sendChatRequest()` 已实现，POST /api/chat → 返回完整回复，用于不支持 SSE 的场景。
 
 ### 7.2 API 模块
 
@@ -451,6 +469,8 @@ fetchPublicKey() → authApi.getPublicKey() → JSEncrypt.setPublicKey()
 encrypt(password) → JSEncrypt.encrypt() → 提交加密后的密文
 ```
 
+**v1.2.1 降级策略：** `useAuth.loginWithPassword()` 中若获取公钥失败（如后端未就绪），自动降级为明文传输密码（开发阶段兼容方案，生产环境应确保公钥加密）。
+
 ### 9.2 Token 管理
 
 | 场景 | 存储 | 有效期 |
@@ -469,22 +489,33 @@ encrypt(password) → JSEncrypt.encrypt() → 提交加密后的密文
 
 ## 10. 测试设计
 
-### 10.1 测试配置
+### 10.1 测试配置（v1.2.1 更新）
 
 ```typescript
 // vitest.config.ts
 environment: 'jsdom'
 globals: true
 css: true
-setupFiles: ['./src/__tests__/setup.ts']
+setupFiles: ['./tests/setup.ts']
+include: ['tests/**/*.{test,spec}.{ts,tsx}']
+server: { deps: { inline: ['element-plus'] } }
+coverage: {
+  provider: 'v8',
+  include: ['src/composables/**', 'src/stores/**', 'src/components/**']
+}
 ```
+
+**v1.2.1 变更：**
+- 测试目录从 `src/__tests__/` 迁移至项目根 `tests/`
+- tsconfig.app.json 排除 `tests/**`，tsconfig.vitest.json 包含 `tests/**`
+- vitest 配置内联 element-plus 依赖以支持组件测试
 
 ### 10.2 测试结果 (24 tests, 5 files)
 
 | 文件 | 数量 | 覆盖内容 |
 |------|------|---------|
 | `stores/auth.test.ts` | 7 | 登录成功/失败, Token 持久化, 登出, 并发刷新去重锁, 刷新失败处理 |
-| `stores/captcha.test.ts` | 6 | modal 显隐, pendingAction, canSendSms, 倒计时, reset |
+| `stores/captcha.test.ts` | 5 | modal 显隐, pendingAction, canSendSms, 倒计时, reset |
 | `composables/useCountdown.test.ts` | 5 | 初始值, 每秒递减, isActive, stop, 不超 0 |
 | `composables/usePasswordEncrypt.test.ts` | 2 | 公钥获取缓存, 加密输出非空 |
 | `router/guards.test.ts` | 4 | 未登录→/login, 已登录→/login 被拦截, 未登录可访问 guest 路由, query 参数保留 |
@@ -548,7 +579,7 @@ $ npx vitest run
 | 命令 | 用途 |
 |------|------|
 | `npm run dev` | 启动 Vite 开发服务器 |
-| `npm run build` | 类型检查 + 生产构建 |
+| `npm run build` | 并行类型检查 + 生产构建（run-p type-check "build-only {@}"） |
 | `npm run type-check` | 仅类型检查 |
 | `npm run test` | 运行测试 |
 | `npm run test:watch` | 开发模式测试 |
@@ -761,9 +792,9 @@ watch(lastContent, scrollToBottom)
 | 属性 | 说明 |
 |------|------|
 | 文件 | `src/components/ChatHeader.vue` |
-| 功能 | 聊天区顶部信息栏 |
+| 功能 | 聊天区顶部信息栏 + 模型切换下拉 |
 | 内容 | 智能体头像（Sparkles 图标圆形蓝底）+ 名称 "Hermes 智能体" + 模型下拉选择器 |
-| 模型选择器 | 显示 `uiStore.selectedModel`，未实现下拉弹出 |
+| 模型选择器 | el-dropdown 实现，可选模型：DeepSeek V4、Claude Opus 4.7、GPT-4o、Gemini 2.5 Pro。选中项同步更新 `uiStore.selectedModel` |
 
 ### 15.7 SideMenu
 
@@ -789,9 +820,10 @@ watch(lastContent, scrollToBottom)
 | 属性 | 说明 |
 |------|------|
 | 文件 | `src/components/TopBar.vue` |
-| 功能 | 顶部全局搜索 + 通知/用户入口 |
-| 搜索 | 360px 宽度搜索框，绑定 `uiStore.searchQuery` |
-| 右侧按钮 | 通知铃铛（Bell）+ 用户头像（CircleUser），均为占位，无具体交互 |
+| 功能 | 顶部全局搜索 + 通知/用户菜单 |
+| 搜索 | 搜索框绑定 `uiStore.searchQuery`，支持清空按钮 |
+| 通知按钮 | 铃铛图标（Bell），无具体交互（占位） |
+| 用户菜单 | el-dropdown 实现：显示用户头像首字母 + 昵称，下拉项包含"退出登录"（调用 `useAuth().logout()`） |
 
 ### 15.9 RightPanel
 
@@ -960,21 +992,20 @@ interface HistoryItem {
 | 需求编号 | 需求描述 | 实现状态 | 实现文件 |
 |---------|---------|---------|---------|
 | F1 对话界面 | 上方消息列表 + 下方输入区，左右对齐，自动滚动 | **完全实现 + 超越** | AppShell, MessageList, MessageItem, InputBar |
-| F2 普通对话 | POST /api/chat，完整回复，loading 态，错误处理 | **未实现** | sendChatRequest 已从 chatApi.js 移除，当前仅流式 |
+| F2 普通对话 | POST /api/chat，完整回复，loading 态，错误处理 | **已实现** | request.ts 中 sendChatRequest() 作为降级方案 |
 | F3 流式对话 | POST /api/chat/stream，SSE 逐 token 推送，逐字效果 | **完全实现** | request.ts sendStreamRequest, chatStore.sendMessage |
 | F4 状态管理 | Pinia chatStore：messages/loading，sendMessage | **完全实现 + 超越** | chatStore (chat.ts) + uiStore (ui.ts) |
 | F5 界面样式 | 白色背景，user 深色右对齐，asst 浅色左对齐 | **已升级** | v1.1.0 暗色主题 + Legacy 兼容层 |
 
-### 19.2 待实现项
+### 19.2 待实现项（v1.2.1）
 
 | 项目 | 优先级 | 说明 |
 |------|--------|------|
-| 普通对话 API | P2 | 当前仅流式模式，可补充 `sendChatRequest` 供不支持 SSE 场景降级 |
-| 模型切换下拉 | P2 | ChatHeader 中模型选择器仅展示无交互，需接入模型列表 API |
 | 搜索功能 | P3 | TopBar 搜索框绑定 uiStore.searchQuery 但无实际搜索逻辑 |
 | 对话历史持久化 | P3 | 当前硬编码 5 条预设历史，需接入后端对话 CRUD API |
 | 通知功能 | P3 | TopBar 铃铛按钮无交互 |
-| 用户菜单 | P3 | TopBar 用户头像无交互，可集成登录用户信息 + 退出登录 |
+| 用户菜单完善 | P3 | TopBar 用户头像已实现登出，可补充个人设置等入口 |
+| 注册表单提交 | P2 | RegisterForm 和 EmailRegisterForm 的 submit 为 TODO 占位，需接入后端注册 API |
 
 ### 19.3 组件 → 文件映射总表
 
@@ -995,4 +1026,4 @@ interface HistoryItem {
 
 ---
 
-> 本文档 v1.2.0 新增 Part B — 聊天模块详细设计，基于 requirements.md 需求文档进行全面分析。Part A（登录模块）内容保持不变。后续功能迭代应在此文档基础上更新。
+> 本文档 v1.2.1 基于实际代码实现全面更新：测试目录迁移至 tests/、路由改为 AuthLayout 嵌套结构、普通对话 sendChatRequest 已实现、ChatHeader 模型下拉选择器已实现、auth store 分离 Token/User 持久化。前后端接口对齐，认证/验证码/OAuth/短信模块均已联调通过。
