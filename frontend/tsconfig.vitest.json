@@ -3,7 +3,7 @@
   "compilerOptions": {
     "composite": true
   },
-  "include": ["src/__tests__/**/*.ts", "src/__tests__/**/*.tsx"],
+  "include": ["tests/**/*.ts", "tests/**/*.tsx"],
   "references": [
     { "path": "./tsconfig.app.json" }
   ]
