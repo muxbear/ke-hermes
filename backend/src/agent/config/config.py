@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     DASHSCOPE_EMBEDDING: str = os.getenv("DASHSCOPE_EMBEDDING")
     DASHSCOPE_BASE_URL: str = os.getenv("DASHSCOPE_BASE_URL")
 
+    # ---- Tavily ----
+    TAVILY_API_KEY: str = os.getenv("TAVILY_API_KEY")
+
     # ---- Server ----
     HOST: str = os.getenv("HOST", "127.0.0.1")
     PORT: int = os.getenv("PORT", 8000)
