@@ -66,7 +66,8 @@ async def _record_login(session: AsyncSession, account: str, success: bool, ip: 
 async def _incr_fail(account: str, store: KeyValueStore):
     from agent.config import settings
 
-    count = await store.incr(f"login:fail:{account}")
+    info = await _get_fail_info(account, store)
+    count = info.failCount + 1
     if count >= settings.LOGIN_MAX_FAILS:
         until = int(time.time()) + settings.LOGIN_LOCK_MINUTES * 60
         await store.set(f"login:fail:{account}", f"{count}:{until}", ttl=settings.LOGIN_LOCK_MINUTES * 60)
