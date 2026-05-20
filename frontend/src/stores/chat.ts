@@ -12,6 +12,7 @@ export interface ChatMessage {
 export const useChatStore = defineStore('chat', () => {
   const messages = ref<ChatMessage[]>([])
   const loading = ref(false)
+  const threadId = ref<string | null>(null)
   let nextId = 1
 
   function addMessage(role: 'user' | 'assistant', content = '', streaming = false): ChatMessage {
@@ -29,12 +30,16 @@ export const useChatStore = defineStore('chat', () => {
 
     try {
       await sendStreamRequest(text.trim(), {
+        threadId: threadId.value,
         onToken(token: string) {
           // 通过响应式数组修改，确保 Vue 跟踪变化
           const idx = messages.value.findIndex(m => m.id === assistantId)
           if (idx !== -1) {
             messages.value[idx] = { ...messages.value[idx], content: messages.value[idx].content + token }
           }
+        },
+        onThreadId(id: string) {
+          threadId.value = id
         },
         onDone() {
           const idx = messages.value.findIndex(m => m.id === assistantId)
@@ -72,7 +77,8 @@ export const useChatStore = defineStore('chat', () => {
   function clearMessages() {
     messages.value = []
     loading.value = false
+    threadId.value = null
   }
 
-  return { messages, loading, sendMessage, clearMessages }
+  return { messages, loading, threadId, sendMessage, clearMessages }
 })

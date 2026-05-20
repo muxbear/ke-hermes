@@ -134,36 +134,71 @@ export class ApiError extends Error {
 
 export default instance
 
+function chatAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  }
+  const token = getAccessToken()
+  if (token) {
+    headers.Authorization = `Bearer ${token}`
+  }
+  return headers
+}
+
+function parseSseDataLine(
+  line: string,
+  onToken: (token: string) => void,
+  onThreadId?: (threadId: string) => void,
+): void {
+  if (!line.startsWith('data: ')) return
+  try {
+    const json = JSON.parse(line.slice(6)) as { token?: string; thread_id?: string }
+    if (json.token) {
+      onToken(json.token)
+    }
+    if (json.thread_id && onThreadId) {
+      onThreadId(json.thread_id)
+    }
+  } catch {
+    // skip malformed SSE line
+  }
+}
+
 /**
  * SSE 流式请求
  */
 export async function sendStreamRequest(
   message: string,
-  callbacks: {
+  options: {
+    threadId?: string | null
     onToken: (token: string) => void
+    onThreadId?: (threadId: string) => void
     onDone: () => void
     onError: (err: Error) => void
   },
 ): Promise<void> {
+  const { threadId, onToken, onThreadId, onDone, onError } = options
+
+  const body: { message: string; thread_id?: string } = { message }
+  if (threadId) {
+    body.thread_id = threadId
+  }
+
   const baseURL = import.meta.env.VITE_API_BASE_URL || '/api'
   const response = await fetch(`${baseURL}/chat/stream`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message }),
+    headers: chatAuthHeaders(),
+    body: JSON.stringify(body),
   })
 
   if (!response.ok) {
     const errorText = await response.text()
-    console.error('[SSE] HTTP error:', response.status, errorText)
     throw new Error(`HTTP ${response.status}: ${errorText}`)
   }
 
-  console.log('[SSE] Response OK, content-type:', response.headers.get('content-type'))
-
   const reader = response.body?.getReader()
   if (!reader) {
-    console.error('[SSE] No ReadableStream')
-    callbacks.onError(new Error('ReadableStream not supported'))
+    onError(new Error('ReadableStream not supported'))
     return
   }
 
@@ -173,62 +208,48 @@ export async function sendStreamRequest(
   try {
     while (true) {
       const { done, value } = await reader.read()
-      if (done) {
-        console.log('[SSE] Stream done')
-        break
-      }
+      if (done) break
 
-      const chunk = decoder.decode(value, { stream: true })
-      console.log('[SSE] chunk:', chunk)
-      buffer += chunk
+      buffer += decoder.decode(value, { stream: true })
       const lines = buffer.split('\n')
       buffer = lines.pop() || ''
 
       for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          try {
-            const json = JSON.parse(line.slice(6))
-            console.log('[SSE] token:', json.token)
-            if (json.token) {
-              callbacks.onToken(json.token)
-            }
-          } catch {
-            console.log('[SSE] skip line:', line)
-          }
-        }
+        parseSseDataLine(line, onToken, onThreadId)
       }
     }
 
-    if (buffer.startsWith('data: ')) {
-      try {
-        const json = JSON.parse(buffer.slice(6))
-        if (json.token) {
-          callbacks.onToken(json.token)
-        }
-      } catch {
-        // skip
+    if (buffer.trim()) {
+      for (const line of buffer.split('\n')) {
+        parseSseDataLine(line, onToken, onThreadId)
       }
     }
   } catch (err) {
-    console.error('[SSE] error:', err)
-    callbacks.onError(err instanceof Error ? err : new Error(String(err)))
+    onError(err instanceof Error ? err : new Error(String(err)))
     return
   }
 
-  console.log('[SSE] calling onDone')
-  callbacks.onDone()
+  onDone()
 }
 
 /**
  * 普通对话（非流式）— 降级方案
- * POST /api/chat → { response: string }
+ * POST /api/chat → { response, thread_id }
  */
-export async function sendChatRequest(message: string): Promise<string> {
+export async function sendChatRequest(
+  message: string,
+  threadId?: string | null,
+): Promise<{ response: string; threadId: string }> {
+  const body: { message: string; thread_id?: string } = { message }
+  if (threadId) {
+    body.thread_id = threadId
+  }
+
   const baseURL = import.meta.env.VITE_API_BASE_URL || '/api'
   const response = await fetch(`${baseURL}/chat`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message }),
+    headers: chatAuthHeaders(),
+    body: JSON.stringify(body),
   })
 
   if (!response.ok) {
@@ -236,6 +257,9 @@ export async function sendChatRequest(message: string): Promise<string> {
     throw new Error(`HTTP ${response.status}: ${errorText}`)
   }
 
-  const data = await response.json()
-  return data.response
+  const data = (await response.json()) as { response: string; thread_id: string }
+  return {
+    response: data.response,
+    threadId: data.thread_id,
+  }
 }
