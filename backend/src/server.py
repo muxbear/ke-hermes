@@ -13,11 +13,13 @@ from api import router
 from api.deps import set_store
 from core.store import create_store
 from db.engine import init_db
+from agent.graph import init_graph
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    await init_graph()
     store = await create_store()
     set_store(store)
     from core.security import _get_jwt_secret as init_jwt

@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     # ---- Database ----
     DATABASE_URL: str = os.getenv("DATABASE_URL")
 
+    # ---- Checkpoint Database
+    CHECKPOINT_DB_PATH: str = os.getenv("CHECKPOINT_DB_PATH", "./db/langgraph_checkpoints.db")
+
     # ---- JWT ----
     JWT_SECRET_KEY: str = ""
     JWT_ACCESS_EXPIRE: int = os.getenv("JWT_ACCESS_EXPIRE", 7200)

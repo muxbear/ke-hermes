@@ -6,7 +6,7 @@ from langchain_core.messages import HumanMessage
 from langchain_core.utils.uuid import uuid7
 from pydantic import BaseModel, Field
 
-from agent import graph
+from agent import get_graph
 
 router = APIRouter(prefix="/api")
 
@@ -29,7 +29,7 @@ class StreamToken(BaseModel):
 async def chat(req: ChatRequest):
     thread_id = req.thread_id or str(uuid7())
     config = {"configurable": {"thread_id": thread_id}}
-    result = await graph.ainvoke(
+    result = await get_graph().ainvoke(
         {"messages": [HumanMessage(content=req.message)]},
         config=config,
     )
@@ -46,7 +46,7 @@ async def chat_stream(req: ChatRequest):
     config = {"configurable": {"thread_id": thread_id}}
 
     async def event_generator():
-        async for event in graph.astream_events(
+        async for event in get_graph().astream_events(
             {"messages": [HumanMessage(content=req.message)]},
             config=config,
             version="v2",
