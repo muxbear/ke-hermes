@@ -16,6 +16,10 @@
    - [3.3 OAuth 关联表 user_oauths](#33-oauth-关联表-user_oauths)
    - [3.4 登录记录表 login_records](#34-登录记录表-login_records)
    - [3.5 LangGraph 检查点表](#35-langgraph-检查点表)
+       - [3.5.1 概述](#351-概述)
+       - [3.5.2 检查点表 checkpoints](#352-检查点表-checkpoints)
+       - [3.5.3 通道写入表 writes](#353-通道写入表-writes)
+       - [3.5.4 数据流](#354-数据流)
    - [3.6 ER 图](#36-er-图)
 4. [键值存储设计](#4-键值存储设计)
    - [4.1 架构概述](#41-架构概述)
@@ -273,20 +277,162 @@ CREATE INDEX ix_login_records_account ON login_records (account);
 
 ### 3.5 LangGraph 检查点表
 
-LangGraph 框架使用独立的 SQLite 数据库存储 Agent 对话检查点（短期记忆）。表结构由 `langgraph-checkpoint-sqlite` 库自动管理。
+LangGraph 框架使用独立的 SQLite 数据库存储 Agent 对话检查点（短期记忆），由 `langgraph-checkpoint-sqlite` 库的 `AsyncSqliteSaver` 自动管理表结构。该数据库包含 2 张表：`checkpoints`（检查点快照）和 `writes`（通道写入记录）。
+
+#### 3.5.1 概述
 
 | 属性 | 值 |
 |------|-----|
-| 数据库文件 | `./db/langgraph_checkpoints.sqlite` |
-| 配置项 | `CHECKPOINT_DB_PATH` 环境变量 |
+| 数据库文件 | `./db/langgraph_checkpoints.db` |
+| 配置项 | `CHECKPOINT_DB_PATH` 环境变量（默认 `./db/langgraph_checkpoints.db`） |
 | Python 类 | `AsyncSqliteSaver` (from `langgraph.checkpoint.sqlite.aio`) |
 | 驱动 | aiosqlite |
-| 初始化 | FastAPI lifespan 中调用 `init_graph()` |
+| 初始化 | `backend/src/agent/graph.py` → `init_graph()`，由 FastAPI lifespan 调用 |
+| 序列化格式 | msgpack（`type` 字段标识） |
 
-**与业务库隔离的原因**:
+**与业务库隔离的原因**：
 - LangGraph 的表结构和迁移周期独立于业务
 - 避免与业务表的命名冲突
-- 便于单独备份/清理对话历史
+- 便于单独备份/清理对话历史而不影响用户数据
+
+#### 3.5.2 检查点表 checkpoints
+
+**表名**: `checkpoints`
+**管理方**: `langgraph-checkpoint-sqlite` 库
+
+| 字段 | 类型 | 约束 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `thread_id` | TEXT | NOT NULL, PK | — | 对话线程唯一标识（对应 API 中的 `thread_id`） |
+| `checkpoint_ns` | TEXT | NOT NULL, PK | `''` | 检查点命名空间（当前均为空字符串，预留多租户/子图隔离） |
+| `checkpoint_id` | TEXT | NOT NULL, PK | — | 检查点唯一标识（UUID7，按时间有序） |
+| `parent_checkpoint_id` | TEXT | NULLABLE | — | 父检查点 ID，形成对话历史链表；首个检查点为 NULL |
+| `type` | TEXT | NULLABLE | — | 序列化格式标识（当前为 `msgpack`） |
+| `checkpoint` | BLOB | — | — | 检查点状态快照（msgpack 序列化的 Agent 状态） |
+| `metadata` | BLOB | — | — | 检查点元数据（msgpack 序列化，含 source、step、writes 等信息） |
+
+**建表 DDL**（由 `langgraph-checkpoint-sqlite` 自动创建）：
+
+```sql
+CREATE TABLE checkpoints (
+    thread_id         TEXT NOT NULL,
+    checkpoint_ns     TEXT NOT NULL DEFAULT '',
+    checkpoint_id     TEXT NOT NULL,
+    parent_checkpoint_id TEXT,
+    type              TEXT,
+    checkpoint        BLOB,
+    metadata          BLOB,
+    PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id)
+);
+```
+
+**设计要点**：
+
+1. **复合主键** (`thread_id`, `checkpoint_ns`, `checkpoint_id`): 支持多线程、多命名空间的检查点隔离存储。
+2. **UUID7 排序**: `checkpoint_id` 使用 UUID7（时间戳前缀），天然按时间排序，便于 LangGraph 按序回溯对话历史。
+3. **链表式历史链**: 通过 `parent_checkpoint_id` 串联同一线程的检查点，形成对话演化链条。首个检查点的 `parent_checkpoint_id` 为 NULL。
+4. **BLOB 序列化**: `checkpoint` 和 `metadata` 以 msgpack 二进制格式存储，紧凑高效。`checkpoint` 字段包含 Agent 完整状态（消息历史、中间变量等）；`metadata` 包含来源（source）、步骤（step）、写入（writes）等元信息。
+
+#### 3.5.3 通道写入表 writes
+
+**表名**: `writes`
+**管理方**: `langgraph-checkpoint-sqlite` 库
+
+| 字段 | 类型 | 约束 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `thread_id` | TEXT | NOT NULL, PK | — | 对话线程唯一标识 |
+| `checkpoint_ns` | TEXT | NOT NULL, PK | `''` | 检查点命名空间 |
+| `checkpoint_id` | TEXT | NOT NULL, PK | — | 关联的检查点 ID |
+| `task_id` | TEXT | NOT NULL, PK | — | 引发此写入的任务/节点 ID |
+| `idx` | INTEGER | NOT NULL, PK | — | 同一 task 内的写入序号（从 0 递增） |
+| `channel` | TEXT | NOT NULL | — | 通道名称，标识写入目标 |
+| `type` | TEXT | NULLABLE | — | 序列化格式（msgpack）或 NULL（表示空写入） |
+| `value` | BLOB | — | — | 写入的通道数据（msgpack 序列化或 NULL） |
+
+**建表 DDL**（由 `langgraph-checkpoint-sqlite` 自动创建）：
+
+```sql
+CREATE TABLE writes (
+    thread_id       TEXT NOT NULL,
+    checkpoint_ns   TEXT NOT NULL DEFAULT '',
+    checkpoint_id   TEXT NOT NULL,
+    task_id         TEXT NOT NULL,
+    idx             INTEGER NOT NULL,
+    channel         TEXT NOT NULL,
+    type            TEXT,
+    value           BLOB,
+    PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id, task_id, idx)
+);
+```
+
+**设计要点**：
+
+1. **复合主键** (`thread_id`, `checkpoint_ns`, `checkpoint_id`, `task_id`, `idx`): 精确标识每个检查点中每个任务的每次通道写入。
+2. **写入序号**: `idx` 自 0 递增，记录单个 task 内多次写入的先后顺序。
+3. **通道类型**: `channel` 标识数据写入的目标通道，常见值：
+
+   | channel | 说明 |
+   |---------|------|
+   | `messages` | 对话消息通道，存储 HumanMessage / AIMessage 等 |
+   | `branch:to:model` | 发送给 LLM 模型节点的分支触发 |
+   | `branch:to:PatchToolCallsMiddleware.before_agent` | DeepAgents 工具调用修复中间件触发 |
+   | `branch:to:TodoListMiddleware.after_model` | DeepAgents 任务列表管理中间件触发 |
+   | `__no_writes__` | 空通道（无实际写入，仅标记检查点创建） |
+
+4. **与 checkpoints 的关系**: 每个检查点（`checkpoint_id`）可包含多个 task 写入记录，`writes` 表是 `checkpoints` 表的明细/子表，通过 (`thread_id`, `checkpoint_ns`, `checkpoint_id`) 关联。
+
+#### 3.5.4 数据流
+
+**Agent 对话的检查点写入流程**：
+
+```
+用户请求
+  │
+  ▼
+POST /api/chat 或 /api/chat/stream
+  │ thread_id = 前端提供或自动生成 UUID7
+  ▼
+graph.ainvoke / graph.astream_events
+  │ {"messages": [HumanMessage], "configurable": {"thread_id": thread_id}}
+  ▼
+LangGraph Runtime
+  │ 1. 执行 Agent 图节点（model → tools → model 循环）
+  │ 2. 每步执行后自动写入 checkpoints 和 writes
+  ▼
+AsyncSqliteSaver
+  │ INSERT INTO checkpoints ...  (保存状态快照)
+  │ INSERT INTO writes ...       (保存通道写入)
+  ▼
+langgraph_checkpoints.db
+```
+
+**上下文恢复流程**：
+
+```
+用户请求（携带已有 thread_id）
+  │
+  ▼
+graph.ainvoke(config={"configurable": {"thread_id": thread_id}})
+  │
+  ▼
+AsyncSqliteSaver
+  │ SELECT ... FROM checkpoints WHERE thread_id = ?
+  │ ORDER BY checkpoint_id DESC LIMIT 1
+  │ → 获取最新检查点
+  │ → 反序列化 checkpoint BLOB
+  │ → 恢复消息历史和 Agent 状态
+  ▼
+Agent 在已有上下文基础上继续对话
+```
+
+**API 映射**：
+
+| API | 方法 | 说明 |
+|-----|------|------|
+| `/api/chat` | POST | 非流式对话，返回完整响应 + `thread_id` |
+| `/api/chat/stream` | POST | SSE 流式对话，逐 Token 返回，结束时返回 `thread_id` |
+
+- 前端首次对话不传 `thread_id`，后端自动生成 UUID7
+- 前端保存返回的 `thread_id`，后续对话携带同一 ID 以维持上下文
 
 ### 3.6 ER 图
 
@@ -535,11 +681,12 @@ OAuth 流程 → [600s TTL] → 回调后删除 / 过期自动清理
 
 | API | 方法 | 涉及存储 | 说明 |
 |-----|------|----------|------|
-| `/api/chat` | POST | langgraph_checkpoints.sqlite | 非流式对话，通过 `thread_id` 关联上下文 |
-| `/api/chat/stream` | POST | langgraph_checkpoints.sqlite | SSE 流式对话，逐 Token 返回 |
+| `/api/chat` | POST | langgraph_checkpoints.db | 非流式对话，通过 `thread_id` 关联上下文 |
+| `/api/chat/stream` | POST | langgraph_checkpoints.db | SSE 流式对话，逐 Token 返回 |
 
 **检查点存储**:
-- 每次对话自动保存检查点到 `langgraph_checkpoints.sqlite`
+
+- 每次对话自动保存检查点到 `langgraph_checkpoints.db`
 - 通过 `thread_id` 恢复历史对话上下文
 - `thread_id` 由前端管理（首次对话自动生成 UUID7，后续请求携带同一 ID）
 
@@ -552,7 +699,7 @@ OAuth 流程 → [600s TTL] → 回调后删除 / 过期自动清理
 ```bash
 # ---- 数据库 ----
 DATABASE_URL=sqlite+aiosqlite:///./db/ke-hermes.db   # 业务数据库
-CHECKPOINT_DB_PATH=./db/langgraph_checkpoints.sqlite   # Agent 检查点数据库
+CHECKPOINT_DB_PATH=./db/langgraph_checkpoints.db   # Agent 检查点数据库
 
 # ---- JWT ----
 JWT_SECRET_KEY=                    # 留空自动生成并持久化到 .jwt_secret
