@@ -26,7 +26,9 @@ class Settings(BaseSettings):
     DATABASE_URL: str = os.getenv("DATABASE_URL")
 
     # ---- Checkpoint Database
+    CHECKPOINT_BACKEND: str = os.getenv("CHECKPOINT_BACKEND", "sqlite")
     CHECKPOINT_DB_PATH: str = os.getenv("CHECKPOINT_DB_PATH", "./db/langgraph_checkpoints.db")
+    CHECKPOINT_DB_URL: str = os.getenv("CHECKPOINT_DB_URL", "postgresql://127.0.0.1:5432/ke_hermes")
 
     # ---- JWT ----
     JWT_SECRET_KEY: str = ""

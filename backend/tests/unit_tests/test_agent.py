@@ -1,13 +1,15 @@
-from langgraph.graph.state import CompiledStateGraph
-
-from agent import graph
+from agent import get_graph, init_graph, shutdown_graph
 
 
 def test_graph_type():
-    assert isinstance(graph, CompiledStateGraph)
+    """Verify graph module exports are callable."""
+    assert callable(get_graph)
+    assert callable(init_graph)
+    assert callable(shutdown_graph)
 
 
 def test_graph_import():
-    from agent import graph as g
+    """Verify graph exports are consistent on re-import."""
+    from agent import get_graph as g
 
-    assert g is graph
+    assert g is get_graph

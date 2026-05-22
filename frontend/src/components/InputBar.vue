@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { Mic, Plus, Send, ChevronDown, FileText, Image } from 'lucide-vue-next'
 import { useChatStore } from '@/stores/chat'
 import { useUiStore } from '@/stores/ui'
@@ -8,6 +8,7 @@ const chatStore = useChatStore()
 const uiStore = useUiStore()
 
 const inputText = ref('')
+const inputRef = ref(null)
 const inputBarRef = ref(null)
 
 function handleSend() {
@@ -37,6 +38,12 @@ onMounted(() => {
 onUnmounted(() => {
   document.removeEventListener('click', handleClickOutside)
 })
+
+watch(() => chatStore.loading, (loading) => {
+  if (!loading) {
+    nextTick(() => inputRef.value?.focus())
+  }
+})
 </script>
 
 <template>
@@ -44,6 +51,7 @@ onUnmounted(() => {
     <div class="input-row">
       <div class="input-field-wrap">
         <input
+          ref="inputRef"
           v-model="inputText"
           @keydown="handleKeydown"
           :disabled="chatStore.loading"

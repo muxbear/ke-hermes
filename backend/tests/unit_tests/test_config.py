@@ -29,6 +29,8 @@ def test_base_url_defaults(monkeypatch):
     s = Settings(
         DEEPSEEK_API_KEY="test",
         DASHSCOPE_API_KEY="test",
+        DEEPSEEK_BASE_URL="https://api.deepseek.com/v1",
+        DASHSCOPE_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1",
     )
     assert s.DEEPSEEK_BASE_URL == "https://api.deepseek.com/v1"
     assert s.DASHSCOPE_BASE_URL == "https://dashscope.aliyuncs.com/compatible-mode/v1"

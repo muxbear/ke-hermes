@@ -1,5 +1,15 @@
+import asyncio
 import logging
+import sys
 from contextlib import asynccontextmanager
+
+if sys.platform == "win32":
+    # uvicorn hardcodes ProactorEventLoop on Windows, bypassing the
+    # event loop policy.  Monkeypatch it so psycopg can work.
+    import uvicorn.loops.asyncio as _uvicorn_loops
+
+    _uvicorn_loops.asyncio_loop_factory = lambda use_subprocess=False: asyncio.SelectorEventLoop
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -13,7 +23,7 @@ from api import router
 from api.deps import set_store
 from core.store import create_store
 from db.engine import init_db
-from agent.graph import init_graph
+from agent.graph import init_graph, shutdown_graph
 
 
 @asynccontextmanager
@@ -25,6 +35,7 @@ async def lifespan(app: FastAPI):
     from core.security import _get_jwt_secret as init_jwt
     init_jwt()  # 预初始化 JWT secret，确保重启后不变
     yield
+    await shutdown_graph()
 
 
 app = FastAPI(

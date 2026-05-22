@@ -57,7 +57,7 @@ backend/src/
 ```bash
 cd backend
 uv sync                    # 安装依赖
-uv run uvicorn server:app --reload  # 启动开发服务器
+uv run python run.py       # 启动开发服务器 (含热重载)
 uv run pytest               # 运行测试
 uv run ruff check .         # lint
 uv run ruff format .        # 格式化

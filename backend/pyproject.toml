@@ -25,6 +25,8 @@ dependencies = [
     "tavily-python>=0.7.24",
     "pydantic[email]>=2.12.5",
     "langgraph-checkpoint-sqlite>=3.1.0",
+    "langgraph-checkpoint-postgres>=3.1.0",
+    "psycopg[binary]>=3.3.4",
 ]
 
 

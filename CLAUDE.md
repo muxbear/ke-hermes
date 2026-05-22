@@ -16,7 +16,7 @@ ke-hermes/
 
 | 项目       | 包管理                 | 启动命令                                               |
 | -------- | ------------------- | -------------------------------------------------- |
-| backend  | uv (pyproject.toml) | `cd backend && uv run uvicorn server:app --reload` |
+| backend  | uv (pyproject.toml) | `cd backend && uv run python run.py`             |
 | frontend | npm                 | `cd frontend && npm run dev`                       |
 
 

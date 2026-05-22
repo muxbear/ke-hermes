@@ -1,3 +1,9 @@
+import asyncio
+import sys
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -16,5 +22,6 @@ def anyio_backend():
 @pytest.fixture
 async def client():
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as c:
-        yield c
+    async with app.router.lifespan_context(app):  # triggers init_db + init_graph
+        async with AsyncClient(transport=transport, base_url="http://test") as c:
+            yield c

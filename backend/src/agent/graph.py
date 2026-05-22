@@ -1,16 +1,20 @@
 import aiosqlite
 from deepagents import create_deep_agent
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from psycopg.rows import dict_row
+from psycopg_pool import AsyncConnectionPool
 
 from agent.config import settings
 from agent.models.llm import llm
 from agent.tools.internet_search import internet_search
 
-from deepagents.backends import FilesystemBackend, LocalShellBackend
+from deepagents.backends import FilesystemBackend
 
 import os
 
 _graph = None
+_checkpointer_pool = None
 
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(PROJECT_ROOT)
@@ -24,29 +28,42 @@ def get_graph():
         raise RuntimeError("Graph not initialized. Call init_graph() first.")
     return _graph
 
-
-python_paths = [
-    r"D:\opt\Python\Python311",
-    r"D:\opt\Python\Python311\Scripts"
-]
-system_path = os.environ.get("PATH", "")
-# 用分号分隔
-env_path = ";".join(python_paths) + ";" + system_path if system_path else ";".join(python_paths)
-
 async def init_graph():
     """Initialize the checkpointer and graph (called once at app startup)."""
-    global _graph
-    conn = aiosqlite.connect(settings.CHECKPOINT_DB_PATH)
-    checkpointer = AsyncSqliteSaver(conn)
+    global _graph, _checkpointer_pool
+    
+    backend = settings.CHECKPOINT_BACKEND
+
+    if backend == "sqlite":
+        conn = await aiosqlite.connect(settings.CHECKPOINT_DB_PATH)
+        checkpointer = AsyncSqliteSaver(conn)
+    elif backend == "postgres":
+        _checkpointer_pool = AsyncConnectionPool(
+            conninfo=settings.CHECKPOINT_DB_URL,
+            open=False,
+            kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
+        )
+        await _checkpointer_pool.open()
+        checkpointer = AsyncPostgresSaver(_checkpointer_pool)
+        await checkpointer.setup()
+    else:
+        raise ValueError(
+              f"Unknown CHECKPOINT_BACKEND: '{backend}'. Expected 'sqlite' or 'postgres'."
+        )
+
     _graph = create_deep_agent(
         model=llm,
         tools=[internet_search],
         checkpointer=checkpointer,
-        # backend=FilesystemBackend(root_dir=PROJECT_ROOT, virtual_mode=True),
-        backend=LocalShellBackend(root_dir=PROJECT_ROOT, env={"PATH": env_path}),
+        backend=FilesystemBackend(root_dir=PROJECT_ROOT, virtual_mode=True),
         # skills=["/skills/"],
         system_prompt="你是 ke-hermes 通用智能体，请根据用户的需求提供准确、有用的回答。",
     )
 
+async def shutdown_graph():
+    global _checkpointer_pool
+    if _checkpointer_pool is not None:
+        await _checkpointer_pool.close()
+        _checkpointer_pool = None
 
-__all__ = ["get_graph", "init_graph"]
+__all__ = ["get_graph", "init_graph", "shutdown_graph"]
