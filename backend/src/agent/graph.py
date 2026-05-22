@@ -44,7 +44,7 @@ async def init_graph():
         checkpointer=checkpointer,
         # backend=FilesystemBackend(root_dir=PROJECT_ROOT, virtual_mode=True),
         backend=LocalShellBackend(root_dir=PROJECT_ROOT, env={"PATH": env_path}),
-        skills=["/skills/"],
+        # skills=["/skills/"],
         system_prompt="你是 ke-hermes 通用智能体，请根据用户的需求提供准确、有用的回答。",
     )
 
