@@ -6,7 +6,7 @@ from agent.config import settings
 from agent.models.llm import llm
 from agent.tools.internet_search import internet_search
 
-from deepagents.backends import FilesystemBackend
+from deepagents.backends import FilesystemBackend, LocalShellBackend
 
 import os
 
@@ -25,6 +25,14 @@ def get_graph():
     return _graph
 
 
+python_paths = [
+    r"D:\opt\Python\Python311",
+    r"D:\opt\Python\Python311\Scripts"
+]
+system_path = os.environ.get("PATH", "")
+# 用分号分隔
+env_path = ";".join(python_paths) + ";" + system_path if system_path else ";".join(python_paths)
+
 async def init_graph():
     """Initialize the checkpointer and graph (called once at app startup)."""
     global _graph
@@ -34,7 +42,9 @@ async def init_graph():
         model=llm,
         tools=[internet_search],
         checkpointer=checkpointer,
-        backend=FilesystemBackend(root_dir=PROJECT_ROOT, virtual_mode=True),
+        # backend=FilesystemBackend(root_dir=PROJECT_ROOT, virtual_mode=True),
+        backend=LocalShellBackend(root_dir=PROJECT_ROOT, env={"PATH": env_path}),
+        skills=["/skills/"],
         system_prompt="你是 ke-hermes 通用智能体，请根据用户的需求提供准确、有用的回答。",
     )
 
