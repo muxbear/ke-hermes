@@ -1,4 +1,4 @@
-# Ke-Hermes 详细设计说明书 — v1.2.1
+# Ke-Hermes 详细设计说明书 — v1.2.2
 
 | 版本    | 日期         | 作者  | 变更说明                                         |
 | ----- | ---------- | --- | -------------------------------------------- |
@@ -6,6 +6,7 @@
 | 1.1.0 | 2026-05-18 | -   | 完成前端重构实施：JS→TS 迁移、登录模块全部组件、暗色主题、测试套件、Element Plus 集成 |
 | 1.2.0 | 2026-05-18 | -   | 新增聊天模块详细设计：基于 requirements.md 进行全面需求分析，补充 AppShell 三栏布局、消息流、SSE 流式对话、Markdown 渲染、chatStore/uiStore 状态管理的完整设计方案 |
 | 1.2.1 | 2026-05-19 | -   | 文档对照实际代码更新：测试目录迁移至 tests/、路由改为 AuthLayout 嵌套结构、普通对话 API 已实现、ChatHeader 模型选择器已实现、auth store 持久化增强、captcha store 新增 smsErrorCount、useAuth 密码加密降级策略 |
+| 1.2.2 | 2026-05-22 | -   | 文档对照实际代码更新：chatStore 增加 threadId 状态管理、sendStreamRequest/sendChatRequest 支持 thread_id 参数、SSE 解析增加 onThreadId 回调、clearMessages 重置 threadId、ChatMessage 增加 thread_id 流转 |
 
 
 ---
@@ -41,9 +42,9 @@
 
 ### 1.1 文档目的
 
-本文档为 Ke-Hermes 前端（桌面版）的详细设计说明书 v1.2.1，基于实际代码库编写。文档覆盖两大核心模块：
+本文档为 Ke-Hermes 前端（桌面版）的详细设计说明书 v1.2.2，基于实际代码库编写。文档覆盖两大核心模块：
 - **Part A — 基础架构与登录模块**：TypeScript 技术栈、暗色主题、国际化、测试套件
-- **Part B — 聊天模块**：AppShell 三栏布局、SSE 流式对话、Markdown 渲染、状态管理
+- **Part B — 聊天模块**：AppShell 三栏布局、SSE 流式对话（含 thread_id 上下文管理）、Markdown 渲染、状态管理
 
 文档供前端开发人员编码实现、代码审查和后期维护使用。
 
@@ -609,7 +610,7 @@ $ npx vitest run
 | 需求 | 实现 | 偏差说明 |
 |------|------|---------|
 | F1 对话界面 | 超出需求：升级为 AppShell 三栏布局 + 可折叠侧栏 + 历史面板 | 需求仅定义了简单的上方消息/下方输入布局；实际实现了企业级多面板布局 |
-| F2 普通对话 | chatApi.js 中原有 `sendChatRequest`，迁移到 request.ts 后仅保留 SSE 流式 | 当前 chatStore 仅使用 sendStreamRequest；普通对话模式待实现 |
+| F2 普通对话 | sendChatRequest 已实现 | POST /api/chat → 完整回复 + thread_id，作为降级方案 |
 | F3 流式对话 | 完全符合需求 | fetch + ReadableStream SSE 解析、逐 token 追加、loading 态、错误处理 |
 | F4 状态管理 | 超出需求：新增 uiStore 管理 sidebar/panel/model/history | 需求仅定义 chatStore；实际需要 uiStore 管理复杂 UI 状态 |
 | F5 界面样式 | 暗色主题替代白色背景 | v1.1.0 全面暗色化，通过 Legacy 兼容层保证现有组件正常渲染 |
@@ -847,13 +848,15 @@ watch(lastContent, scrollToBottom)
          → chatStore.sendMessage(text)
            ├─ 追加 user 消息到 messages[]
            ├─ 创建空 assistant 消息（streaming=true）
-           ├─ 调用 sendStreamRequest(text, callbacks)
-           │   ├─ fetch POST /api/chat/stream
+           ├─ 调用 sendStreamRequest(text, { threadId, onToken, onThreadId, onDone, onError })
+           │   ├─ fetch POST /api/chat/stream (body: { message, thread_id? })
            │   ├─ response.body.getReader() → ReadableStream
            │   ├─ 逐块解码 → TextDecoder
            │   ├─ 按 \n 分割 → 解析 SSE data: 行
-           │   └─ JSON.parse → onToken(token)
-           │       └─ assistantMsg.content += token
+           │   ├─ JSON.parse → onToken(token)
+           │   │   └─ assistantMsg.content += token
+           │   └─ JSON.parse → onThreadId(thread_id)
+           │       └─ chatStore.threadId = thread_id
            ├─ onDone() → streaming=false, loading=false
            └─ onError() → 追加错误文本到消息末尾
 ```
@@ -863,36 +866,65 @@ watch(lastContent, scrollToBottom)
 ```typescript
 // src/services/request.ts — sendStreamRequest()
 
-const reader = response.body?.getReader()
-const decoder = new TextDecoder()
-let buffer = ''
-
-while (true) {
-  const { done, value } = await reader.read()
-  if (done) break
-
-  buffer += decoder.decode(value, { stream: true })
-  const lines = buffer.split('\n')
-  buffer = lines.pop() || ''       // 保留未完成行
-
-  for (const line of lines) {
-    if (line.startsWith('data: ')) {
-      try {
-        const json = JSON.parse(line.slice(6))
-        if (json.token) onToken(json.token)
-      } catch { /* skip */ }
+function parseSseDataLine(
+  line: string,
+  onToken: (token: string) => void,
+  onThreadId?: (threadId: string) => void,
+): void {
+  if (!line.startsWith('data: ')) return
+  try {
+    const json = JSON.parse(line.slice(6)) as { token?: string; thread_id?: string }
+    if (json.token) {
+      onToken(json.token)
     }
+    if (json.thread_id && onThreadId) {
+      onThreadId(json.thread_id)
+    }
+  } catch {
+    // skip malformed SSE line
   }
 }
-// 处理 buffer 中残留的最后一行
+
+export async function sendStreamRequest(
+  message: string,
+  options: {
+    threadId?: string | null
+    onToken: (token: string) => void
+    onThreadId?: (threadId: string) => void
+    onDone: () => void
+    onError: (err: Error) => void
+  },
+): Promise<void> {
+  const { threadId, onToken, onThreadId, onDone, onError } = options
+
+  const body: { message: string; thread_id?: string } = { message }
+  if (threadId) {
+    body.thread_id = threadId
+  }
+
+  const baseURL = import.meta.env.VITE_API_BASE_URL || '/api'
+  const response = await fetch(`${baseURL}/chat/stream`, {
+    method: 'POST',
+    headers: chatAuthHeaders(),
+    body: JSON.stringify(body),
+  })
+  // ... reader + decoder + buffer logic (same as v1.2.1)
+  // 每个 SSE data: 行调用 parseSseDataLine(line, onToken, onThreadId)
+}
 ```
 
 ### 16.3 请求/响应格式
 
 | 方向 | 格式 |
 |------|------|
-| 请求 | `POST /api/chat/stream` `{ "message": "string" }` |
-| 响应 | SSE 事件流：`data: {"token": "string"}\n\n` |
+| 请求 | `POST /api/chat/stream` `{ "message": "string", "thread_id"?: "string" }` |
+| 响应 (token) | SSE 事件流：`data: {"token": "string"}\n\n` |
+| 响应 (结束) | SSE 最后一条：`data: {"thread_id": "string"}\n\n` |
+
+**v1.2.2 变更：**
+- 请求体增加可选 `thread_id` 参数，携带上次对话返回的 thread_id 以续接上下文
+- SSE 流结束时后端推送 `thread_id`，前端通过 `onThreadId` 回调保存到 `chatStore.threadId`
+- 前端首次对话不传 `thread_id`，后续请求自动携带已保存的 `threadId`
 
 ### 16.4 为什么不用 EventSource
 
@@ -908,12 +940,13 @@ while (true) {
 |-------|------|------|
 | `messages` | `Ref<ChatMessage[]>` | 所有消息 |
 | `loading` | `Ref<boolean>` | 等待流式回复中 |
+| `threadId` | `Ref<string \| null>` | 当前对话线程 ID（v1.2.2 新增） |
 
 | Action | 说明 |
 |--------|------|
 | `addMessage(role, content, streaming?)` | 追加消息，返回引用（用于流式追加） |
-| `sendMessage(text)` | 空/loading 校验 → 追加 user → 创建 asst → 调用 SSE → onToken 追加 content → onDone/onError 标记完成 |
-| `clearMessages()` | 清空消息列表 + 重置 loading |
+| `sendMessage(text)` | 空/loading 校验 → 追加 user → 创建 asst → 调用 SSE（带 threadId）→ onToken 追加 content → onThreadId 保存 threadId → onDone/onError 标记完成 |
+| `clearMessages()` | 清空消息列表 + 重置 loading + 重置 threadId = null |
 
 ```typescript
 // ChatMessage 类型
@@ -922,6 +955,38 @@ interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
   streaming: boolean     // true 表示正在流式接收 token
+}
+```
+
+**v1.2.2 thread_id 流转：**
+
+```typescript
+async function sendMessage(text: string) {
+  if (loading.value || !text.trim()) return
+
+  loading.value = true
+  addMessage('user', text.trim())
+  const assistantId = addMessage('assistant', '', true).id
+
+  try {
+    await sendStreamRequest(text.trim(), {
+      threadId: threadId.value,       // 携带已有 thread_id
+      onToken(token: string) {
+        // 逐 token 追加到 assistant 消息
+      },
+      onThreadId(id: string) {
+        threadId.value = id           // 保存后端返回的 thread_id
+      },
+      onDone() { /* streaming=false, loading=false */ },
+      onError(err: Error) { /* 追加错误消息 */ },
+    })
+  } catch (err) { /* 网络异常处理 */ }
+}
+
+function clearMessages() {
+  messages.value = []
+  loading.value = false
+  threadId.value = null              // v1.2.2: 清空对话线程
 }
 ```
 
@@ -963,8 +1028,8 @@ interface HistoryItem {
 
 | 接口 | 方法 | 请求体 | 响应体 | 用途 | 实现状态 |
 |------|------|--------|--------|------|---------|
-| `/api/chat` | POST | `{"message":"string"}` | `{"response":"string"}` | 普通对话 | **未实现** |
-| `/api/chat/stream` | POST | `{"message":"string"}` | SSE `data:{"token":"string"}\n\n` | 流式对话 | 已实现 |
+| `/api/chat` | POST | `{"message":"string","thread_id?":"string"}` | `{"response":"string","thread_id":"string"}` | 普通对话 | 已实现 |
+| `/api/chat/stream` | POST | `{"message":"string","thread_id?":"string"}` | SSE `data:{"token":"string"}\n\n` + `data:{"thread_id":"string"}\n\n` | 流式对话 | 已实现 |
 
 ### 18.2 错误处理
 
@@ -1026,4 +1091,4 @@ interface HistoryItem {
 
 ---
 
-> 本文档 v1.2.1 基于实际代码实现全面更新：测试目录迁移至 tests/、路由改为 AuthLayout 嵌套结构、普通对话 sendChatRequest 已实现、ChatHeader 模型下拉选择器已实现、auth store 分离 Token/User 持久化。前后端接口对齐，认证/验证码/OAuth/短信模块均已联调通过。
+> 本文档 v1.2.2 基于实际代码实现全面更新：测试目录迁移至 tests/、路由改为 AuthLayout 嵌套结构、普通对话 sendChatRequest 已实现、ChatHeader 模型下拉选择器已实现、auth store 分离 Token/User 持久化、chat store 增加 threadId 多轮对话上下文管理。前后端接口对齐（含 thread_id 双向传递），认证/验证码/OAuth/短信模块均已联调通过。
