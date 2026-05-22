@@ -73,7 +73,6 @@
 
 - [Ke-Hermes 前端详细设计说明书 v1.2.0](../../frontend/docs/Ke%20Hermes%20详细设计说明书-1.2.0.md)
 - [Ke-Hermes 前端需求说明书-登录模块（桌面版）v1.1.0](../../frontend/docs/Ke%20Hermes%20需求说明书-登录模块（桌面版）-1.1.0.md)
-- [ke-hermes 后端设计说明书（当前实现）](./design.md)
 
 ---
 

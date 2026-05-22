@@ -6,8 +6,17 @@ from agent.config import settings
 from agent.models.llm import llm
 from agent.tools.internet_search import internet_search
 
+from deepagents.backends import FilesystemBackend
+
+import os
+
 _graph = None
 
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(PROJECT_ROOT)
+PROJECT_ROOT = os.path.dirname(PROJECT_ROOT)
+PROJECT_ROOT = os.path.join(PROJECT_ROOT, "workspace")
+print(f'工作路径 = {PROJECT_ROOT}')
 
 def get_graph():
     """Return the initialized graph. Must be called after init_graph()."""
@@ -25,6 +34,7 @@ async def init_graph():
         model=llm,
         tools=[internet_search],
         checkpointer=checkpointer,
+        backend=FilesystemBackend(root_dir=PROJECT_ROOT, virtual_mode=True),
         system_prompt="你是 ke-hermes 通用智能体，请根据用户的需求提供准确、有用的回答。",
     )
 
