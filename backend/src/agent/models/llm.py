@@ -9,4 +9,10 @@ llm = ChatOpenAI(
     extra_body={"thinking": {"type": "disabled"}} # 关闭 deepseek 的思考过程
 )
 
-__all__ = ["llm"]
+qwen_llm = ChatOpenAI(
+    model="qwen3.6-plus",
+    api_key=settings.DASHSCOPE_API_KEY,
+    base_url=settings.DASHSCOPE_BASE_URL
+)
+
+__all__ = ["llm", qwen_llm]

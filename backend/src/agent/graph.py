@@ -7,7 +7,7 @@ from psycopg_pool import AsyncConnectionPool
 
 from agent.config import settings
 from agent.models.llm import llm
-from agent.tools.internet_search import internet_search
+from agent.subagents import research_subagent
 
 from deepagents.backends import FilesystemBackend
 
@@ -51,13 +51,15 @@ async def init_graph():
               f"Unknown CHECKPOINT_BACKEND: '{backend}'. Expected 'sqlite' or 'postgres'."
         )
 
+    subagents = [research_subagent]
+
     _graph = create_deep_agent(
         model=llm,
-        tools=[internet_search],
         checkpointer=checkpointer,
         backend=FilesystemBackend(root_dir=PROJECT_ROOT, virtual_mode=True),
+        subagents=subagents,
         # skills=["/skills/"],
-        system_prompt="你是 ke-hermes 通用智能体，请根据用户的需求提供准确、有用的回答。",
+        system_prompt="你是 ke-hermes 通用智能体，请根据用户的需求委派对应的子智能体进行处理。",
     )
 
 async def shutdown_graph():
