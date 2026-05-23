@@ -1,5 +1,7 @@
 from deepagents import create_deep_agent
+from langchain.agents.middleware import Runtime
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from langgraph.store.memory import InMemoryStore
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
@@ -11,7 +13,7 @@ from agent.config import settings
 from agent.models.llm import llm
 from agent.subagents import research_subagent
 
-from deepagents.backends import FilesystemBackend
+from deepagents.backends import StateBackend, CompositeBackend, FilesystemBackend
 
 _graph = None
 _checkpointer_pool = None
@@ -54,7 +56,13 @@ async def init_graph():
         model=llm,
         context_schema=Context,
         checkpointer=checkpointer,
-        backend=FilesystemBackend(root_dir=WORKSPACE, virtual_mode=True),
+        store=InMemoryStore(),
+        # backend=FilesystemBackend(root_dir=WORKSPACE, virtual_mode=True),
+        # 代理在 `/workspace/` 下的读取和写入操作会进入真实的磁盘，而卸载的工具结果和其他内部数据则保留在临时状态中”
+        backend=CompositeBackend(
+            default=StateBackend(),
+            routes={"/workspace/": FilesystemBackend(root_dir=WORKSPACE, virtual_mode=True)}
+        ),
         subagents=subagents,
         # skills=["/skills/"],
         system_prompt="你是 ke-hermes 通用智能体，请根据用户的需求委派对应的子智能体进行处理。",
