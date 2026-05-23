@@ -1,8 +1,29 @@
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
 import os
 
 load_dotenv()
+
+
+def get_default_workspace() -> str:
+    """Return the agent filesystem workspace directory.
+
+    Uses ``WORKSPACE`` from the environment when set to a non-empty path;
+    otherwise resolves to ``backend/workspace`` under the backend package root.
+    """
+    env = os.getenv("WORKSPACE", "").strip()
+    if env:
+        return os.path.abspath(env)
+
+    # config.py lives at backend/src/agent/config/ — four levels up to backend/
+    backend_root = os.path.dirname(
+        os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        )
+    )
+    return os.path.join(backend_root, "workspace")
+
 
 class Settings(BaseSettings):
     # ---- LLM (DeepSeek) ----
@@ -21,6 +42,16 @@ class Settings(BaseSettings):
     # ---- Server ----
     HOST: str = os.getenv("HOST", "127.0.0.1")
     PORT: int = os.getenv("PORT", 8000)
+
+    # ---- Workspace ----
+    WORKSPACE: str = Field(default_factory=get_default_workspace)
+
+    @field_validator("WORKSPACE", mode="before")
+    @classmethod
+    def _workspace_use_default_when_empty(cls, value: object) -> str:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return get_default_workspace()
+        return str(value)
 
     # ---- Database ----
     DATABASE_URL: str = os.getenv("DATABASE_URL")

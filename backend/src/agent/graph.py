@@ -1,26 +1,22 @@
-import aiosqlite
 from deepagents import create_deep_agent
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
+import aiosqlite
+
+from agent.context.context import Context
 from agent.config import settings
 from agent.models.llm import llm
 from agent.subagents import research_subagent
 
 from deepagents.backends import FilesystemBackend
 
-import os
-
 _graph = None
 _checkpointer_pool = None
 
-PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.dirname(PROJECT_ROOT)
-PROJECT_ROOT = os.path.dirname(PROJECT_ROOT)
-PROJECT_ROOT = os.path.join(PROJECT_ROOT, "workspace")
-print(f'工作路径 = {PROJECT_ROOT}')
+WORKSPACE = settings.WORKSPACE
 
 def get_graph():
     """Return the initialized graph. Must be called after init_graph()."""
@@ -54,9 +50,11 @@ async def init_graph():
     subagents = [research_subagent]
 
     _graph = create_deep_agent(
+        name="main-agent",
         model=llm,
+        context_schema=Context,
         checkpointer=checkpointer,
-        backend=FilesystemBackend(root_dir=PROJECT_ROOT, virtual_mode=True),
+        backend=FilesystemBackend(root_dir=WORKSPACE, virtual_mode=True),
         subagents=subagents,
         # skills=["/skills/"],
         system_prompt="你是 ke-hermes 通用智能体，请根据用户的需求委派对应的子智能体进行处理。",
