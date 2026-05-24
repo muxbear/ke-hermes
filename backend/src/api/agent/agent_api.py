@@ -1,13 +1,19 @@
 import json
 
+from api.conversation.conversation_api import create_conversation
+from api.deps import get_current_user_id
+from db import get_db
 from fastapi import APIRouter
+from fastapi import Depends
 from fastapi.responses import StreamingResponse
+
 from langchain_core.messages import HumanMessage
 from langchain_core.utils.uuid import uuid7
 from pydantic import BaseModel, Field
 
 from agent.context.context import Context
 from agent import get_graph
+from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/api")
 
@@ -28,16 +34,25 @@ class StreamToken(BaseModel):
 
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat(req: ChatRequest):
+async def chat(
+    req: ChatRequest,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db)
+):
+    is_new = not req.thread_id
     thread_id = req.thread_id or str(uuid7())
     config = {"configurable": {"thread_id": thread_id}}
-    context = Context(user_id=req.user_id)
+    context = Context(user_id=user_id) # 用 JWT 提取的 user_id 替换 req.user_id 
 
     result = await get_graph().ainvoke(
         {"messages": [HumanMessage(content=req.message)]},
         config=config,
         context=context
     )
+
+    # 新对话自动创建记录
+    if is_new:
+        await create_conversation(db, user_id, thread_id, req.message)
 
     final_message = result["messages"][-1]
     return ChatResponse(
@@ -47,11 +62,14 @@ async def chat(req: ChatRequest):
 
 
 @router.post("/chat/stream")
-async def chat_stream(req: ChatRequest):
+async def chat_stream(
+    req: ChatRequest,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db)):
+    is_new = not req.thread_id
     thread_id = req.thread_id or str(uuid7())
     config = {"configurable": {"thread_id": thread_id}}
-    context = Context(user_id=req.user_id)
-    print(f"上下文 Context: {context}")
+    context = Context(user_id=user_id)
 
     async def event_generator():
         async for event in get_graph().astream_events(
@@ -66,5 +84,8 @@ async def chat_stream(req: ChatRequest):
                     yield f"data: {json.dumps({'token': token})}\n\n"
 
         yield f"data: {json.dumps({'thread_id': thread_id})}\n\n"
+
+        if is_new:
+            await create_conversation(db, user_id, thread_id, req.message)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")

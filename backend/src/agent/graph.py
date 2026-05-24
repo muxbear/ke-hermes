@@ -32,6 +32,11 @@ def get_graph():
         raise RuntimeError("Graph not initialized. Call init_graph() first.")
     return _graph
 
+def get_checkpointer():
+    if _checkpointer is None:
+        raise RuntimeError("Checkpointer not initialized. Call init_graph() first.")
+    return _checkpointer
+
 async def init_graph():
     """Initialize the checkpointer and graph (called once at app startup)."""
     global _graph, _conn_pool, _checkpointer, _store
@@ -89,4 +94,4 @@ async def shutdown_graph():
         await _conn_pool.close()
         _conn_pool = None
 
-__all__ = ["get_graph", "init_graph", "shutdown_graph"]
+__all__ = ["get_graph", "get_checkpointer", "init_graph", "shutdown_graph"]
