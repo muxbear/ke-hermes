@@ -1,8 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { fetchConversations, deleteConversation as deleteConversationApi } from '@/services/conversationApi'
 
 export interface HistoryItem {
-  id: number
+  thread_id: string
   title: string
 }
 
@@ -12,14 +13,22 @@ export const useUiStore = defineStore('ui', () => {
   const plusMenuOpen = ref(false)
   const searchQuery = ref('')
   const selectedModel = ref('DeepSeek V4')
-  const histories = ref<HistoryItem[]>([
-    { id: 1, title: '关于 AI 的发展趋势' },
-    { id: 2, title: 'Python 代码优化建议' },
-    { id: 3, title: '旅行规划方案' },
-    { id: 4, title: '数据可视化思路' },
-    { id: 5, title: '产品需求分析' },
-  ])
-  const activeHistoryId = ref<number | null>(1)
+  const histories = ref<HistoryItem[]>([])
+  const activeThreadId = ref<string | null>(null)
+
+  async function fetchHistories() {
+    try {
+      const data = await fetchConversations()
+      histories.value = data.map((c) => (
+        {
+          thread_id: c.thread_id,
+          title: c.title,
+        }
+      ))
+    } catch {
+      // 静默失败, 列表保持现状
+    }
+  }
 
   function toggleSidebar() {
     sidebarCollapsed.value = !sidebarCollapsed.value
@@ -37,31 +46,37 @@ export const useUiStore = defineStore('ui', () => {
     plusMenuOpen.value = false
   }
 
-  function deleteHistory(id: number) {
-    histories.value = histories.value.filter((h) => h.id !== id)
-    if (activeHistoryId.value === id) {
-      activeHistoryId.value = null
+  async function deleteHistory(thread_id: string) {
+    try {
+      await deleteConversationApi(thread_id)
+      histories.value = histories.value.filter((h) => h.thread_id != thread_id)
+      if (activeThreadId.value == thread_id) {
+        activeThreadId.value = null
+      }
+    } catch {
+      // 静默失败
     }
   }
 
   function newConversation() {
-    activeHistoryId.value = null
+    activeThreadId.value = null
     plusMenuOpen.value = false
   }
 
   return {
-    sidebarCollapsed,
-    rightPanelCollapsed,
-    plusMenuOpen,
-    searchQuery,
-    selectedModel,
-    histories,
-    activeHistoryId,
-    toggleSidebar,
-    toggleRightPanel,
-    togglePlusMenu,
-    closePlusMenu,
-    deleteHistory,
-    newConversation,
+      sidebarCollapsed,
+      rightPanelCollapsed,
+      plusMenuOpen,
+      searchQuery,
+      selectedModel,
+      histories,
+      activeThreadId,
+      fetchHistories,
+      deleteHistory,
+      toggleSidebar,
+      toggleRightPanel,
+      togglePlusMenu,
+      closePlusMenu,
+      newConversation,
   }
 })

@@ -8,9 +8,26 @@ import {
 } from 'lucide-vue-next'
 import { useUiStore } from '@/stores/ui'
 import { useChatStore } from '@/stores/chat'
+import { onMounted } from 'vue'
 
 const uiStore = useUiStore()
 const chatStore = useChatStore()
+
+onMounted(() => {
+  uiStore.fetchHistories()
+})
+
+async function handleSelectHistory(threadId) {
+  uiStore.activeThreadId = threadId
+  await chatStore.loadConversation(threadId)
+}
+
+async function handleDeleteHistory(threadId) {
+  await uiStore.deleteHistory(threadId)
+  if (chatStore.threadId === threadId) {
+    chatStore.clearMessages()
+  }
+}
 
 function handleNewConversation() {
   chatStore.clearMessages()
@@ -40,13 +57,13 @@ function handleNewConversation() {
       <div class="history-list">
         <div
           v-for="item in uiStore.histories"
-          :key="item.id"
+          :key="item.thread_id"
           class="history-item"
-          :class="{ active: uiStore.activeHistoryId === item.id }"
-          @click="uiStore.activeHistoryId = item.id"
+          :class="{ active: uiStore.activeThreadId === item.thread_id }"
+          @click="handleSelectHistory(item.thread_id)"
         >
           <span class="history-title">{{ item.title }}</span>
-          <button class="delete-btn" @click.stop="uiStore.deleteHistory(item.id)">
+          <button class="delete-btn" @click.stop="handleDeleteHistory(item.thread_id)">
             <Trash2 :size="14" />
           </button>
         </div>

@@ -80,5 +80,27 @@ export const useChatStore = defineStore('chat', () => {
     threadId.value = null
   }
 
-  return { messages, loading, threadId, sendMessage, clearMessages }
+  async function loadConversation(tid: string) {
+    const { fetchConversationMessages } = await import('@/services/conversationApi')
+    threadId.value = tid
+    loading.value = true
+    try {
+      const detail = await fetchConversationMessages(tid)
+      
+      messages.value = detail.messages
+        .filter((m) => m.role === 'user' || m.role === 'assistant')
+        .map((m, idx) => ({
+          id: idx + 1,
+          role: m.role as 'user' | 'assistant',
+          content: m.content,
+          streaming: false
+        }))
+        nextId = messages.value.length + 1
+    } catch {
+    }
+
+    loading.value = false
+  }
+
+  return { messages, loading, threadId, sendMessage, clearMessages, loadConversation }
 })
