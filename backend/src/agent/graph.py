@@ -1,8 +1,9 @@
 from deepagents import create_deep_agent
 from langchain.agents.middleware import Runtime
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-from langgraph.store.memory import InMemoryStore
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from langgraph.store.postgres.aio import AsyncPostgresStore
+from langgraph.store.memory import InMemoryStore
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
@@ -15,10 +16,15 @@ from agent.subagents import research_subagent
 
 from deepagents.backends import StateBackend, CompositeBackend, FilesystemBackend
 
+import os
+
 _graph = None
-_checkpointer_pool = None
+_conn_pool = None
+_checkpointer = None
+_store = None
 
 WORKSPACE = settings.WORKSPACE
+MEMORIES = os.path.join(WORKSPACE, "memories")
 
 def get_graph():
     """Return the initialized graph. Must be called after init_graph()."""
@@ -28,22 +34,27 @@ def get_graph():
 
 async def init_graph():
     """Initialize the checkpointer and graph (called once at app startup)."""
-    global _graph, _checkpointer_pool
+    global _graph, _conn_pool, _checkpointer, _store
     
     backend = settings.CHECKPOINT_BACKEND
 
     if backend == "sqlite":
         conn = await aiosqlite.connect(settings.CHECKPOINT_DB_PATH)
-        checkpointer = AsyncSqliteSaver(conn)
+        _checkpointer = AsyncSqliteSaver(conn)
+        _store = InMemoryStore()
     elif backend == "postgres":
-        _checkpointer_pool = AsyncConnectionPool(
+        _conn_pool = AsyncConnectionPool(
             conninfo=settings.CHECKPOINT_DB_URL,
             open=False,
             kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
         )
-        await _checkpointer_pool.open()
-        checkpointer = AsyncPostgresSaver(_checkpointer_pool)
-        await checkpointer.setup()
+        await _conn_pool.open()
+
+        _checkpointer = AsyncPostgresSaver(_conn_pool)
+        await _checkpointer.setup()
+
+        _store = AsyncPostgresStore(_conn_pool)
+        await _store.setup() # 会自动创建 store 表和 store_migrations 表
     else:
         raise ValueError(
               f"Unknown CHECKPOINT_BACKEND: '{backend}'. Expected 'sqlite' or 'postgres'."
@@ -55,13 +66,17 @@ async def init_graph():
         name="main-agent",
         model=llm,
         context_schema=Context,
-        checkpointer=checkpointer,
-        store=InMemoryStore(),
+        checkpointer=_checkpointer,
+        store=_store,
         # backend=FilesystemBackend(root_dir=WORKSPACE, virtual_mode=True),
         # 代理在 `/workspace/` 下的读取和写入操作会进入真实的磁盘，而卸载的工具结果和其他内部数据则保留在临时状态中”
+        memory=["/memories/AGNET.md"],
         backend=CompositeBackend(
             default=StateBackend(),
-            routes={"/workspace/": FilesystemBackend(root_dir=WORKSPACE, virtual_mode=True)}
+            routes={
+                "/memories/": FilesystemBackend(root_dir=MEMORIES, virtual_mode=True),
+                "/workspace/": FilesystemBackend(root_dir=WORKSPACE, virtual_mode=True)
+            }
         ),
         subagents=subagents,
         # skills=["/skills/"],
@@ -69,9 +84,9 @@ async def init_graph():
     )
 
 async def shutdown_graph():
-    global _checkpointer_pool
-    if _checkpointer_pool is not None:
-        await _checkpointer_pool.close()
-        _checkpointer_pool = None
+    global _conn_pool
+    if _conn_pool is not None:
+        await _conn_pool.close()
+        _conn_pool = None
 
 __all__ = ["get_graph", "init_graph", "shutdown_graph"]
