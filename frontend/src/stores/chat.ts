@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { sendStreamRequest } from '@/services/request'
+import { useUiStore } from '@/stores/ui'
 
 export interface ChatMessage {
   id: number
@@ -47,6 +48,10 @@ export const useChatStore = defineStore('chat', () => {
             messages.value[idx] = { ...messages.value[idx], streaming: false }
           }
           loading.value = false
+
+          const uiStore = useUiStore()
+          uiStore.activeThreadId = threadId.value
+          uiStore.fetchHistories()
         },
         onError(err: Error) {
           const idx = messages.value.findIndex(m => m.id === assistantId)
