@@ -54,12 +54,20 @@ class Settings(BaseSettings):
         return str(value)
 
     # ---- Database ----
+    DATABASE_BACKEND: str = os.getenv("DATABASE_BACKEND", "sqlite")
     DATABASE_URL: str = os.getenv("DATABASE_URL")
+    DATABASE_PATH: str = os.getenv("DATABASE_PATH")
+
 
     # ---- Checkpoint Database
     CHECKPOINT_BACKEND: str = os.getenv("CHECKPOINT_BACKEND", "sqlite")
     CHECKPOINT_DB_URL: str = os.getenv("CHECKPOINT_DB_URL", "postgresql://127.0.0.1:5432/ke_hermes")
-    CHECKPOINT_DB_PATH: str = os.getenv("CHECKPOINT_DB_PATH", "./db/langgraph_checkpoints.db")
+    CHECKPOINT_DB_PATH: str = os.getenv("CHECKPOINT_DB_PATH", "./db/ke_hermes.db")
+
+    # ---- Store Database
+    STORE_BACKEND: str = os.getenv("STORE_BACKEND", "sqlite")
+    STORE_DB_URL: str = os.getenv("STORE_DB_URL", "postgresql://127.0.0.1:5432/ke_hermes")
+    STORE_DB_PATH: str = os.getenv("STORE_DB_PATH", "./db/ke_hermes.db")
 
     # ---- JWT ----
     JWT_SECRET_KEY: str = ""

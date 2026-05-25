@@ -2,7 +2,14 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from agent.config import settings
 
-async_engine = create_async_engine(settings.DATABASE_URL, echo=False)
+async_engine = None
+if settings.DATABASE_BACKEND == "sqlite":
+    async_engine = create_async_engine(settings.DATABASE_URL, echo=False)
+elif settings.DATABASE_BACKEND == "postgres":
+    async_engine = create_async_engine(settings.DATABASE_URL, echo=False)
+else:
+    raise Exception("DATABASE_BACKEND must be sqlite or postgres.")
+
 async_session = async_sessionmaker(async_engine, expire_on_commit=False)
 
 
