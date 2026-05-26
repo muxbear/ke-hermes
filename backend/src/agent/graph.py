@@ -16,7 +16,7 @@ from agent.models.llm import llm
 from agent.subagents import research_subagent
 
 from deepagents import create_deep_agent
-from deepagents.backends import StoreBackend
+from deepagents.backends import CompositeBackend, StateBackend, StoreBackend
 
 import os
 
@@ -75,7 +75,21 @@ async def init_graph():
         checkpointer=_checkpointer,
         store=_store,
         context_schema=Context,
-        backend=StoreBackend(namespace=lambda ctx: (ctx.runtime.context.user_id,),),
+        memory=["/memories/AGENT.md"],
+        backend=CompositeBackend(
+            default=StoreBackend(
+                namespace=lambda ctx: (
+                    ctx.runtime.context.server_info,
+                ),
+            ),
+            routes={
+                "/memories/": StoreBackend(
+                    namespace=lambda ctx: (
+                        ctx.runtime.context.user_id,
+                    ),
+                ),
+            }
+        ),
         subagents=subagents,
         # skills=["/skills/"],
         system_prompt="你是 ke-hermes 通用智能体，请根据用户的需求委派对应的子智能体进行处理。",

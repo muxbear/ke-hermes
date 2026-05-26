@@ -42,7 +42,7 @@ async def chat(
     is_new = not req.thread_id
     thread_id = req.thread_id or str(uuid7())
     config = {"configurable": {"thread_id": thread_id}}
-    context = Context(user_id=user_id) # 用 JWT 提取的 user_id 替换 req.user_id 
+    context = Context(server_info="ke_hermes_server", user_id=user_id) # 用 JWT 提取的 user_id 替换 req.user_id 
 
     result = await get_graph().ainvoke(
         {"messages": [HumanMessage(content=req.message)]},
@@ -69,7 +69,7 @@ async def chat_stream(
     is_new = not req.thread_id
     thread_id = req.thread_id or str(uuid7())
     config = {"configurable": {"thread_id": thread_id}}
-    context = Context(user_id=user_id)
+    context = Context(server_info="ke_hermes_server", user_id=user_id)
 
     async def event_generator():
         async for event in get_graph().astream_events(
