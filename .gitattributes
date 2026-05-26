@@ -1,0 +1,32 @@
+# 通用配置
+* text=auto
+*.md text diff=markdown
+*.txt text
+*.csv text eol=crlf
+
+# 图像文件标记为二进制
+*.png binary
+*.jpg binary
+*.gif binary
+
+# 脚本文件换行符配置
+*.sh text eol=lf
+*.bash text eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# TypeScript相关配置
+*.ts text diff=typescript
+*.tsx text diff=typescript
+*.d.ts text diff=typescript
+
+# Python相关配置
+*.py text diff=python
+*.pyi text diff=python
+*.ipynb text diff=json
+
+# 依赖与缓存文件配置
+node_modules/** -diff
+__pycache__/ export-ignore
+*.py[cod] export-ignore
+*$py.class export-ignore
