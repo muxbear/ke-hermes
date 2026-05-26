@@ -1,8 +1,10 @@
+import { storeToRefs } from 'pinia'
 import { useCaptchaStore } from '@/stores/captcha'
 import type { PendingAction } from '@/types/components'
 
 export function useCaptcha() {
   const captchaStore = useCaptchaStore()
+  const { modalVisible, captchaType, pendingAction } = storeToRefs(captchaStore)
 
   function requestCaptcha(action: PendingAction) {
     captchaStore.showCaptcha(action)
@@ -17,9 +19,9 @@ export function useCaptcha() {
   }
 
   return {
-    modalVisible: captchaStore.modalVisible,
-    captchaType: captchaStore.captchaType,
-    pendingAction: captchaStore.pendingAction,
+    modalVisible,
+    captchaType,
+    pendingAction,
     requestCaptcha,
     onCaptchaVerified,
     closeCaptcha,

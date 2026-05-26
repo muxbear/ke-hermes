@@ -12,20 +12,21 @@ export function useAuth() {
   const loading = computed(() => authStore.isLoginLoading)
   const error = computed(() => authStore.loginError)
 
+  async function encryptPassword(password: string): Promise<string> {
+    try {
+      await fetchPublicKey()
+      if (publicKey.value) {
+        return encrypt(password)
+      }
+    } catch {
+      console.warn('Failed to fetch public key, sending password in plaintext')
+    }
+    return password
+  }
+
   async function loginWithPassword(account: string, password: string, rememberMe: boolean) {
     try {
-      // 尝试获取公钥用于加密，失败则降级为明文传输
-      let finalPassword = password
-      try {
-        await fetchPublicKey()
-        if (publicKey.value) {
-          finalPassword = encrypt(password)
-        }
-      } catch {
-        // 无法获取公钥，使用明文密码（开发阶段降级方案）
-        console.warn('Failed to fetch public key, sending password in plaintext')
-      }
-
+      const finalPassword = await encryptPassword(password)
       await authStore.loginWithPassword({
         account,
         password: finalPassword,
@@ -48,6 +49,46 @@ export function useAuth() {
     }
   }
 
+  async function register(payload: {
+    phone: string
+    smsCode: string
+    nickname: string
+    password: string
+    agreedProtocolVersion: string
+  }) {
+    try {
+      const finalPassword = await encryptPassword(payload.password)
+      await authStore.register({
+        ...payload,
+        password: finalPassword,
+      })
+      redirectAfterLogin()
+    } catch (err) {
+      console.error('Register failed:', err)
+      throw err
+    }
+  }
+
+  async function emailRegister(payload: {
+    email: string
+    emailCode: string
+    nickname: string
+    password: string
+    agreedProtocolVersion: string
+  }) {
+    try {
+      const finalPassword = await encryptPassword(payload.password)
+      await authStore.emailRegister({
+        ...payload,
+        password: finalPassword,
+      })
+      redirectAfterLogin()
+    } catch (err) {
+      console.error('Email register failed:', err)
+      throw err
+    }
+  }
+
   function redirectAfterLogin() {
     const redirect = (route.query.redirect as string) || '/'
     router.push(redirect)
@@ -65,6 +106,8 @@ export function useAuth() {
     error,
     loginWithPassword,
     loginWithPhone,
+    register,
+    emailRegister,
     logout,
   }
 }

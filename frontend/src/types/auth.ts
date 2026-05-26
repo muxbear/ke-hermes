@@ -38,6 +38,13 @@ export interface RegisterRequest {
   agreedProtocolVersion: string
 }
 
+/** 发送邮箱验证码请求 */
+export interface SendEmailCodeRequest {
+  email: string
+  captchaTicket?: string
+  captchaRandstr?: string
+}
+
 /** 邮箱注册请求 */
 export interface EmailRegisterRequest {
   email: string

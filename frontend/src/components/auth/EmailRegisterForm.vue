@@ -1,13 +1,20 @@
 <script setup lang="ts">
 import { reactive } from 'vue'
+import { ElMessage } from 'element-plus'
 import { Mail, KeyRound, User, Lock } from 'lucide-vue-next'
 import PasswordInput from '@/components/common/PasswordInput.vue'
 import CountdownButton from '@/components/common/CountdownButton.vue'
 import FormError from '@/components/common/FormError.vue'
 import AgreementCheckbox from './AgreementCheckbox.vue'
+import CaptchaModal from '@/components/captcha/CaptchaModal.vue'
 import { useCountdown } from '@/composables/useCountdown'
+import { useCaptcha } from '@/composables/useCaptcha'
+import { useAuth } from '@/composables/useAuth'
+import { authApi } from '@/services/authApi'
 
+const { emailRegister } = useAuth()
 const { countdown, start: startCountdown } = useCountdown()
+const { modalVisible, requestCaptcha, onCaptchaVerified, closeCaptcha } = useCaptcha()
 
 const form = reactive({
   email: '',
@@ -25,6 +32,8 @@ const errors = reactive({
   password: '',
   confirmPassword: '',
 })
+
+const submitting = reactive({ value: false })
 
 function validate(): boolean {
   errors.email = ''
@@ -54,14 +63,52 @@ function validate(): boolean {
     return false
   }
   if (!agreementChecked.value) {
+    ElMessage.warning('请先阅读并同意用户协议')
     return false
   }
   return true
 }
 
-function onSubmit() {
-  if (!validate()) return
-  // TODO: 调用邮箱注册 API
+async function onSubmit() {
+  if (!validate() || submitting.value) return
+  submitting.value = true
+  try {
+    await emailRegister({
+      email: form.email.trim(),
+      emailCode: form.emailCode,
+      nickname: form.nickname.trim(),
+      password: form.password,
+      agreedProtocolVersion: 'v1',
+    })
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : '注册失败，请稍后重试'
+    ElMessage.error(msg)
+  } finally {
+    submitting.value = false
+  }
+}
+
+function handleSendEmailCode() {
+  if (!form.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+    errors.email = '请输入正确的邮箱地址'
+    return
+  }
+  errors.email = ''
+  requestCaptcha({ type: 'send-sms' })
+}
+
+async function onCaptchaSuccess(result: { ticket: string; randstr: string }) {
+  onCaptchaVerified(result.ticket, result.randstr)
+  try {
+    await authApi.sendEmailCode({
+      email: form.email.trim(),
+      captchaTicket: result.ticket,
+      captchaRandstr: result.randstr,
+    })
+    startCountdown(60)
+  } catch {
+    errors.email = '验证码发送失败，请重试'
+  }
 }
 </script>
 
@@ -78,7 +125,7 @@ function onSubmit() {
       <el-input v-model="form.emailCode" placeholder="请输入验证码" size="large" class="auth-input sms-input" maxlength="6">
         <template #prefix><KeyRound :size="18" class="input-icon" /></template>
       </el-input>
-      <CountdownButton :countdown="countdown" @click="() => {}" />
+      <CountdownButton :countdown="countdown" @click="handleSendEmailCode" />
     </div>
     <FormError :message="errors.emailCode" />
 
@@ -101,9 +148,15 @@ function onSubmit() {
 
     <AgreementCheckbox v-model="agreementChecked.value" />
 
-    <el-button type="primary" size="large" class="submit-btn" @click="onSubmit">
+    <el-button type="primary" size="large" class="submit-btn" :loading="submitting.value" @click="onSubmit">
       注册
     </el-button>
+
+    <CaptchaModal
+      v-model="modalVisible"
+      type="slide"
+      @success="onCaptchaSuccess"
+    />
   </div>
 </template>
 

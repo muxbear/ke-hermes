@@ -6,6 +6,7 @@ import type {
   RegisterRequest,
   EmailRegisterRequest,
   AuthResponse,
+  SendEmailCodeRequest,
 } from '@/types/auth'
 
 export const authApi = {
@@ -24,6 +25,10 @@ export const authApi = {
   /** 邮箱注册 */
   emailRegister: (data: EmailRegisterRequest) =>
     request.post<ApiResponse<AuthResponse>>('/auth/register/email', data),
+
+  /** 发送邮箱验证码 */
+  sendEmailCode: (data: SendEmailCodeRequest) =>
+    request.post<ApiResponse<{ devCode?: string }>>('/email/send', data),
 
   /** 退出登录 */
   logout: () => request.post<ApiResponse<null>>('/auth/logout'),

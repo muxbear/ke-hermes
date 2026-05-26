@@ -137,7 +137,6 @@ defineExpose({
       v-model="modalVisible"
       type="slide"
       @success="onCaptchaSuccess"
-      @fail="closeCaptcha"
     />
   </div>
 </template>

@@ -1,15 +1,20 @@
 <script setup lang="ts">
 import { reactive } from 'vue'
+import { ElMessage } from 'element-plus'
 import { Phone, KeyRound, User, Lock } from 'lucide-vue-next'
 import PasswordInput from '@/components/common/PasswordInput.vue'
 import CountdownButton from '@/components/common/CountdownButton.vue'
 import FormError from '@/components/common/FormError.vue'
 import AgreementCheckbox from './AgreementCheckbox.vue'
+import CaptchaModal from '@/components/captcha/CaptchaModal.vue'
 import { useCountdown } from '@/composables/useCountdown'
+import { useCaptcha } from '@/composables/useCaptcha'
 import { useAuth } from '@/composables/useAuth'
+import { captchaApi } from '@/services/captchaApi'
 
-const { loginWithPhone } = useAuth()
+const { register } = useAuth()
 const { countdown, start: startCountdown } = useCountdown()
+const { modalVisible, requestCaptcha, onCaptchaVerified, closeCaptcha } = useCaptcha()
 
 const form = reactive({
   phone: '',
@@ -27,6 +32,8 @@ const errors = reactive({
   password: '',
   confirmPassword: '',
 })
+
+const submitting = reactive({ value: false })
 
 function validate(): boolean {
   errors.phone = ''
@@ -56,18 +63,52 @@ function validate(): boolean {
     return false
   }
   if (!agreementChecked.value) {
+    ElMessage.warning('请先阅读并同意用户协议')
     return false
   }
   return true
 }
 
-function onSubmit() {
-  if (!validate()) return
-  // TODO: 调用注册 API
+async function onSubmit() {
+  if (!validate() || submitting.value) return
+  submitting.value = true
+  try {
+    await register({
+      phone: form.phone.trim(),
+      smsCode: form.smsCode,
+      nickname: form.nickname.trim(),
+      password: form.password,
+      agreedProtocolVersion: 'v1',
+    })
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : '注册失败，请稍后重试'
+    ElMessage.error(msg)
+  } finally {
+    submitting.value = false
+  }
 }
 
 function handleSendSms() {
-  // TODO: 触发验证码弹窗 -> 发送短信
+  if (!/^1[3-9]\d{9}$/.test(form.phone.trim())) {
+    errors.phone = '请输入正确的手机号'
+    return
+  }
+  errors.phone = ''
+  requestCaptcha({ type: 'send-sms' })
+}
+
+async function onCaptchaSuccess(result: { ticket: string; randstr: string }) {
+  onCaptchaVerified(result.ticket, result.randstr)
+  try {
+    await captchaApi.sendSms({
+      phone: form.phone.trim(),
+      captchaTicket: result.ticket,
+      captchaRandstr: result.randstr,
+    })
+    startCountdown(60)
+  } catch {
+    errors.phone = '短信发送失败，请重试'
+  }
 }
 </script>
 
@@ -107,9 +148,15 @@ function handleSendSms() {
 
     <AgreementCheckbox v-model="agreementChecked.value" />
 
-    <el-button type="primary" size="large" class="submit-btn" @click="onSubmit">
+    <el-button type="primary" size="large" class="submit-btn" :loading="submitting.value" @click="onSubmit">
       注册
     </el-button>
+
+    <CaptchaModal
+      v-model="modalVisible"
+      type="slide"
+      @success="onCaptchaSuccess"
+    />
   </div>
 </template>
 

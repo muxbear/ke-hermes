@@ -5,9 +5,11 @@ class SlidePuzzleData(BaseModel):
     bgImage: str
     slideImage: str
     y: int
+    sessionId: str
 
 
 class SlideVerifyRequest(BaseModel):
+    sessionId: str
     distance: int
     track: list[int] = Field(default_factory=list)
     ticket: str | None = None

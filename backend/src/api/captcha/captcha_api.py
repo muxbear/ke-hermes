@@ -56,7 +56,8 @@ async def verify_slide_route(
     request: Request,
     store: KeyValueStore = Depends(get_store),
 ):
-    sid = request.cookies.get(CAPTCHA_SESSION_COOKIE)
+    # Prefer sessionId from request body; fall back to cookie
+    sid = req.sessionId or request.cookies.get(CAPTCHA_SESSION_COOKIE)
     if not sid:
         return error(400, "Captcha session not found, please refresh")
     result = await verify_slide(req, sid, store)

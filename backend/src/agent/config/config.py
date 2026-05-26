@@ -84,7 +84,7 @@ class Settings(BaseSettings):
 
     # ---- Captcha ----
     CAPTCHA_EXPIRE: int = os.getenv("CAPTCHA_EXPIRE", 300)
-    SLIDE_THRESHOLD: int = os.getenv("SLIDE_THRESHOLD", 5)
+    SLIDE_THRESHOLD: int = os.getenv("SLIDE_THRESHOLD", 8)
 
     # ---- Redis ----
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")

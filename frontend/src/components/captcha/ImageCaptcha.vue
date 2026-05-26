@@ -17,7 +17,7 @@ const loading = ref(false)
 async function fetchCaptcha() {
   try {
     const res = await captchaApi.getImageCaptcha()
-    imageUrl.value = res.data.data.image
+    imageUrl.value = `data:image/png;base64,${res.data.data.image}`
     captchaKey.value = res.data.data.key
   } catch {
     emit('fail')

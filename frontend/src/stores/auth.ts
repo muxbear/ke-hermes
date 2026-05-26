@@ -152,6 +152,62 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  async function register(payload: {
+    phone: string
+    smsCode: string
+    nickname: string
+    password: string
+    agreedProtocolVersion: string
+  }) {
+    loginLoading.value = true
+    loginError.value = null
+    try {
+      const res = await authApi.register({
+        phone: payload.phone,
+        smsCode: payload.smsCode,
+        nickname: payload.nickname,
+        password: payload.password,
+        agreedProtocolVersion: payload.agreedProtocolVersion,
+      })
+      const { tokens: t, user: u } = res.data.data
+      setTokens(t)
+      setUser(u)
+    } catch (err) {
+      loginError.value = err instanceof Error ? err.message : '注册失败'
+      throw err
+    } finally {
+      loginLoading.value = false
+    }
+  }
+
+  async function emailRegister(payload: {
+    email: string
+    emailCode: string
+    nickname: string
+    password: string
+    agreedProtocolVersion: string
+  }) {
+    loginLoading.value = true
+    loginError.value = null
+    try {
+      const res = await authApi.emailRegister({
+        email: payload.email,
+        emailCode: payload.emailCode,
+        nickname: payload.nickname,
+        password: payload.password,
+        agreedProtocolVersion: payload.agreedProtocolVersion,
+      })
+      const { tokens: t, user: u } = res.data.data
+      setTokens(t)
+      setUser(u)
+    } catch (err) {
+      loginError.value = err instanceof Error ? err.message : '注册失败'
+      throw err
+    } finally {
+      loginLoading.value = false
+    }
+  }
+
   async function logout() {
     try {
       await authApi.logout()
@@ -180,6 +236,8 @@ export const useAuthStore = defineStore('auth', () => {
     refreshAccessToken,
     loginWithPassword,
     loginWithPhone,
+    register,
+    emailRegister,
     logout,
     agreeProtocol,
     loadRememberedAccount,

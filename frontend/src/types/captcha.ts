@@ -3,10 +3,12 @@ export interface SlidePuzzleData {
   bgImage: string
   slideImage: string
   y: number
+  sessionId: string
 }
 
 /** 滑动拼图校验请求 */
 export interface SlideVerifyRequest {
+  sessionId: string
   distance: number
   track: number[]
   ticket?: string
