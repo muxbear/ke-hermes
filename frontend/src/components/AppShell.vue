@@ -1,15 +1,11 @@
 <script setup>
-import SideMenu from './SideMenu.vue'
-import TopBar from './TopBar.vue'
 import ChatMain from './ChatMain.vue'
 import RightPanel from './RightPanel.vue'
 </script>
 
 <template>
   <div class="app-shell">
-    <SideMenu />
-    <div class="main-column">
-      <TopBar />
+    <div class="chat-column">
       <ChatMain />
     </div>
     <RightPanel />
@@ -19,11 +15,11 @@ import RightPanel from './RightPanel.vue'
 <style scoped>
 .app-shell {
   display: flex;
-  height: 100vh;
+  height: 100%;
   background: var(--surface-primary);
 }
 
-.main-column {
+.chat-column {
   flex: 1;
   display: flex;
   flex-direction: column;

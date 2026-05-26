@@ -2,12 +2,26 @@ import { createRouter, createWebHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
+const MainLayout = () => import('@/components/MainLayout.vue')
+
 const routes: RouteRecordRaw[] = [
   {
     path: '/',
-    name: 'home',
-    component: () => import('@/views/HomeView.vue'),
+    component: MainLayout,
     meta: { requiresAuth: true },
+    children: [
+      {
+        path: '',
+        name: 'home',
+        component: () => import('@/views/HomeView.vue'),
+      },
+      {
+        path: 'skills',
+        name: 'skills',
+        component: () => import('@/views/SkillsView.vue'),
+        meta: { title: 'Skills' },
+      },
+    ],
   },
   {
     path: '/login',

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import {
   PanelLeftClose,
   PanelLeftOpen,
@@ -18,9 +19,23 @@ import {
   Settings,
   Shield,
 } from 'lucide-vue-next'
+import type { Component } from 'vue'
 import { useUiStore } from '@/stores/ui'
 
+const router = useRouter()
+const route = useRoute()
 const uiStore = useUiStore()
+
+interface MenuItem {
+  icon: Component
+  text: string
+  route?: string
+}
+
+interface MenuGroup {
+  label: string
+  items: MenuItem[]
+}
 
 const collapsedGroups = ref<Set<string>>(new Set())
 
@@ -30,47 +45,59 @@ function toggleGroup(label: string) {
   } else {
     collapsedGroups.value.add(label)
   }
-  // trigger reactivity
   collapsedGroups.value = new Set(collapsedGroups.value)
 }
 
-const menuGroups = [
+function isItemActive(item: MenuItem): boolean {
+  if (item.route) {
+    return route.path === item.route
+  }
+  return false
+}
+
+function handleItemClick(item: MenuItem) {
+  if (item.route) {
+    router.push(item.route)
+  }
+}
+
+const menuGroups: MenuGroup[] = [
   {
     label: '聊天',
     items: [
-      { icon: MessageSquare, text: '对话', active: true },
+      { icon: MessageSquare, text: '对话', route: '/' },
     ],
   },
   {
     label: '控制',
     items: [
-      { icon: LayoutDashboard, text: '概览', active: false },
-      { icon: Server, text: '实例', active: false },
-      { icon: MessagesSquare, text: '会话', active: false },
-      { icon: BarChart3, text: '使用情况', active: false },
-      { icon: Timer, text: '定时任务', active: false },
+      { icon: LayoutDashboard, text: '概览' },
+      { icon: Server, text: '实例' },
+      { icon: MessagesSquare, text: '会话' },
+      { icon: BarChart3, text: '使用情况' },
+      { icon: Timer, text: '定时任务' },
     ],
   },
   {
     label: '代理',
     items: [
-      { icon: Bot, text: '代理', active: false },
-      { icon: Zap, text: '技能', active: false },
-      { icon: Network, text: '节点', active: false },
-      { icon: CloudMoon, text: '梦境', active: false },
+      { icon: Bot, text: '代理' },
+      { icon: Zap, text: '技能', route: '/skills' },
+      { icon: Network, text: '节点' },
+      { icon: CloudMoon, text: '梦境' },
     ],
   },
   {
     label: '设置',
     items: [
-      { icon: Settings, text: '配置', active: false },
-      { icon: FileText, text: '文档', active: false },
+      { icon: Settings, text: '配置' },
+      { icon: FileText, text: '文档' },
     ],
   },
   {
     label: '后台',
     items: [
-      { icon: Shield, text: '后台', active: false },
+      { icon: Shield, text: '后台' },
     ],
   },
 ]
@@ -101,7 +128,8 @@ const menuGroups = [
           v-for="item in group.items"
           :key="item.text"
           class="menu-item"
-          :class="{ active: item.active }"
+          :class="{ active: isItemActive(item) }"
+          @click="handleItemClick(item)"
         >
           <component :is="item.icon" :size="16" />
           <span class="menu-text">{{ item.text }}</span>
