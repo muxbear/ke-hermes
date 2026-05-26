@@ -1,4 +1,4 @@
-# Ke-Hermes 详细设计说明书 — v1.2.2
+# Ke-Hermes 详细设计说明书 — v1.3.0
 
 | 版本    | 日期         | 作者  | 变更说明                                         |
 | ----- | ---------- | --- | -------------------------------------------- |
@@ -7,6 +7,7 @@
 | 1.2.0 | 2026-05-18 | -   | 新增聊天模块详细设计：基于 requirements.md 进行全面需求分析，补充 AppShell 三栏布局、消息流、SSE 流式对话、Markdown 渲染、chatStore/uiStore 状态管理的完整设计方案 |
 | 1.2.1 | 2026-05-19 | -   | 文档对照实际代码更新：测试目录迁移至 tests/、路由改为 AuthLayout 嵌套结构、普通对话 API 已实现、ChatHeader 模型选择器已实现、auth store 持久化增强、captcha store 新增 smsErrorCount、useAuth 密码加密降级策略 |
 | 1.2.2 | 2026-05-22 | -   | 文档对照实际代码更新：chatStore 增加 threadId 状态管理、sendStreamRequest/sendChatRequest 支持 thread_id 参数、SSE 解析增加 onThreadId 回调、clearMessages 重置 threadId、ChatMessage 增加 thread_id 流转 |
+| 1.3.0 | 2026-05-26 | -   | 文档对照实际代码更新：新增 MainLayout 根布局组件重构路由结构；新增 MCP 广场模块（列表/详情/安装/卸载）；新增 Skills 技能管理模块（CRUD/仓库导入/本地上传）；新增 conversationApi 服务对接后端对话历史 API；RightPanel 接入真实对话历史数据；SideMenu 增加可折叠菜单分组 + 路由导航；uiStore 重构 HistoryItem/activeThreadId；chatStore 增加 loadConversation |
 
 
 ---
@@ -36,15 +37,20 @@
 18. [聊天 API 接口对接](#18-聊天-api-接口对接)
 19. [需求对照与合规](#19-需求对照与合规)
 
+**Part C — MCP 广场与技能模块（v1.3.0 新增）**
+20. [MCP 广场模块](#20-mcp-广场模块)
+21. [Skills 技能管理模块](#21-skills-技能管理模块)
+
 ---
 
 ## 1. 概述
 
 ### 1.1 文档目的
 
-本文档为 Ke-Hermes 前端（桌面版）的详细设计说明书 v1.2.2，基于实际代码库编写。文档覆盖两大核心模块：
+本文档为 Ke-Hermes 前端（桌面版）的详细设计说明书 v1.3.0，基于实际代码库编写。文档覆盖三大核心模块：
 - **Part A — 基础架构与登录模块**：TypeScript 技术栈、暗色主题、国际化、测试套件
-- **Part B — 聊天模块**：AppShell 三栏布局、SSE 流式对话（含 thread_id 上下文管理）、Markdown 渲染、状态管理
+- **Part B — 聊天模块**：AppShell 三栏布局、SSE 流式对话（含 thread_id 上下文管理）、Markdown 渲染、状态管理、对话历史对接
+- **Part C — MCP 广场与技能模块**：MCP 工具广场（浏览/详情/安装/卸载）、Skills 技能管理（CRUD/仓库导入/本地上传/手动创建）
 
 文档供前端开发人员编码实现、代码审查和后期维护使用。
 
@@ -74,7 +80,8 @@
 ### 1.3 适用模块
 
 - **Part A**：PC Web 端登录/注册页面、OAuth 回调处理、路由守卫、Token 刷新、权限校验
-- **Part B**：智能体对话界面（三栏布局）、流式 SSE 对话、Markdown 渲染、消息历史管理
+- **Part B**：智能体对话界面（三栏布局）、流式 SSE 对话、Markdown 渲染、对话历史管理
+- **Part C**：MCP 工具广场、Skills 技能管理（仓库导入/本地上传/手动创建）
 
 ### 1.4 相关文档
 
@@ -85,12 +92,10 @@
 
 ## 2. 项目架构
 
-### 2.1 目录结构
+### 2.1 目录结构（v1.3.0）
 
 ```
 frontend/
-├── .vscode/
-│   └── extensions.json
 ├── index.html                         # 入口 HTML → /src/main.ts
 ├── package.json
 ├── tsconfig.json                      # 项目引用根
@@ -98,14 +103,14 @@ frontend/
 ├── tsconfig.node.json                 # 构建工具 TS 配置
 ├── tsconfig.vitest.json               # 测试 TS 配置（include tests/）
 ├── vite.config.ts
-├── vitest.config.ts                   # 测试配置（include tests/，内联 element-plus）
+├── vitest.config.ts                   # 测试配置
 ├── env.d.ts
 ├── .env / .env.development / .env.production
 ├── .prettierrc.json
 │
 ├── public/
 │
-├── tests/                             # v1.2.1：测试从 src/__tests__/ 迁移至此
+├── tests/                             # 测试目录
 │   ├── setup.ts                       # localStorage/sessionStorage mock
 │   ├── stores/
 │   │   ├── auth.test.ts               # 7 用例
@@ -121,26 +126,33 @@ frontend/
     ├── App.vue                        # 仅 <RouterView />
     │
     ├── router/
-    │   └── index.ts                   # 路由表（AuthLayout 嵌套路由） + 前置守卫
+    │   └── index.ts                   # 路由表（MainLayout + AuthLayout 嵌套路由） + 前置守卫
     │
     ├── stores/
-    │   ├── auth.ts                    # Token/用户/登录状态（含 USER_STORAGE_KEY 分离持久化）
-    │   ├── captcha.ts                 # 验证码/倒计时状态（含 smsErrorCount）
-    │   ├── chat.ts                    # 聊天消息 + SSE 流式
-    │   └── ui.ts                      # UI 状态（侧栏/面板/模型/历史）
+    │   ├── auth.ts                    # Token/用户/登录状态
+    │   ├── captcha.ts                 # 验证码/倒计时状态
+    │   ├── chat.ts                    # 聊天消息 + SSE 流式 + loadConversation
+    │   ├── ui.ts                      # UI 状态（侧栏/面板/模型）+ 对话历史（后端对接）
+    │   ├── mcp.ts                     # MCP 工具状态（v1.3.0 新增）
+    │   └── skill.ts                   # Skills 技能状态（v1.3.0 新增）
     │
     ├── types/
     │   ├── api.ts                     # ApiResponse<T>, SendSmsRequest
     │   ├── auth.ts                    # AuthTokens, UserInfo, Request/Response
     │   ├── captcha.ts                 # SlidePuzzleData, SlideVerifyRequest
     │   ├── components.ts              # FeatureItem, OAuthProvider, CaptchaResult
+    │   ├── mcp.ts                     # McpTool, McpConfigField, InstallMcpRequest（v1.3.0 新增）
+    │   ├── skill.ts                   # Skill, SkillCreateRequest, CATEGORY_LABELS（v1.3.0 新增）
     │   └── router.d.ts                # RouteMeta 扩展
     │
     ├── services/
     │   ├── request.ts                 # Axios 实例 + 拦截器 + SSE + sendChatRequest
     │   ├── authApi.ts                 # 认证接口（8 个）
     │   ├── captchaApi.ts              # 验证码 + 短信接口（5 个）
-    │   └── oauthApi.ts                # OAuth 接口（2 个）
+    │   ├── oauthApi.ts                # OAuth 接口（2 个）
+    │   ├── conversationApi.ts         # 对话历史 CRUD（4 个）（v1.3.0 新增）
+    │   ├── mcpApi.ts                  # MCP 接口（4 个）（v1.3.0 新增）
+    │   └── skillApi.ts                # Skills 接口（6 个）（v1.3.0 新增）
     │
     ├── composables/
     │   ├── useAuth.ts                 # 登录逻辑封装 + 重定向 + 密码加密降级
@@ -150,16 +162,26 @@ frontend/
     │   └── useAgreement.ts            # 协议勾选
     │
     ├── components/
+    │   ├── MainLayout.vue             # 认证页面根布局（SideMenu + TopBar + RouterView）（v1.3.0 新增）
+    │   ├── AppShell.vue               # 聊天三栏布局容器（ChatMain + RightPanel）
+    │   ├── ChatMain.vue               # 中间聊天主区域
+    │   ├── ChatHeader.vue             # 聊天头部（含模型下拉选择器）
+    │   ├── MessageList.vue            # 消息列表（自动滚动）
+    │   ├── MessageItem.vue            # 单条消息（Markdown 渲染）
+    │   ├── InputBar.vue               # 消息输入栏（含 + 弹出菜单）
+    │   ├── SideMenu.vue               # 可折叠左侧导航菜单（路由导航 + 可折叠分组）
+    │   ├── TopBar.vue                 # 顶部搜索 + 通知 + 用户菜单
+    │   ├── RightPanel.vue             # 可折叠右侧历史面板（后端对话数据对接）
     │   ├── auth/
     │   │   ├── AuthLayout.vue         # 认证页根布局（左品牌 + 右 RouterView）
-    │   │   ├── BrandPanel.vue         # 左侧品牌面板 (Logo + 名称 + 标语 + FeatureGrid)
+    │   │   ├── BrandPanel.vue         # 左侧品牌面板
     │   │   ├── FeatureGrid.vue        # 2×4 特性网格
     │   │   ├── LoginCard.vue          # 520px 毛玻璃卡片
     │   │   ├── LoginTabs.vue          # 登录方式切换标签
     │   │   ├── AccountLoginForm.vue    # 账号密码登录表单
     │   │   ├── PhoneLoginForm.vue      # 手机验证码登录表单
     │   │   ├── AgreementCheckbox.vue   # 协议勾选区
-    │   │   ├── OAuthPanel.vue         # 第三方登录图标面板（微信/支付宝/飞书/钉钉/企业微信）（微信/支付宝/飞书/钉钉/企业微信）
+    │   │   ├── OAuthPanel.vue         # 第三方登录图标面板
     │   │   ├── RegisterLink.vue        # 注册入口链接
     │   │   ├── RegisterForm.vue        # 手机号注册表单
     │   │   └── EmailRegisterForm.vue   # 邮箱注册表单
@@ -171,22 +193,22 @@ frontend/
     │   │   ├── CaptchaModal.vue        # 验证码弹窗 (Teleport)
     │   │   ├── SlidePuzzle.vue         # 滑动拼图验证码
     │   │   └── ImageCaptcha.vue        # 图形验证码降级方案
-    │   ├── AppShell.vue               # 聊天三栏布局容器
-    │   ├── ChatMain.vue               # 中间聊天主区域
-    │   ├── ChatHeader.vue             # 聊天头部（含模型下拉选择器）
-    │   ├── MessageList.vue            # 消息列表（自动滚动）
-    │   ├── MessageItem.vue            # 单条消息（Markdown 渲染）
-    │   ├── InputBar.vue               # 消息输入栏（含 + 弹出菜单）
-    │   ├── SideMenu.vue               # 可折叠左侧导航菜单
-    │   ├── TopBar.vue                 # 顶部搜索 + 通知 + 用户菜单
-    │   └── RightPanel.vue             # 可折叠右侧历史面板
+    │   ├── mcp/
+    │   │   └── McpCard.vue            # MCP 工具卡片（v1.3.0 新增）
+    │   └── skill/
+    │       ├── SkillCard.vue           # Skills 技能卡片（v1.3.0 新增）
+    │       ├── SkillDialog.vue         # Skills 创建/编辑弹窗（3 标签页）（v1.3.0 新增）
+    │       └── iconMap.ts             # Skills 图标映射（v1.3.0 新增）
     │
     ├── views/
     │   ├── HomeView.vue               # 受保护首页（包裹 AppShell）
-    │   ├── LoginView.vue              # 登录页（组装所有认证子组件）
+    │   ├── LoginView.vue              # 登录页
     │   ├── RegisterView.vue           # 注册页
     │   ├── EmailRegisterView.vue      # 邮箱注册页
-    │   └── OAuthCallbackView.vue      # OAuth 回调处理页
+    │   ├── OAuthCallbackView.vue      # OAuth 回调处理页
+    │   ├── SkillsView.vue             # Skills 管理页面（v1.3.0 新增）
+    │   ├── McpSquareView.vue          # MCP 广场页面（v1.3.0 新增）
+    │   └── McpDetailView.vue          # MCP 工具详情页面（v1.3.0 新增）
     │
     ├── assets/
     │   └── styles/
@@ -203,41 +225,48 @@ frontend/
 ### 2.2 模块分层
 
 ```
-Views (HomeView, LoginView, RegisterView, ...)
-  └── Components (AuthLayout, LoginCard, AccountLoginForm, ...)
+Views (HomeView, LoginView, SkillsView, McpSquareView, ...)
+  └── Components (MainLayout, AppShell, SkillCard, McpCard, ...)
        └── Composables (useAuth, useCaptcha, useCountdown, ...)
-            ├── Stores (auth, captcha, chat, ui)
-            └── Services (request, authApi, captchaApi, oauthApi)
-                 └── Types (auth, api, captcha, components)
+            ├── Stores (auth, captcha, chat, ui, mcp, skill)
+            └── Services (request, authApi, captchaApi, oauthApi, conversationApi, mcpApi, skillApi)
+                 └── Types (auth, api, captcha, components, mcp, skill)
 ```
 
-### 2.3 v1.0.0 → v1.1.0 实施偏差
+### 2.3 v1.2.2 → v1.3.0 实施偏差
 
-| 设计项 | v1.0.0 计划 | v1.1.0 实施 | 原因 |
+| 设计项 | v1.2.2 计划 | v1.3.0 实施 | 原因 |
 |--------|------------|------------|------|
-| request.ts 与 authStore 关系 | request.ts 通过 require() 延迟导入 authStore | request.ts 直接读写 localStorage/sessionStorage，不依赖 authStore | ES module 下避免循环依赖，更简洁 |
-| eslint.config.ts | 创建 ESLint 扁平配置 | 跳过 — 非核心功能 | 聚焦核心重构，后续补充 |
-| unplugin-auto-import | 配置自动导入 | 跳过 — main.ts 中手动 `app.use(ElementPlus)` | 明确依赖关系，减少魔法 |
-| AccountLoginForm 组件测试 | 7 用例 — mount + Element Plus | 跳过 — Element Plus CSS 在 jsdom 下兼容性复杂 | stores/composables/router 测试已覆盖核心逻辑 |
-| CSP meta 标签 | index.html 中添加 | 跳过 | 生产环境由 Nginx 配置管理 |
-| pinia-plugin-persistedstate | 自动同步 store 到 storage | 未使用 — auth store 手动管理持久化 | 减少依赖，保持 token 流程显式可控 |
+| 对话历史 | RightPanel 硬编码 5 条预设 | 对接后端 Conversation API，动态加载 | 后端对话历史 CRUD 已实现 |
+| 路由结构 | HomeView 直接包裹 AppShell | 新增 MainLayout 作为认证页面根布局，HomeView/SkillsView/McpSquareView 为嵌套子路由 | 支持多页面导航 |
+| 侧栏导航 | 静态菜单无路由 | SideMenu 使用 vue-router 导航，菜单可折叠分组，支持路由高亮 | 支持 MCP 广场和 Skills 页面入口 |
+| MCP 广场 | 无 | 完整实现：列表（搜索/分类/排序）+ 详情（概述/配置/使用说明/评价）+ 安装/卸载 | 需求"前端增加了 MCP 广场功能" |
+| Skills 管理 | 无 | 完整实现：列表（分类筛选/统计）+ CRUD + 仓库导入 + 本地上传 + 手动创建 | 需求"前端添加技能功能模块" |
+| Token 存储 | request.ts 读写 localStorage + sessionStorage | 统一使用 sessionStorage | 简化策略，标签页级别隔离 |
 
 ---
 
 ## 3. 路由设计
 
-### 3.1 路由表（v1.2.1 更新：AuthLayout 嵌套路由）
+### 3.1 路由表（v1.3.0 重构）
 
 | 路径               | 名称              | 组件 (懒加载)                       | Meta                         |
 | ----------------- | --------------- | ------------------------------ | ---------------------------- |
-| `/`               | home            | `@/views/HomeView.vue`         | requiresAuth: true           |
+| `/`               | home            | MainLayout → `@/views/HomeView.vue` (child) | requiresAuth: true           |
+| `/skills`         | skills          | MainLayout → `@/views/SkillsView.vue` (child) | requiresAuth: true, title: 'Skills' |
+| `/mcp`            | mcp-square      | MainLayout → `@/views/McpSquareView.vue` (child) | requiresAuth: true, title: 'MCP 广场' |
+| `/mcp/:id`        | mcp-detail      | MainLayout → `@/views/McpDetailView.vue` (child) | requiresAuth: true, title: 'MCP 详情' |
 | `/login`          | login           | AuthLayout → `@/views/LoginView.vue` (child) | guest: true, title: '登录'     |
 | `/register`       | register        | AuthLayout → `@/views/RegisterView.vue` (child) | guest: true, title: '注册'     |
 | `/register/email` | register-email  | AuthLayout → `@/views/EmailRegisterView.vue` (child) | guest: true, title: '邮箱注册' |
 | `/oauth/callback` | oauth-callback  | `@/views/OAuthCallbackView.vue` | guest: true, title: '第三方登录' |
 | `/:pathMatch(.*)*`| not-found       | — (redirect → /)               | —                            |
 
-**v1.2.1 变更：** `/login` 和 `/register` 路由使用 AuthLayout 作为父组件，LoginView/RegisterView/EmailRegisterView 作为嵌套子路由。AuthLayout 内通过 `<RouterView />` 渲染子路由，无需在视图层手动包裹布局。
+**v1.3.0 路由重构要点：**
+
+- **MainLayout** 作为所有需认证页面的父布局组件（`/`，`/skills`，`/mcp`，`/mcp/:id`），内部包含 SideMenu + TopBar + `<RouterView />`
+- **AuthLayout** 仅包裹认证页面（`/login`，`/register`，`/register/email`）
+- 路由守卫逻辑不变：`requiresAuth` → 未登录跳转 `/login`；`guest` → 已登录跳转 `/`
 
 ### 3.2 路由守卫逻辑
 
@@ -248,87 +277,53 @@ beforeEach:
   其他 → 放行
 ```
 
-### 3.3 RouteMeta 扩展
+### 3.3 MainLayout 组件（v1.3.0 新增）
 
-```typescript
-// src/types/router.d.ts
-declare module 'vue-router' {
-  interface RouteMeta {
-    title?: string
-    requiresAuth?: boolean
-    guest?: boolean
-  }
-}
+```vue
+<template>
+  <div class="main-layout">
+    <SideMenu />
+    <div class="right-area">
+      <TopBar />
+      <div class="work-area">
+        <RouterView />
+      </div>
+    </div>
+  </div>
+</template>
 ```
+
+- 左侧：可折叠 SideMenu（导航菜单）
+- 右侧：TopBar（搜索/通知/用户）+ RouterView（工作区）
+- 取代 v1.2.2 中 HomeView 直接包裹 AppShell 的结构
+- 原有 AppShell 三栏布局保留在 HomeView 内部，仅用于聊天页面
 
 ---
 
 ## 4. 组件设计（登录模块）
 
+（与 v1.2.2 保持一致，无变更。）
+
 ### 4.1 组件树
 
 ```
-App.vue
+AuthLayout.vue
+├── BrandPanel.vue
+│   ├── Logo (Inline SVG, 96×96, 蓝紫渐变)
+│   ├── "Ke-Hermes" (36px/700)
+│   ├── "自我进化，越用越强" (20px)
+│   ├── FeatureGrid.vue (2×4 网格, 8 特性)
+│   └── "2026 Ke-Hermes 版权所有" (12px)
 └── <RouterView />
-    ├── AuthLayout.vue
-    │   ├── BrandPanel.vue
-    │   │   ├── Logo (Inline SVG, 96×96, 蓝紫渐变)
-    │   │   ├── "Ke-Hermes" (36px/700)
-    │   │   ├── "自我进化，越用越强" (20px)
-    │   │   ├── FeatureGrid.vue (2×4 网格, 8 特性)
-    │   │   └── "2026 Ke-Hermes 版权所有" (12px)
-    │   └── <RouterView />
-    │       └── LoginView.vue
-    │           └── LoginCard.vue (max-width 520px, glass-card)
-    │               ├── LoginTabs.vue (账号登录 / 手机登录)
-    │               ├── AccountLoginForm.vue / PhoneLoginForm.vue
-    │               │   ├── el-input (Element Plus)
-    │               │   ├── PasswordInput.vue (Eye/EyeOff toggle)
-    │               │   └── CountdownButton.vue (倒计时)
-    │               ├── AgreementCheckbox.vue (协议勾选 + ElMessageBox)
-    │               ├── el-button (登录按钮, 52px, 蓝色渐变)
-    │               ├── OAuthPanel.vue (5 个 52×52 圆形图标)
-    │               │   └── CaptchaModal.vue (Teleport to body)
-    │               │       └── SlidePuzzle.vue / ImageCaptcha.vue
-    │               └── RegisterLink.vue (→ /register)
-    └── HomeView.vue
-        └── AppShell.vue (保留全部现有聊天布局)
+    └── LoginView.vue
+        └── LoginCard.vue (max-width 520px, glass-card)
+            ├── LoginTabs.vue (账号登录 / 手机登录)
+            ├── AccountLoginForm.vue / PhoneLoginForm.vue
+            ├── AgreementCheckbox.vue
+            ├── el-button (登录按钮, 52px, 蓝色渐变)
+            ├── OAuthPanel.vue (5 个 52×52 圆形图标)
+            └── RegisterLink.vue (→ /register)
 ```
-
-### 4.2 核心组件契约
-
-#### AccountLoginForm
-
-| 属性 | 说明 |
-|------|------|
-| Props | 无 |
-| Emits | `submit(payload: { account, password, rememberMe })`, `forgot-password` |
-| 校验 | 账号 2-64 字符、密码 6-12 字符至少字母+数字 |
-| 交互 | Enter 键触发提交 |
-
-#### PhoneLoginForm
-
-| 属性 | 说明 |
-|------|------|
-| Props | 无 |
-| Emits | `submit(payload: { phone, smsCode })` |
-| 依赖 | useCountdown, useCaptcha, captchaStore, CaptchaModal |
-
-#### CaptchaModal
-
-| 属性 | 说明 |
-|------|------|
-| Props | `modelValue: boolean`, `type: 'slide' \| 'image'` |
-| Emits | `update:modelValue`, `success(CaptchaResult)`, `fail` |
-| 交互 | ESC 关闭, 点击遮罩关闭 |
-
-#### AuthLayout
-
-| 属性 | 说明 |
-|------|------|
-| 响应式 | ≥1024px: 40/60, 768-1023px: 32/68, <768px: 隐藏品牌区 |
-| 左侧 | 固定 BrandPanel |
-| 右侧 | `<RouterView />` 嵌套路由出口 |
 
 ---
 
@@ -344,29 +339,14 @@ App.vue
 | loginError | `string \| null` | 最近登录错误消息 |
 | agreedProtocolVersion | `string \| null` | 已同意的协议版本 |
 
-| Getter | 说明 |
-|--------|------|
-| isAuthenticated | `!!tokens?.accessToken` |
-| accessToken | 当前 Access Token |
-| refreshToken | 当前 Refresh Token |
-| isLoginLoading | `loginLoading` 别名 |
-
 | Action | 说明 |
 |--------|------|
 | loginWithPassword | 调用 authApi.accountLogin → setTokens + setUser |
-| loginWithPhone | 调用 authApi.phoneLogin → setTokens(rememberMe=false) + setUser |
+| loginWithPhone | 调用 authApi.phoneLogin → setTokens + setUser |
 | logout | 调用 authApi.logout → clearTokens |
-| refreshAccessToken | 去重锁机制，防止并发刷新；同时刷新 user |
-| setTokens(t, rememberMe?) | localStorage (rememberMe=true) / sessionStorage |
-| setUser(u, rememberMe?) | 持久化用户信息到 localStorage/sessionStorage |
-| clearTokens | 清空 tokens + user + USER_STORAGE_KEY + auth_tokens |
-| agreeProtocol(version) | 记录已同意的协议版本 |
-
-**Token 持久化策略（v1.2.1 增强）:**
-- Token 和 User 分别使用独立 storage key 持久化：`auth_tokens` / `auth_user`
-- `rememberMe=true` → `localStorage`，`rememberMe=false` → `sessionStorage`
-- 应用启动时 `loadTokens()` / `loadUser()` 从 localStorage→sessionStorage 优先级加载
-- `refreshAccessToken()` 响应中包含 user 时自动调用 `setUser()` 同步更新
+| refreshAccessToken | 去重锁机制，防止并发刷新 |
+| setTokens(t, rememberMe?) | rememberMe=true → localStorage，反之 sessionStorage |
+| clearTokens | 清空 tokens + user |
 
 ### 5.2 captchaStore (src/stores/captcha.ts)
 
@@ -376,87 +356,110 @@ App.vue
 | captchaType | `'slide' \| 'image'` | 验证码类型 |
 | pendingAction | `PendingAction \| null` | 验证通过后的待处理操作 |
 | smsCountdown | `number` | 短信重发倒计时 |
-| smsErrorCount | `number` | 短信发送失败次数（v1.2.1 新增） |
+| smsErrorCount | `number` | 短信发送失败次数 |
 | dailySmsCount | `number` | 当日已发送短信次数 |
+
+### 5.3 MCP Store (src/stores/mcp.ts)（v1.3.0 新增）
+
+| State | 类型 | 说明 |
+|-------|------|------|
+| tools | `McpTool[]` | MCP 工具列表 |
+| currentTool | `McpTool \| null` | 当前查看的工具详情 |
+| loading | `boolean` | 列表加载中 |
+| detailLoading | `boolean` | 详情加载中 |
+| error | `string \| null` | 错误消息 |
 
 | Getter | 说明 |
 |--------|------|
-| canSendSms | countdown=0 && daily<5 |
+| installedTools | 已安装的工具列表 |
+| officialTools | 官方工具列表 |
 
-### 5.3 chatStore & uiStore
+| Action | 说明 |
+|--------|------|
+| fetchTools(params?) | 获取工具列表（支持 category/search/sort） |
+| fetchToolById(id) | 获取工具详情 |
+| installTool(id) | 安装工具（调用 API + 更新本地状态） |
+| uninstallTool(id) | 卸载工具（调用 API + 更新本地状态） |
 
-保持原有功能不变，从 `.js` 迁移为 `.ts`，添加了 `ChatMessage` 和 `HistoryItem` 类型接口。详细设计参见 [Part B — 聊天状态管理](#17-聊天状态管理)。
+### 5.4 Skill Store (src/stores/skill.ts)（v1.3.0 新增）
+
+| State | 类型 | 说明 |
+|-------|------|------|
+| skills | `Skill[]` | 技能列表 |
+| loading | `boolean` | 加载中 |
+| error | `string \| null` | 错误消息 |
+
+| Getter | 说明 |
+|--------|------|
+| builtinSkills | 内置技能（is_builtin=true） |
+| customSkills | 自定义技能（is_builtin=false） |
+| enabledSkills | 已启用的技能 |
+| disabledSkills | 已禁用的技能 |
+| categoryStats | 分类统计: `{ [category]: { total, enabled, disabled } }` |
+
+| Action | 说明 |
+|--------|------|
+| fetchSkills(category?) | 获取技能列表 |
+| addSkill(data) | 创建技能 |
+| editSkill(id, data) | 更新技能 |
+| removeSkill(id) | 删除技能 |
+| toggleSkillEnabled(id, enabled) | 切换启用/禁用（乐观更新 + 失败回滚） |
+
+### 5.5 chatStore & uiStore
+
+详见 [Part B — 聊天状态管理](#17-聊天状态管理)。
 
 ---
 
 ## 6. 类型定义
 
-### 文件清单
+### 文件清单（v1.3.0 扩展）
 
 | 文件 | 导出类型 |
 |------|---------|
-| `types/api.ts` | `ApiResponse<T>`, `PaginatedResponse<T>`, `SendSmsRequest` |
+| `types/api.ts` | `ApiResponse<T>`, `SendSmsRequest` |
 | `types/auth.ts` | `AuthTokens`, `UserInfo`, `AccountLoginRequest`, `PhoneLoginRequest`, `RegisterRequest`, `EmailRegisterRequest`, `AuthResponse`, `LoginFailInfo` |
 | `types/captcha.ts` | `SlidePuzzleData`, `SlideVerifyRequest`, `SlideVerifyResponse`, `ImageCaptchaData` |
 | `types/components.ts` | `LoginTabItem`, `FeatureItem`, `OAuthProvider`, `CaptchaResult`, `PendingAction` |
+| `types/mcp.ts` | `McpTool`, `McpConfigField`, `InstallMcpRequest`, `MCP_CATEGORY_LABELS`, `MCP_CATEGORY_FILTERS` |
+| `types/skill.ts` | `Skill`, `SkillCreateRequest`, `CATEGORY_LABELS`, `CATEGORY_FILTERS` |
 | `types/router.d.ts` | 扩展 `RouteMeta: { title?, requiresAuth?, guest? }` |
 
 ---
 
 ## 7. API 服务层设计
 
-### 7.1 request.ts — Axios 实例
+### 7.1 request.ts — Axios 实例（v1.3.0 更新）
 
-**避免循环依赖策略:** request.ts 不导入 authStore，直接操作 localStorage/sessionStorage 的 `auth_tokens` key。auth store 使用相同的 key 和管理策略，两者通过共享存储实现通信。
+**Token 存储策略（v1.3.0 变更）：** 统一使用 `sessionStorage` 存储 Token（key: `auth_tokens`），不再区分 localStorage/sessionStorage。
 
 ```
-请求拦截器: 从 storage 读取 accessToken → 注入 Authorization header
+请求拦截器: 从 sessionStorage 读取 accessToken → 注入 Authorization header
 响应拦截器:
   code≠0 → ApiError
-  401 → 从 storage 读取 refreshToken → POST /auth/refresh (去重锁)
-    成功 → 更新 storage → 重试原请求
-    失败 → 清除 storage → window.location.href='/login'
+  401 → 从 sessionStorage 读取 refreshToken → POST /auth/refresh (去重锁)
+    成功 → 更新 sessionStorage → 重试原请求
+    失败 → 清除 sessionStorage → window.location.href='/login'
 ```
 
-**SSE 流式请求:** `sendStreamRequest()` 函数使用 fetch + ReadableStream 解析 SSE。
-**普通对话降级:** `sendChatRequest()` 已实现，POST /api/chat → 返回完整回复，用于不支持 SSE 的场景。
+**SSE 流式请求:** `sendStreamRequest()` 函数使用 fetch + ReadableStream 解析 SSE。请求头通过 `chatAuthHeaders()` 注入 JWT Token。
 
-### 7.2 API 模块
+### 7.2 API 模块（v1.3.0 扩展）
 
 | 模块 | 接口方法 |
 |------|---------|
 | authApi | accountLogin, phoneLogin, register, emailRegister, logout, refreshToken, getFailCount, getPublicKey |
 | captchaApi | getSlidePuzzle, verifySlide, sendSms, getImageCaptcha, verifyImageCaptcha |
 | oauthApi | getAuthUrl, handleCallback |
+| conversationApi | fetchConversations, fetchConversationMessages, renameConversation, deleteConversation |
+| mcpApi | fetchMcpTools, fetchMcpToolById, installMcpTool, uninstallMcpTool |
+| skillApi | fetchSkills, createSkill, fetchSkill, updateSkill, deleteSkill, toggleSkill |
 
 ---
 
 ## 8. 样式系统设计
 
-### 8.1 暗色主题变量 (variables.css)
-
-全部 34 个 CSS 自定义属性，覆盖：品牌色系、文字色阶、圆角、尺寸、字号/字重、阴影、过渡、遮罩、第三方平台色、品牌渐变。
-
-### 8.2 Legacy 兼容映射
-
-为保持 8 个现有聊天组件正常工作，在 variables.css 底部添加映射层：
-
-```css
---accent-primary: var(--color-accent);
---foreground-primary: var(--color-text-primary);
---surface-primary: var(--color-bg-page);
---surface-card: var(--color-bg-card);
---border-subtle: rgba(38, 51, 89, 0.25);
---border-medium: var(--color-border-input);
-```
-
-这使现有组件的 scoped 样式无需任何修改即可在暗色主题下正常渲染。
-
-### 8.3 SCSS Mixins (mixins.scss)
-
-- `respond-lg` / `respond-md` / `respond-sm` — 响应式断点 1024px / 768px
-- `glass-card` — 毛玻璃卡片效果 (backdrop-filter: blur(8px) + 半透明背景)
-- `input-focus` — 输入框聚焦蓝色边框 + 外发光
+（与 v1.2.2 保持一致，无变更。）
 
 ---
 
@@ -464,54 +467,40 @@ App.vue
 
 ### 9.1 密码加密
 
-```typescript
-// usePasswordEncrypt.ts
+```
 fetchPublicKey() → authApi.getPublicKey() → JSEncrypt.setPublicKey()
 encrypt(password) → JSEncrypt.encrypt() → 提交加密后的密文
 ```
 
-**v1.2.1 降级策略：** `useAuth.loginWithPassword()` 中若获取公钥失败（如后端未就绪），自动降级为明文传输密码（开发阶段兼容方案，生产环境应确保公钥加密）。
+降级策略：若获取公钥失败，自动降级为明文传输密码（开发阶段兼容方案）。
 
-### 9.2 Token 管理
+### 9.2 Token 管理（v1.3.0 简化）
 
 | 场景 | 存储 | 有效期 |
 |------|------|--------|
-| rememberMe=true | localStorage | 7 天 (Refresh Token) |
-| rememberMe=false | sessionStorage | 标签页生命周期 |
+| 所有登录 | sessionStorage | 标签页生命周期 |
 
 ### 9.3 请求安全
 
-- Authorization Bearer 头注入
-- 401 → 自动刷新 Token (去重锁)
+- Authorization Bearer 头注入（含 SSE 流式请求）
+- 401 → 自动刷新 Token（去重锁）
 - 密码不进 URL，POST Body 传输
-- 前端不存明文密码
 
 ---
 
 ## 10. 测试设计
 
-### 10.1 测试配置（v1.2.1 更新）
+### 10.1 测试配置
 
 ```typescript
 // vitest.config.ts
 environment: 'jsdom'
 globals: true
-css: true
-setupFiles: ['./tests/setup.ts']
 include: ['tests/**/*.{test,spec}.{ts,tsx}']
 server: { deps: { inline: ['element-plus'] } }
-coverage: {
-  provider: 'v8',
-  include: ['src/composables/**', 'src/stores/**', 'src/components/**']
-}
 ```
 
-**v1.2.1 变更：**
-- 测试目录从 `src/__tests__/` 迁移至项目根 `tests/`
-- tsconfig.app.json 排除 `tests/**`，tsconfig.vitest.json 包含 `tests/**`
-- vitest 配置内联 element-plus 依赖以支持组件测试
-
-### 10.2 测试结果 (24 tests, 5 files)
+### 10.2 测试结果 (24 tests, 6 files)
 
 | 文件 | 数量 | 覆盖内容 |
 |------|------|---------|
@@ -533,61 +522,29 @@ npm run test:coverage  # 覆盖率报告
 
 ## 11. 国际化设计
 
-### 11.1 配置
-
-- `vue-i18n` Composition API 模式 (`legacy: false`)
-- locale: `zh-CN`, fallbackLocale: `zh-CN`
-- 消息注册在 `src/locales/zh-CN.ts`，分 `auth` / `validation` / `error` 三组
-- 组件中使用 `$t('auth.login')` 或 `useI18n().t()`
-
-### 11.2 语言包规模
-
-- `auth`: 24 个 key（登录、注册、placeholder、协议等）
-- `validation`: 9 个 key（各字段校验错误消息）
-- `error`: 11 个 key（AUTH_001-AUTH_010 + networkError）
+（与 v1.2.2 保持一致，无变更。）
 
 ---
 
 ## 12. 实施记录
 
-### 12.1 文件变更统计
+### 12.1 v1.3.0 文件变更统计
 
-| 类型 | 数量 |
-|------|------|
-| 新增文件 | 57 |
-| JS→TS 转换 | 4 (main.js, chat.js, ui.js, chatApi.js→request.ts) |
-| 修改文件 | 4 (App.vue, index.html, package.json, variables.css) |
-| 保留不变 | 8 (chat components: AppShell, ChatHeader, ChatMain, InputBar, MessageItem, MessageList, RightPanel, SideMenu, TopBar) |
-| 删除文件 | 4 (main.js, chat.js, ui.js, chatApi.js) |
+| 类型 | 数量 | 说明 |
+|------|------|------|
+| 新增文件 | 15 | MainLayout, McpCard, SkillCard, SkillDialog, iconMap, conversationApi, mcpApi, skillApi, mcp store, skill store, mcp types, skill types, SkillsView, McpSquareView, McpDetailView |
+| 重构文件 | 6 | router/index.ts, stores/ui.ts, stores/chat.ts, services/request.ts, SideMenu.vue, RightPanel.vue |
 
-### 12.2 TypeScript 类型检查
-
-```bash
-$ npx vue-tsc --build --force
-# 零错误通过
-```
-
-### 12.3 测试结果
-
-```bash
-$ npx vitest run
- Test Files  5 passed (5)
-      Tests  24 passed (24)
-```
-
-### 12.4 npm 脚本
+### 12.2 npm 脚本
 
 | 命令 | 用途 |
 |------|------|
 | `npm run dev` | 启动 Vite 开发服务器 |
-| `npm run build` | 并行类型检查 + 生产构建（run-p type-check "build-only {@}"） |
+| `npm run build` | 并行类型检查 + 生产构建 |
 | `npm run type-check` | 仅类型检查 |
 | `npm run test` | 运行测试 |
-| `npm run test:watch` | 开发模式测试 |
-| `npm run test:coverage` | 覆盖率报告 |
 | `npm run lint` | ESLint 检查 |
 | `npm run format` | Prettier 格式化 |
-```
 
 ---
 
@@ -595,253 +552,111 @@ $ npx vitest run
 
 ### 13.1 需求来源
 
-聊天模块设计基于 `requirements.md`（ke-hermes 前端需求文档），该文档定义了 5 项功能需求：
+聊天模块设计基于 `requirements.md`，定义了 5 项功能需求：F1 对话界面、F2 普通对话、F3 流式对话、F4 状态管理、F5 界面样式。
 
-| 需求编号 | 功能 | 说明 |
-|---------|------|------|
-| F1 | 对话界面 | 消息列表 + 输入区域，左右对齐，自动滚动 |
-| F2 | 普通对话 | POST /api/chat → 完整回复（当前未实现，仅流式） |
-| F3 | 流式对话 | POST /api/chat/stream → SSE 逐 token 推送 |
-| F4 | 状态管理 | Pinia chatStore：messages/loading/sendMessage |
-| F5 | 界面样式 | 白色背景 → 已在 v1.1.0 升级为暗色主题 |
+### 13.2 v1.3.0 对话历史对接
 
-### 13.2 实现与需求偏差
+v1.3.0 将 RightPanel 从硬编码历史数据升级为对接后端 Conversation API：
 
-| 需求 | 实现 | 偏差说明 |
-|------|------|---------|
-| F1 对话界面 | 超出需求：升级为 AppShell 三栏布局 + 可折叠侧栏 + 历史面板 | 需求仅定义了简单的上方消息/下方输入布局；实际实现了企业级多面板布局 |
-| F2 普通对话 | sendChatRequest 已实现 | POST /api/chat → 完整回复 + thread_id，作为降级方案 |
-| F3 流式对话 | 完全符合需求 | fetch + ReadableStream SSE 解析、逐 token 追加、loading 态、错误处理 |
-| F4 状态管理 | 超出需求：新增 uiStore 管理 sidebar/panel/model/history | 需求仅定义 chatStore；实际需要 uiStore 管理复杂 UI 状态 |
-| F5 界面样式 | 暗色主题替代白色背景 | v1.1.0 全面暗色化，通过 Legacy 兼容层保证现有组件正常渲染 |
+- 组件挂载时调用 `uiStore.fetchHistories()` → `conversationApi.fetchConversations()` 从后端获取真实对话列表
+- 点击历史项 → `chatStore.loadConversation(threadId)` → `conversationApi.fetchConversationMessages(threadId)` 加载消息
+- 删除历史 → `uiStore.deleteHistory(threadId)` → `conversationApi.deleteConversation(threadId)` 调用后端删除
+- 新对话完成后自动刷新历史列表（`sendMessage` 的 `onDone` 回调中调用 `uiStore.fetchHistories()`）
 
 ### 13.3 技术要点
 
 | 项目 | 技术 | 说明 |
 |------|------|------|
-| 布局 | Flexbox 三栏 | SideMenu(左) + MainColumn(ChatHeader+MessageList+InputBar)(中) + RightPanel(右) |
+| 布局 | Flexbox 三栏 | SideMenu(左) + MainColumn(中) + RightPanel(右) |
+| 页面框架 | MainLayout | SideMenu + TopBar + RouterView，支持多页面导航 |
 | 流式通信 | fetch + ReadableStream | 手动解析 SSE `data: { "token": "..." }\n\n` 格式 |
-| Markdown | marked 库 | 智能体回复渲染为富文本（标题/代码块/表格/引用等） |
+| Markdown | marked 库 | 智能体回复渲染为富文本 |
 | 自动滚动 | watch + nextTick + scrollTop | 监听 messages.length 和 lastContent 变化 |
-| 消息 ID | 自增整数 | `let nextId = 1` 每消息递增 |
 
 ---
 
 ## 14. 聊天页面布局
 
-### 14.1 AppShell — 三栏弹性布局
+### 14.1 页面层级（v1.3.0）
 
 ```
-┌──────────────────────────────────────────────────────────┐
-│ AppShell (flex row, 100vh)                               │
-│ ┌─────────┬──────────────────────────────┬────────────┐ │
-│ │SideMenu │  MainColumn (flex:1)         │ RightPanel │ │
-│ │220px    │  ┌────────────────────────┐  │ 280px      │ │
-│ │(可折叠  │  │ TopBar (52px)          │  │ (可折叠    │ │
-│ │ 56px)  │  ├────────────────────────┤  │  40px)    │ │
-│ │         │  │ ChatHeader (48px)      │  │            │ │
-│ │         │  ├────────────────────────┤  │ 对话历史    │ │
-│ │  导航    │  │ MessageList (flex:1)    │  │ 列表       │ │
-│ │  菜单    │  │  - MessageItem (user)  │  │            │ │
-│ │         │  │  - MessageItem (asst)  │  │            │ │
-│ │         │  │  - auto-scroll         │  │            │ │
-│ │         │  ├────────────────────────┤  │            │ │
-│ │         │  │ InputBar              │  │            │ │
-│ │         │  │ (输入框 + 发送/附件按钮) │  │            │ │
-│ │         │  └────────────────────────┘  │            │ │
-│ └─────────┴──────────────────────────────┴────────────┘ │
-└──────────────────────────────────────────────────────────┘
+MainLayout.vue (flex row, 100vh)
+├── SideMenu (220px / 56px 折叠)
+└── right-area (flex:1, flex column)
+    ├── TopBar (52px)
+    └── work-area (flex:1)
+        └── <RouterView />
+            └── HomeView.vue
+                └── AppShell.vue (flex row)
+                    ├── ChatMain (flex:1)
+                    │   ├── ChatHeader (48px)
+                    │   ├── MessageList (flex:1)
+                    │   └── InputBar
+                    └── RightPanel (280px / 40px 折叠)
 ```
 
-### 14.2 布局尺寸规范
-
-| 区域 | 宽度/高度 | CSS 变量 | 说明 |
-|------|---------|---------|------|
-| SideMenu 展开 | 220px | `--sidebar-width` | 含 Logo + 导航菜单 |
-| SideMenu 折叠 | 56px | `--sidebar-collapsed-width` | 仅图标，文字隐藏 |
-| TopBar | 52px | `--topbar-height` | 搜索框 + 通知/用户按钮 |
-| ChatHeader | 48px | `--chat-header-height` | 智能体名称 + 模型选择器 |
-| RightPanel 展开 | 280px | `--right-panel-width` | 对话历史列表 |
-| RightPanel 折叠 | 40px | `--right-panel-collapsed-width` | 仅展开按钮 |
-| MessageList | flex: 1 | — | 自动填充剩余空间，overflow-y: auto |
-| InputBar | fit-content | — | 固定底部，含输入框+发送按钮 |
-
-### 14.3 折叠/展开过渡
-
-```css
-/* SideMenu & RightPanel 使用 CSS transition */
-transition: width var(--transition-duration) ease,
-            min-width var(--transition-duration) ease;
-
-/* 折叠态隐藏文字 */
-.sidebar.collapsed .logo       { opacity: 0; width: 0; overflow: hidden; }
-.sidebar.collapsed .menu-label { opacity: 0; height: 0; overflow: hidden; }
-.sidebar.collapsed .menu-text  { opacity: 0; width: 0; overflow: hidden; }
-```
+**v1.3.0 变更：** MainLayout 作为外层框架提供 SideMenu + TopBar，AppShell 仅在 HomeView 内使用，负责聊天区域的三栏布局（ChatMain + RightPanel）。
 
 ---
 
 ## 15. 聊天核心组件设计
 
-### 15.1 AppShell
+### 15.1 MainLayout（v1.3.0 新增）
+
+| 属性 | 说明 |
+|------|------|
+| 文件 | `src/components/MainLayout.vue` |
+| 功能 | 认证页面根布局，包含 SideMenu + TopBar + RouterView |
+| 样式 | `display: flex; height: 100vh;` |
+
+### 15.2 AppShell
 
 | 属性 | 说明 |
 |------|------|
 | 文件 | `src/components/AppShell.vue` |
-| 功能 | 三栏根布局容器 |
-| 子组件 | SideMenu + (TopBar + ChatMain) + RightPanel |
+| 功能 | 聊天页三栏布局（ChatMain + RightPanel） |
 | 状态依赖 | uiStore（sidebar/panel 折叠态） |
-| 样式 | `display: flex; height: 100vh;` |
 
-### 15.2 ChatMain
-
-| 属性 | 说明 |
-|------|------|
-| 文件 | `src/components/ChatMain.vue` |
-| 功能 | 中间主列垂直布局 |
-| 子组件 | ChatHeader + MessageList + InputBar |
-| 样式 | `flex-direction: column; height: 100%;` |
-
-### 15.3 MessageList
-
-| 属性 | 说明 |
-|------|------|
-| 文件 | `src/components/MessageList.vue` |
-| 功能 | 滚动消息容器，渲染 `MessageItem` 列表 |
-| Props | 无（直接从 chatStore 读取 `messages`） |
-| 自动滚动 | watch `messages.length`（新消息）和 `lastContent`（流式追加）→ `scrollToBottom()` |
-| 样式 | `flex:1; overflow-y:auto; padding:16px 24px; gap:16px` |
-
-```typescript
-// 自动滚动实现
-const lastContent = computed(() => {
-  const msgs = chatStore.messages
-  if (msgs.length === 0) return ''
-  return msgs[msgs.length - 1].content
-})
-
-function scrollToBottom() {
-  nextTick(() => {
-    const el = scrollContainer.value
-    if (el) el.scrollTop = el.scrollHeight
-  })
-}
-
-watch(() => chatStore.messages.length, scrollToBottom)
-watch(lastContent, scrollToBottom)
-```
-
-### 15.4 MessageItem
-
-| 属性 | 说明 |
-|------|------|
-| 文件 | `src/components/MessageItem.vue` |
-| 功能 | 单条消息渲染，区分 user/assistant 角色 |
-| Props | `message: ChatMessage` |
-| 关键行为 | user 消息右对齐（蓝底白字），assistant 左对齐（卡片白/暗底） |
-
-**渲染逻辑：**
-
-| 角色 | 头像图标 | 内容渲染 | 对齐 |
-|------|---------|---------|------|
-| user | UserCircle (lucide) | 纯文本 | 右 |
-| assistant | Sparkles (lucide) | **Markdown → HTML**（通过 `marked`） | 左 |
-
-**流式输出指示器：**
-```
-<span v-if="message.streaming && !message.content" class="typing-indicator">
-  <span class="dot" /><span class="dot" /><span class="dot" />
-</span>
-```
-三个圆点依次闪烁（CSS `@keyframes typing`，各延迟 0s/0.2s/0.4s）。
-
-**Markdown 渲染样式（scoped）：**
-- 标题 h1–h4：字体 14–18px
-- 代码块 `<pre><code>`：浅/暗背景 + Consolas/Monaco 等宽字体
-- 引用 blockquote：左侧 3px 蓝色竖线
-- 表格：完整边框 + 表头背景
-- 链接：accent 色 + hover 下划线
-
-### 15.5 InputBar
-
-| 属性 | 说明 |
-|------|------|
-| 文件 | `src/components/InputBar.vue` |
-| 功能 | 消息输入 + 发送 + 附件入口 |
-| 本地状态 | `inputText: ref<string>` |
-| 依赖 | chatStore.sendMessage, chatStore.loading, uiStore |
-
-**交互行为：**
-
-| 操作 | 行为 |
-|------|------|
-| Enter（非 Shift） | `e.preventDefault()` → `sendMessage(text)` → 清空输入 |
-| Shift + Enter | 换行（默认行为） |
-| 点击发送按钮 | `sendMessage(text)` → 清空输入 |
-| loading=true | 输入框和发送按钮 disabled |
-| 点击 + 按钮 | `uiStore.togglePlusMenu()` → 弹出附件菜单 |
-| 点击外部 | `uiStore.closePlusMenu()`（document click 监听） |
-
-**Plus 弹出菜单**：绝对定位在输入框上方，包含"上传附件"和"上传图片"两项。
-
-**底部信息栏**：
-- 左侧：模型选择器 Pill（`uiStore.selectedModel` + ChevronDown）
-- 右侧：快捷键提示 "Enter 发送 · Shift+Enter 换行"
-
-### 15.6 ChatHeader
-
-| 属性 | 说明 |
-|------|------|
-| 文件 | `src/components/ChatHeader.vue` |
-| 功能 | 聊天区顶部信息栏 + 模型切换下拉 |
-| 内容 | 智能体头像（Sparkles 图标圆形蓝底）+ 名称 "Hermes 智能体" + 模型下拉选择器 |
-| 模型选择器 | el-dropdown 实现，可选模型：DeepSeek V4、Claude Opus 4.7、GPT-4o、Gemini 2.5 Pro。选中项同步更新 `uiStore.selectedModel` |
-
-### 15.7 SideMenu
+### 15.3 SideMenu（v1.3.0 重构）
 
 | 属性 | 说明 |
 |------|------|
 | 文件 | `src/components/SideMenu.vue` |
-| 功能 | 可折叠左侧导航菜单 |
-| 图标库 | lucide-vue-next（PanelLeftClose, MessageSquare, Timer, Bot, Zap, Settings） |
+| 功能 | 可折叠左侧导航菜单，支持菜单分组折叠/展开、路由导航、路由高亮 |
 
-**菜单分组:**
+**菜单分组（v1.3.0）：**
 
 | 分组 | 项目 |
 |------|------|
-| 聊天 | 对话 |
-| 控制 | 定时任务 |
-| 代理 | 代理列表, Skills |
-| 设置 | 配置 |
+| 聊天 | 对话 (→ /) |
+| 控制 | 概览, 实例, 会话, 使用情况, 定时任务 |
+| 代理 | 代理, 技能 (→ /skills), MCP 广场 (→ /mcp), 节点 |
+| 设置 | 配置, 文档 |
+| 后台 | 后台 |
 
-**折叠/展开:** 点击右上角 `<`/`>` 按钮 → `uiStore.toggleSidebar()` → `sidebarCollapsed` 翻转 → CSS transition 动画。
+- 分组可点击折叠/展开（ChevronDown 旋转动画）
+- 菜单项通过 `isItemActive()` 匹配 `route.path` 高亮
+- 点击菜单项调用 `router.push(item.route)` 导航
 
-### 15.8 TopBar
-
-| 属性 | 说明 |
-|------|------|
-| 文件 | `src/components/TopBar.vue` |
-| 功能 | 顶部全局搜索 + 通知/用户菜单 |
-| 搜索 | 搜索框绑定 `uiStore.searchQuery`，支持清空按钮 |
-| 通知按钮 | 铃铛图标（Bell），无具体交互（占位） |
-| 用户菜单 | el-dropdown 实现：显示用户头像首字母 + 昵称，下拉项包含"退出登录"（调用 `useAuth().logout()`） |
-
-### 15.9 RightPanel
+### 15.4 RightPanel（v1.3.0 重构）
 
 | 属性 | 说明 |
 |------|------|
 | 文件 | `src/components/RightPanel.vue` |
-| 功能 | 可折叠右侧历史对话面板 |
-| 展开态 | 标题"历史对话" + 折叠按钮 + "新建对话"按钮 + 历史列表 |
-| 折叠态 | 仅展开按钮 |
-| 新建对话 | `chatStore.clearMessages()` + `uiStore.newConversation()` |
-| 删除历史 | hover 显示删除按钮 → `uiStore.deleteHistory(id)` |
+| 功能 | 可折叠右侧历史对话面板，对接后端 Conversation API |
+| 数据来源 | `uiStore.histories`（通过 `fetchHistories()` 从后端获取） |
+| 点击历史 | `chatStore.loadConversation(threadId)` → 加载消息并渲染 |
+| 删除历史 | `uiStore.deleteHistory(threadId)` → 后端删除 + 本地更新 |
+
+### 15.5 MessageList / MessageItem / InputBar / ChatHeader / TopBar
+
+（与 v1.2.2 保持一致。）
 
 ---
 
 ## 16. 流式对话（SSE）设计
 
-### 16.1 数据流
+### 16.1 数据流（v1.3.0 更新）
 
 ```
 用户输入 → InputBar.handleSend()
@@ -849,150 +664,59 @@ watch(lastContent, scrollToBottom)
            ├─ 追加 user 消息到 messages[]
            ├─ 创建空 assistant 消息（streaming=true）
            ├─ 调用 sendStreamRequest(text, { threadId, onToken, onThreadId, onDone, onError })
-           │   ├─ fetch POST /api/chat/stream (body: { message, thread_id? })
-           │   ├─ response.body.getReader() → ReadableStream
-           │   ├─ 逐块解码 → TextDecoder
-           │   ├─ 按 \n 分割 → 解析 SSE data: 行
-           │   ├─ JSON.parse → onToken(token)
-           │   │   └─ assistantMsg.content += token
-           │   └─ JSON.parse → onThreadId(thread_id)
-           │       └─ chatStore.threadId = thread_id
-           ├─ onDone() → streaming=false, loading=false
-           └─ onError() → 追加错误文本到消息末尾
+           │   ├─ fetch POST /api/chat/stream
+           │   ├─ ReadableStream 解析 SSE
+           │   ├─ onToken(token) → assistantMsg.content += token
+           │   ├─ onThreadId(id) → chatStore.threadId = id
+           │   └─ onDone() → streaming=false, loading=false
+           │       └─ uiStore.activeThreadId = threadId
+           │       └─ uiStore.fetchHistories()  ← v1.3.0 新增：自动刷新历史列表
+           └─ onError() → 追加错误文本
 ```
 
 ### 16.2 SSE 解析实现
 
 ```typescript
-// src/services/request.ts — sendStreamRequest()
-
-function parseSseDataLine(
-  line: string,
-  onToken: (token: string) => void,
-  onThreadId?: (threadId: string) => void,
-): void {
+function parseSseDataLine(line, onToken, onThreadId?): void {
   if (!line.startsWith('data: ')) return
-  try {
-    const json = JSON.parse(line.slice(6)) as { token?: string; thread_id?: string }
-    if (json.token) {
-      onToken(json.token)
-    }
-    if (json.thread_id && onThreadId) {
-      onThreadId(json.thread_id)
-    }
-  } catch {
-    // skip malformed SSE line
-  }
-}
-
-export async function sendStreamRequest(
-  message: string,
-  options: {
-    threadId?: string | null
-    onToken: (token: string) => void
-    onThreadId?: (threadId: string) => void
-    onDone: () => void
-    onError: (err: Error) => void
-  },
-): Promise<void> {
-  const { threadId, onToken, onThreadId, onDone, onError } = options
-
-  const body: { message: string; thread_id?: string } = { message }
-  if (threadId) {
-    body.thread_id = threadId
-  }
-
-  const baseURL = import.meta.env.VITE_API_BASE_URL || '/api'
-  const response = await fetch(`${baseURL}/chat/stream`, {
-    method: 'POST',
-    headers: chatAuthHeaders(),
-    body: JSON.stringify(body),
-  })
-  // ... reader + decoder + buffer logic (same as v1.2.1)
-  // 每个 SSE data: 行调用 parseSseDataLine(line, onToken, onThreadId)
+  const json = JSON.parse(line.slice(6))
+  if (json.token) onToken(json.token)
+  if (json.thread_id && onThreadId) onThreadId(json.thread_id)
 }
 ```
-
-### 16.3 请求/响应格式
-
-| 方向 | 格式 |
-|------|------|
-| 请求 | `POST /api/chat/stream` `{ "message": "string", "thread_id"?: "string" }` |
-| 响应 (token) | SSE 事件流：`data: {"token": "string"}\n\n` |
-| 响应 (结束) | SSE 最后一条：`data: {"thread_id": "string"}\n\n` |
-
-**v1.2.2 变更：**
-- 请求体增加可选 `thread_id` 参数，携带上次对话返回的 thread_id 以续接上下文
-- SSE 流结束时后端推送 `thread_id`，前端通过 `onThreadId` 回调保存到 `chatStore.threadId`
-- 前端首次对话不传 `thread_id`，后续请求自动携带已保存的 `threadId`
-
-### 16.4 为什么不用 EventSource
-
-浏览器原生 `EventSource` 仅支持 GET 请求，不支持 POST。SSE 对话需要 POST 发送用户消息，因此必须使用 `fetch` + `ReadableStream` 手动解析 SSE 格式。
 
 ---
 
 ## 17. 聊天状态管理
 
-### 17.1 chatStore
+### 17.1 chatStore（v1.3.0 更新）
 
 | State | 类型 | 说明 |
 |-------|------|------|
 | `messages` | `Ref<ChatMessage[]>` | 所有消息 |
 | `loading` | `Ref<boolean>` | 等待流式回复中 |
-| `threadId` | `Ref<string \| null>` | 当前对话线程 ID（v1.2.2 新增） |
+| `threadId` | `Ref<string \| null>` | 当前对话线程 ID |
 
 | Action | 说明 |
 |--------|------|
-| `addMessage(role, content, streaming?)` | 追加消息，返回引用（用于流式追加） |
-| `sendMessage(text)` | 空/loading 校验 → 追加 user → 创建 asst → 调用 SSE（带 threadId）→ onToken 追加 content → onThreadId 保存 threadId → onDone/onError 标记完成 |
-| `clearMessages()` | 清空消息列表 + 重置 loading + 重置 threadId = null |
+| `sendMessage(text)` | 发送消息 → SSE 流式接收 → onDone 中自动刷新历史列表 |
+| `clearMessages()` | 清空消息 + 重置 loading + 重置 threadId |
+| `loadConversation(tid)` | **v1.3.0 新增**：从后端加载指定对话的消息并渲染 |
 
 ```typescript
-// ChatMessage 类型
-interface ChatMessage {
-  id: number
-  role: 'user' | 'assistant'
-  content: string
-  streaming: boolean     // true 表示正在流式接收 token
-}
-```
-
-**v1.2.2 thread_id 流转：**
-
-```typescript
-async function sendMessage(text: string) {
-  if (loading.value || !text.trim()) return
-
+async function loadConversation(tid: string) {
+  threadId.value = tid
   loading.value = true
-  addMessage('user', text.trim())
-  const assistantId = addMessage('assistant', '', true).id
-
-  try {
-    await sendStreamRequest(text.trim(), {
-      threadId: threadId.value,       // 携带已有 thread_id
-      onToken(token: string) {
-        // 逐 token 追加到 assistant 消息
-      },
-      onThreadId(id: string) {
-        threadId.value = id           // 保存后端返回的 thread_id
-      },
-      onDone() { /* streaming=false, loading=false */ },
-      onError(err: Error) { /* 追加错误消息 */ },
-    })
-  } catch (err) { /* 网络异常处理 */ }
-}
-
-function clearMessages() {
-  messages.value = []
+  const detail = await fetchConversationMessages(tid)
+  messages.value = detail.messages
+    .filter(m => m.role === 'user' || m.role === 'assistant')
+    .map((m, idx) => ({ id: idx + 1, role: m.role, content: m.content, streaming: false }))
+  nextId = messages.value.length + 1
   loading.value = false
-  threadId.value = null              // v1.2.2: 清空对话线程
 }
 ```
 
-**消息 ID 策略**：`let nextId = 1` 模块级变量，自增分配，确保每条消息有唯一 key（Vue `v-for` 使用）。
-
-### 17.2 uiStore
+### 17.2 uiStore（v1.3.0 重构）
 
 | State | 类型 | 默认值 | 说明 |
 |-------|------|--------|------|
@@ -1001,52 +725,45 @@ function clearMessages() {
 | `plusMenuOpen` | `boolean` | `false` | 附件弹出菜单 |
 | `searchQuery` | `string` | `''` | 搜索框输入 |
 | `selectedModel` | `string` | `'DeepSeek V4'` | 当前选中模型 |
-| `histories` | `HistoryItem[]` | 5 条预设 | 对话历史列表 |
-| `activeHistoryId` | `number \| null` | `1` | 当前活跃历史 ID |
+| `histories` | `HistoryItem[]` | `[]` | 对话历史列表（从后端获取） |
+| `activeThreadId` | `string \| null` | `null` | 当前活跃对话线程 ID |
 
 | Action | 说明 |
 |--------|------|
-| `toggleSidebar()` | 翻转 sidebarCollapsed |
-| `toggleRightPanel()` | 翻转 rightPanelCollapsed |
-| `togglePlusMenu()` | 翻转 plusMenuOpen |
-| `closePlusMenu()` | plusMenuOpen = false |
-| `deleteHistory(id)` | 过滤删除 + 如果当前选中则清除 activeHistoryId |
-| `newConversation()` | 重置 activeHistoryId + 关闭菜单 |
+| `fetchHistories()` | **v1.3.0 新增**：从后端获取对话列表 |
+| `deleteHistory(thread_id)` | **v1.3.0 更新**：调用后端 API 删除 + 本地移除 |
+| `newConversation()` | 重置 activeThreadId + 关闭菜单 |
+| `toggleSidebar()` / `toggleRightPanel()` | 翻转折叠态 |
 
-```typescript
-interface HistoryItem {
-  id: number
-  title: string
-}
-```
+**v1.3.0 核心变更：**
+- `HistoryItem` 接口从 `{id: number, title: string}` → `{thread_id: string, title: string}`
+- `activeHistoryId: number` → `activeThreadId: string | null`
+- `histories` 从硬编码预设 → `fetchHistories()` 从后端动态加载
+- `deleteHistory` 从本地过滤 → 调用 `conversationApi.deleteConversation(thread_id)`
 
 ---
 
 ## 18. 聊天 API 接口对接
 
-### 18.1 后端接口清单（聊天）
+### 18.1 后端接口清单
 
-| 接口 | 方法 | 请求体 | 响应体 | 用途 | 实现状态 |
-|------|------|--------|--------|------|---------|
-| `/api/chat` | POST | `{"message":"string","thread_id?":"string"}` | `{"response":"string","thread_id":"string"}` | 普通对话 | 已实现 |
-| `/api/chat/stream` | POST | `{"message":"string","thread_id?":"string"}` | SSE `data:{"token":"string"}\n\n` + `data:{"thread_id":"string"}\n\n` | 流式对话 | 已实现 |
+| 接口 | 方法 | 请求体 | 响应体 | 用途 |
+|------|------|--------|--------|------|
+| `/api/chat` | POST | `{"message","thread_id?"}` | `{"response","thread_id"}` | 普通对话 |
+| `/api/chat/stream` | POST | `{"message","thread_id?"}` | SSE 流 | 流式对话 |
+| `/api/conversations` | GET | — | `[{thread_id, title, updated_at}]` | 对话列表 |
+| `/api/conversations/{id}` | GET | — | `{thread_id, title, messages}` | 对话消息 |
+| `/api/conversations/{id}` | PATCH | `{title}` | `{thread_id, title}` | 重命名 |
+| `/api/conversations/{id}` | DELETE | — | — | 删除对话 |
 
-### 18.2 错误处理
+### 18.2 conversationApi 服务（v1.3.0 新增）
 
-| 场景 | 状态码 | 前端处理 |
-|------|--------|---------|
-| 空消息 | — | 前端 `minLength=1` 校验，不发送请求 |
-| 后端不可用 | 网络错误 | 在 assistant 消息末尾追加 `[Connection failed: ...]` |
-| 后端内部错误 | 500 | 在 assistant 消息末尾追加 `[Error: ...]` |
-| HTTP 异常 | 4xx/5xx | `fetch` 非 ok → `throw new Error('HTTP ${status}: ${body}')` |
-
-### 18.3 请求配置
-
-| 配置项 | 值 | 说明 |
-|--------|-----|------|
-| 代理目标 | `http://127.0.0.1:8000` | Vite proxy 配置 |
-| baseURL | `/api` | 经 Vite 代理转发到后端 |
-| Content-Type | `application/json` | 请求头 |
+```typescript
+export async function fetchConversations(): Promise<ConversationItem[]>
+export async function fetchConversationMessages(thread_id: string): Promise<ConversationDetail>
+export async function renameConversation(thread_id: string, title: string): Promise<{thread_id, title}>
+export async function deleteConversation(threadId: string): Promise<void>
+```
 
 ---
 
@@ -1056,39 +773,178 @@ interface HistoryItem {
 
 | 需求编号 | 需求描述 | 实现状态 | 实现文件 |
 |---------|---------|---------|---------|
-| F1 对话界面 | 上方消息列表 + 下方输入区，左右对齐，自动滚动 | **完全实现 + 超越** | AppShell, MessageList, MessageItem, InputBar |
-| F2 普通对话 | POST /api/chat，完整回复，loading 态，错误处理 | **已实现** | request.ts 中 sendChatRequest() 作为降级方案 |
-| F3 流式对话 | POST /api/chat/stream，SSE 逐 token 推送，逐字效果 | **完全实现** | request.ts sendStreamRequest, chatStore.sendMessage |
-| F4 状态管理 | Pinia chatStore：messages/loading，sendMessage | **完全实现 + 超越** | chatStore (chat.ts) + uiStore (ui.ts) |
-| F5 界面样式 | 白色背景，user 深色右对齐，asst 浅色左对齐 | **已升级** | v1.1.0 暗色主题 + Legacy 兼容层 |
+| F1 对话界面 | 上方消息列表 + 下方输入区，左右对齐，自动滚动 | 完全实现 + 超越 | AppShell, MessageList, MessageItem, InputBar |
+| F2 普通对话 | POST /api/chat，完整回复 | 已实现 | request.ts sendChatRequest() |
+| F3 流式对话 | POST /api/chat/stream，SSE 逐 token 推送 | 完全实现 | request.ts sendStreamRequest, chatStore.sendMessage |
+| F4 状态管理 | Pinia chatStore | 完全实现 + 超越 | chatStore + uiStore + mcpStore + skillStore |
+| F5 界面样式 | 暗色主题 | 已升级 | v1.1.0 暗色主题 + Legacy 兼容层 |
 
-### 19.2 待实现项（v1.2.1）
+### 19.2 待实现项
 
 | 项目 | 优先级 | 说明 |
 |------|--------|------|
-| 搜索功能 | P3 | TopBar 搜索框绑定 uiStore.searchQuery 但无实际搜索逻辑 |
-| 对话历史持久化 | P3 | 当前硬编码 5 条预设历史，需接入后端对话 CRUD API |
+| 搜索功能 | P3 | TopBar 搜索框无实际搜索逻辑 |
 | 通知功能 | P3 | TopBar 铃铛按钮无交互 |
-| 用户菜单完善 | P3 | TopBar 用户头像已实现登出，可补充个人设置等入口 |
-| 注册表单提交 | P2 | RegisterForm 和 EmailRegisterForm 的 submit 为 TODO 占位，需接入后端注册 API |
-
-### 19.3 组件 → 文件映射总表
-
-| 组件 | 文件 | 关联需求 |
-|------|------|---------|
-| AppShell | `src/components/AppShell.vue` | F1 |
-| ChatMain | `src/components/ChatMain.vue` | F1 |
-| MessageList | `src/components/MessageList.vue` | F1, F3 |
-| MessageItem | `src/components/MessageItem.vue` | F1, F3, F5 |
-| InputBar | `src/components/InputBar.vue` | F1, F2, F3 |
-| ChatHeader | `src/components/ChatHeader.vue` | F1 |
-| SideMenu | `src/components/SideMenu.vue` | F1（扩展） |
-| TopBar | `src/components/TopBar.vue` | F1（扩展） |
-| RightPanel | `src/components/RightPanel.vue` | F1（扩展） |
-| chatStore | `src/stores/chat.ts` | F4 |
-| uiStore | `src/stores/ui.ts` | F1（扩展） |
-| sendStreamRequest | `src/services/request.ts` | F3 |
+| 用户菜单完善 | P3 | 可补充个人设置等入口 |
+| 注册表单提交 | P2 | RegisterForm 和 EmailRegisterForm 的 submit 为 TODO 占位 |
+| MCP 创建功能 | P3 | "创建 MCP"按钮 TODO 占位 |
 
 ---
 
-> 本文档 v1.2.2 基于实际代码实现全面更新：测试目录迁移至 tests/、路由改为 AuthLayout 嵌套结构、普通对话 sendChatRequest 已实现、ChatHeader 模型下拉选择器已实现、auth store 分离 Token/User 持久化、chat store 增加 threadId 多轮对话上下文管理。前后端接口对齐（含 thread_id 双向传递），认证/验证码/OAuth/短信模块均已联调通过。
+## 20. MCP 广场模块
+
+### 20.1 概述
+
+MCP 广场模块允许用户浏览、搜索、查看详情、安装和卸载 MCP（Model Context Protocol）工具，扩展 AI 智能体的能力。
+
+### 20.2 页面结构
+
+```
+McpSquareView.vue
+├── 页面标题 + "创建 MCP" 按钮（TODO）
+├── 搜索栏（关键字搜索）
+├── 统计卡片（总数 / 已安装 / 本周热门 / 最近更新）
+├── 分类筛选按钮（全部/代码执行/搜索/数据分析/文件管理/通知/数据库/开发工具）
+├── 排序下拉（最多安装 / 最高评分 / 最近更新）
+└── 工具卡片网格
+    └── McpCard.vue（每个工具一张卡片）
+```
+
+### 20.3 McpCard 组件
+
+| 属性 | 说明 |
+|------|------|
+| Props | `tool: McpTool` |
+| Emits | `click(tool)`, `install(tool)` |
+
+卡片展示内容：图标 + 名称 + 官方标识 + 作者 + 描述 + 标签 + 安装数 + 评分 + 安装/已安装按钮
+
+### 20.4 McpDetailView 详情页
+
+| 标签页 | 内容 |
+|--------|------|
+| 概述 | 简介 + 核心功能列表 + 信息面板（版本/作者/许可证/仓库/分类/更新）+ 标签 |
+| 配置 | 配置参数列表（名称/类型/必填/描述） |
+| 使用说明 | 安装方式/运行环境/自动启动说明 |
+| 评价 | 用户评价（占位，暂无数据） |
+
+### 20.5 MCP 数据模型
+
+```typescript
+interface McpTool {
+  id: string; name: string; description: string; icon: string
+  author: string; version: string; license: string; repository: string
+  installs: number; rating: number; category: string; tags: string[]
+  features: string[]; official: boolean; installed: boolean
+  config_schema: McpConfigField[]
+  created_at: string; updated_at: string
+}
+
+interface McpConfigField {
+  name: string; label: string
+  type: 'string' | 'number' | 'boolean' | 'select'
+  required: boolean; default?: any; options?: string[]; description?: string
+}
+```
+
+### 20.6 MCP 分类
+
+| key | 中文 |
+|-----|------|
+| code_execution | 代码执行 |
+| search | 搜索 |
+| data_analysis | 数据分析 |
+| file_management | 文件管理 |
+| notification | 通知 |
+| database | 数据库 |
+| dev_tools | 开发工具 |
+| collaboration | 协作 |
+| container | 容器 |
+| custom | 自定义 |
+
+---
+
+## 21. Skills 技能管理模块
+
+### 21.1 概述
+
+Skills 模块提供 AI 智能体技能的完整管理功能：浏览、创建、编辑、删除、启用/禁用，以及从仓库导入和本地上传。
+
+### 21.2 页面结构
+
+```
+SkillsView.vue
+├── 页面标题 + "创建技能" 按钮
+├── 状态横幅（API 错误提示 + 重试）
+├── 统计卡片（技能总数 / 已启用 / 已禁用 / 不可用）
+├── 分类筛选按钮（全部/搜索/代码/创意/分析/工具）
+├── 分类概览面板（每个分类的总数/可用/禁用）
+├── 技能列表标题 + 计数
+└── 技能卡片网格
+    └── SkillCard.vue（每个技能一张卡片）
+```
+
+### 21.3 SkillCard 组件
+
+| 属性 | 说明 |
+|------|------|
+| Props | `skill: Skill` |
+| Emits | `edit(skill)`, `delete(skill)`, `toggle(skill)` |
+
+卡片展示内容：图标（Lucide 动态组件）+ 名称 + 内置标识 + 启用开关 + 描述 + 分类标签 + 操作按钮（编辑/删除，仅自定义技能）
+
+### 21.4 SkillDialog 创建/编辑弹窗
+
+| 标签页 | 功能 | 说明 |
+|--------|------|------|
+| 从仓库下载 | 选择仓库 → 获取技能列表 → 勾选 → 批量导入 | 支持 ClawHub/Anthropic/LangChain/CrewAI/AutoGen + 自定义地址 |
+| 本地上传 | 拖拽或点击上传文件 → 校验格式 + 必需字段 | 支持 .json/.yaml/.yml/.md/.zip |
+| 手动创建 | 填写表单（名称/描述/图标/分类/Prompt） | 编辑已有技能时直接进入此标签 |
+
+**从仓库下载流程：**
+1. 选择仓库（下拉菜单含预设仓库 + 自定义地址）
+2. 点击"获取"加载技能列表
+3. 搜索/筛选技能
+4. 勾选要导入的技能（支持全选当前页）
+5. 点击"拉取到本地"批量导入
+
+**本地上传流程：**
+1. 拖拽或点击上传 .json/.yaml/.yml/.md/.zip 文件
+2. 自动校验：文件格式 → 必需字段（name/description/prompt）
+3. 显示校验结果（通过/失败）
+4. 点击"导入"确认
+
+### 21.5 Skills 数据模型
+
+```typescript
+interface Skill {
+  id: string; name: string; description: string; icon: string
+  category: string; prompt: string; enabled: boolean
+  is_builtin: boolean; user_id: string | null
+  created_at: string; updated_at: string
+}
+
+interface SkillCreateRequest {
+  name: string; description?: string; icon?: string
+  category?: string; prompt?: string
+}
+```
+
+### 21.6 Skills 分类
+
+| key | 中文 |
+|-----|------|
+| search | 搜索 |
+| code | 代码 |
+| creative | 创意 |
+| analysis | 分析 |
+| tools | 工具 |
+| custom | 自定义 |
+
+### 21.7 图标映射（iconMap.ts）
+
+支持 12 种 Lucide 图标：Globe, Code2, Image, BarChart3, FolderOpen, Zap, Search, FileText, Database, Palette, Music, Wrench。通过 `getSkillIcon(name)` 函数查找，未匹配时默认返回 Zap。
+
+---
+
+> 本文档 v1.3.0 基于实际代码实现全面更新。v1.3.0 重点新增了 MCP 广场（浏览/详情/安装/卸载）和 Skills 技能管理（CRUD/仓库导入/本地上传/手动创建）两大功能模块；路由结构重构为 MainLayout 父布局 + 多页面子路由；RightPanel 对话历史接入后端 Conversation API；SideMenu 升级为可折叠多分组路由导航；Token 存储统一为 sessionStorage。后续版本应完善搜索功能、通知系统和用户菜单。
