@@ -1,16 +1,38 @@
-<script setup>
+<script setup lang="ts">
+import { ref } from 'vue'
 import {
   PanelLeftClose,
   PanelLeftOpen,
+  ChevronDown,
   MessageSquare,
+  MessagesSquare,
+  LayoutDashboard,
+  Server,
   Timer,
+  BarChart3,
   Bot,
   Zap,
+  Network,
+  CloudMoon,
+  FileText,
   Settings,
+  Shield,
 } from 'lucide-vue-next'
 import { useUiStore } from '@/stores/ui'
 
 const uiStore = useUiStore()
+
+const collapsedGroups = ref<Set<string>>(new Set())
+
+function toggleGroup(label: string) {
+  if (collapsedGroups.value.has(label)) {
+    collapsedGroups.value.delete(label)
+  } else {
+    collapsedGroups.value.add(label)
+  }
+  // trigger reactivity
+  collapsedGroups.value = new Set(collapsedGroups.value)
+}
 
 const menuGroups = [
   {
@@ -22,20 +44,33 @@ const menuGroups = [
   {
     label: '控制',
     items: [
+      { icon: LayoutDashboard, text: '概览', active: false },
+      { icon: Server, text: '实例', active: false },
+      { icon: MessagesSquare, text: '会话', active: false },
+      { icon: BarChart3, text: '使用情况', active: false },
       { icon: Timer, text: '定时任务', active: false },
     ],
   },
   {
     label: '代理',
     items: [
-      { icon: Bot, text: '代理列表', active: false },
-      { icon: Zap, text: 'Skills', active: false },
+      { icon: Bot, text: '代理', active: false },
+      { icon: Zap, text: '技能', active: false },
+      { icon: Network, text: '节点', active: false },
+      { icon: CloudMoon, text: '梦境', active: false },
     ],
   },
   {
     label: '设置',
     items: [
       { icon: Settings, text: '配置', active: false },
+      { icon: FileText, text: '文档', active: false },
+    ],
+  },
+  {
+    label: '后台',
+    items: [
+      { icon: Shield, text: '后台', active: false },
     ],
   },
 ]
@@ -53,8 +88,16 @@ const menuGroups = [
 
     <div class="menu-wrap">
       <div v-for="group in menuGroups" :key="group.label" class="menu-group">
-        <span class="menu-label">{{ group.label }}</span>
         <div
+          class="menu-label"
+          :class="{ collapsed: collapsedGroups.has(group.label) }"
+          @click="toggleGroup(group.label)"
+        >
+          <ChevronDown :size="12" class="chevron" />
+          <span>{{ group.label }}</span>
+        </div>
+        <div
+          v-show="!collapsedGroups.has(group.label)"
           v-for="item in group.items"
           :key="item.text"
           class="menu-item"
@@ -159,18 +202,38 @@ const menuGroups = [
 }
 
 .menu-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-bold);
   color: var(--foreground-muted);
   letter-spacing: 1px;
   white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  padding: 4px 0;
   transition: opacity var(--transition-duration) ease;
+}
+
+.menu-label:hover {
+  color: var(--foreground-primary);
+}
+
+.menu-label .chevron {
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.menu-label.collapsed .chevron {
+  transform: rotate(-90deg);
 }
 
 .sidebar.collapsed .menu-label {
   opacity: 0;
   height: 0;
   overflow: hidden;
+  padding: 0;
 }
 
 .menu-item {
@@ -196,12 +259,12 @@ const menuGroups = [
 }
 
 .menu-item.active {
-  background: var(--accent-primary-light);
-  color: var(--accent-primary);
+  background: rgba(59, 130, 246, 0.22);
+  color: var(--foreground-primary);
 }
 
 .menu-item.active :deep(svg) {
-  color: var(--accent-primary);
+  color: var(--color-accent);
 }
 
 .menu-text {

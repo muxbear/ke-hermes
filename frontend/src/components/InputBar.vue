@@ -1,6 +1,6 @@
 <script setup>
 import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
-import { Mic, Plus, Send, ChevronDown, FileText, Image } from 'lucide-vue-next'
+import { Mic, Plus, Send, FileText, Image } from 'lucide-vue-next'
 import { useChatStore } from '@/stores/chat'
 import { useUiStore } from '@/stores/ui'
 
@@ -16,6 +16,9 @@ function handleSend() {
   if (!text || chatStore.loading) return
   chatStore.sendMessage(text)
   inputText.value = ''
+  nextTick(() => {
+    if (inputRef.value) inputRef.value.style.height = 'auto'
+  })
 }
 
 function handleKeydown(e) {
@@ -23,6 +26,13 @@ function handleKeydown(e) {
     e.preventDefault()
     handleSend()
   }
+}
+
+function autoResize() {
+  const el = inputRef.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px'
 }
 
 function handleClickOutside(e) {
@@ -50,21 +60,35 @@ watch(() => chatStore.loading, (loading) => {
   <div class="input-bar" ref="inputBarRef">
     <div class="input-row">
       <div class="input-field-wrap">
-        <input
+        <textarea
           ref="inputRef"
           v-model="inputText"
           @keydown="handleKeydown"
+          @input="autoResize"
           :disabled="chatStore.loading"
           placeholder="输入消息..."
           class="input-field"
+          rows="1"
         />
         <button class="mic-btn">
           <Mic :size="16" />
         </button>
       </div>
-      <button class="plus-btn" @click.stop="uiStore.togglePlusMenu">
-        <Plus :size="16" />
-      </button>
+      <div class="plus-wrap">
+        <button class="plus-btn" @click.stop="uiStore.togglePlusMenu">
+          <Plus :size="16" />
+        </button>
+        <div v-if="uiStore.plusMenuOpen" class="plus-menu">
+          <div class="plus-menu-item">
+            <FileText :size="14" />
+            <span>上传附件</span>
+          </div>
+          <div class="plus-menu-item">
+            <Image :size="14" />
+            <span>上传图片</span>
+          </div>
+        </div>
+      </div>
       <button
         class="send-btn"
         :disabled="!inputText.trim() || chatStore.loading"
@@ -74,24 +98,7 @@ watch(() => chatStore.loading, (loading) => {
       </button>
     </div>
 
-    <div v-if="uiStore.plusMenuOpen" class="plus-menu">
-      <div class="plus-menu-item">
-        <FileText :size="14" />
-        <span>上传附件</span>
-      </div>
-      <div class="plus-menu-item">
-        <Image :size="14" />
-        <span>上传图片</span>
-      </div>
-    </div>
-
-    <div class="input-footer">
-      <div class="model-pill">
-        <span>{{ uiStore.selectedModel }}</span>
-        <ChevronDown :size="12" />
-      </div>
-      <span class="kb-hint">Enter 发送 · Shift+Enter 换行</span>
-    </div>
+    <span class="kb-hint">Enter 发送 · Shift+Enter 换行</span>
   </div>
 </template>
 
@@ -115,7 +122,7 @@ watch(() => chatStore.loading, (loading) => {
 .input-field-wrap {
   flex: 1;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 8px;
   padding: 10px 14px;
   border-radius: var(--radius-xl);
@@ -128,7 +135,12 @@ watch(() => chatStore.loading, (loading) => {
   outline: none;
   background: none;
   font-size: var(--font-size-md);
+  font-family: inherit;
   color: var(--foreground-primary);
+  resize: none;
+  line-height: 1.5;
+  min-height: 24px;
+  max-height: 120px;
 }
 
 .input-field::placeholder {
@@ -192,10 +204,14 @@ watch(() => chatStore.loading, (loading) => {
   cursor: not-allowed;
 }
 
+.plus-wrap {
+  position: relative;
+}
+
 .plus-menu {
   position: absolute;
-  bottom: 80px;
-  left: 20px;
+  bottom: calc(100% + 8px);
+  right: 0;
   width: 160px;
   display: flex;
   flex-direction: column;
@@ -224,25 +240,9 @@ watch(() => chatStore.loading, (loading) => {
   color: var(--foreground-primary);
 }
 
-.input-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.model-pill {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  border-radius: var(--radius-full);
-  background: var(--surface-secondary);
-  font-size: var(--font-size-xs);
-  color: var(--foreground-secondary);
-}
-
 .kb-hint {
   font-size: var(--font-size-xs);
   color: var(--foreground-muted);
+  text-align: center;
 }
 </style>

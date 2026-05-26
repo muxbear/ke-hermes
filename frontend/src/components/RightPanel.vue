@@ -237,15 +237,14 @@ function handleNewConversation() {
 
 .panel-collapsed {
   height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 8px;
-  gap: 8px;
+  position: relative;
 }
 
 .expand-btn {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
   width: 28px;
   height: 28px;
   border-radius: var(--radius-sm);
