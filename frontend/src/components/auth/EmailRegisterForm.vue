@@ -100,12 +100,18 @@ function handleSendEmailCode() {
 async function onCaptchaSuccess(result: { ticket: string; randstr: string }) {
   onCaptchaVerified(result.ticket, result.randstr)
   try {
-    await authApi.sendEmailCode({
+    const res = await authApi.sendEmailCode({
       email: form.email.trim(),
       captchaTicket: result.ticket,
       captchaRandstr: result.randstr,
     })
     startCountdown(60)
+    // 开发模式：后端返回 devCode，直接填入并提示用户
+    const devCode = (res.data.data as unknown as { devCode?: string })?.devCode
+    if (devCode) {
+      form.emailCode = devCode
+      ElMessage.success(`验证码已发送（开发模式）：${devCode}`)
+    }
   } catch {
     errors.email = '验证码发送失败，请重试'
   }

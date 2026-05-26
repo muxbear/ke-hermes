@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { reactive } from 'vue'
+import { ElMessage } from 'element-plus'
 import { Phone, KeyRound } from 'lucide-vue-next'
 import CountdownButton from '@/components/common/CountdownButton.vue'
 import FormError from '@/components/common/FormError.vue'
@@ -50,13 +51,18 @@ async function onCaptchaSuccess(result: { ticket: string; randstr: string }) {
   onCaptchaVerified(result.ticket, result.randstr)
 
   try {
-    await captchaApi.sendSms({
+    const res = await captchaApi.sendSms({
       phone: form.phone.trim(),
       captchaTicket: result.ticket,
       captchaRandstr: result.randstr,
     })
     startCountdown(60)
     captchaStore.startSmsCountdown(60)
+    const devCode = (res.data.data as unknown as { devCode?: string })?.devCode
+    if (devCode) {
+      form.smsCode = devCode
+      ElMessage.success(`验证码已发送（开发模式）：${devCode}`)
+    }
   } catch {
     errors.phone = '短信发送失败，请重试'
   }
