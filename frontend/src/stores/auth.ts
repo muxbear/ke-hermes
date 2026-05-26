@@ -6,6 +6,7 @@ import { clearTokensFromStorage } from '@/services/request'
 
 const TOKEN_STORAGE_KEY = 'auth_tokens'
 const USER_STORAGE_KEY = 'auth_user'
+const REMEMBERED_ACCOUNT_KEY = 'remembered_account'
 
 export const useAuthStore = defineStore('auth', () => {
   // ---- State ----
@@ -21,12 +22,10 @@ export const useAuthStore = defineStore('auth', () => {
   const refreshTokenValue = computed(() => tokens.value?.refreshToken ?? '')
   const isLoginLoading = computed(() => loginLoading.value)
 
-  // ---- Token 持久化 ----
+  // ---- Token 持久化（始终使用 sessionStorage，关闭浏览器即清除）----
   function loadTokens(): AuthTokens | null {
     try {
-      const raw =
-        localStorage.getItem(TOKEN_STORAGE_KEY) ||
-        sessionStorage.getItem(TOKEN_STORAGE_KEY)
+      const raw = sessionStorage.getItem(TOKEN_STORAGE_KEY)
       return raw ? JSON.parse(raw) : null
     } catch {
       return null
@@ -35,42 +34,50 @@ export const useAuthStore = defineStore('auth', () => {
 
   function loadUser(): UserInfo | null {
     try {
-      const raw =
-        localStorage.getItem(USER_STORAGE_KEY) ||
-        sessionStorage.getItem(USER_STORAGE_KEY)
+      const raw = sessionStorage.getItem(USER_STORAGE_KEY)
       return raw ? JSON.parse(raw) : null
     } catch {
       return null
     }
   }
 
-  function persistTokens(rememberMe: boolean) {
+  function persistTokens() {
     if (!tokens.value) return
-    const storage = rememberMe ? localStorage : sessionStorage
-    storage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(tokens.value))
+    sessionStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(tokens.value))
   }
 
-  function persistUser(rememberMe: boolean) {
+  function persistUser() {
     if (!user.value) return
-    const storage = rememberMe ? localStorage : sessionStorage
-    storage.setItem(USER_STORAGE_KEY, JSON.stringify(user.value))
+    sessionStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user.value))
   }
 
-  function setTokens(t: AuthTokens, rememberMe = false) {
+  function setTokens(t: AuthTokens) {
     tokens.value = t
-    persistTokens(rememberMe)
+    persistTokens()
   }
 
-  function setUser(u: UserInfo, rememberMe = false) {
+  function setUser(u: UserInfo) {
     user.value = u
-    persistUser(rememberMe)
+    persistUser()
+  }
+
+  function saveRememberedAccount(account: string) {
+    localStorage.setItem(REMEMBERED_ACCOUNT_KEY, account)
+  }
+
+  function loadRememberedAccount(): string | null {
+    return localStorage.getItem(REMEMBERED_ACCOUNT_KEY)
+  }
+
+  function clearRememberedAccount() {
+    localStorage.removeItem(REMEMBERED_ACCOUNT_KEY)
   }
 
   function clearTokens() {
     tokens.value = null
     user.value = null
-    localStorage.removeItem(USER_STORAGE_KEY)
     sessionStorage.removeItem(USER_STORAGE_KEY)
+    clearRememberedAccount()
     clearTokensFromStorage()
   }
 
@@ -84,10 +91,9 @@ export const useAuthStore = defineStore('auth', () => {
       try {
         const res = await authApi.refreshToken(refreshTokenValue.value)
         const data = res.data.data
-        const rememberMe = !!localStorage.getItem(TOKEN_STORAGE_KEY)
-        setTokens(data.tokens, rememberMe)
+        setTokens(data.tokens)
         if (data.user) {
-          setUser(data.user, rememberMe)
+          setUser(data.user)
         }
         return data.tokens.accessToken
       } catch {
@@ -115,8 +121,13 @@ export const useAuthStore = defineStore('auth', () => {
         password: payload.password,
       })
       const { tokens: t, user: u } = res.data.data
-      setTokens(t, payload.rememberMe)
-      setUser(u, payload.rememberMe)
+      setTokens(t)
+      setUser(u)
+      if (payload.rememberMe) {
+        saveRememberedAccount(payload.account)
+      } else {
+        clearRememberedAccount()
+      }
     } catch (err) {
       loginError.value = err instanceof Error ? err.message : '登录失败'
       throw err
@@ -131,8 +142,8 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const res = await authApi.phoneLogin(payload)
       const { tokens: t, user: u } = res.data.data
-      setTokens(t, false)
-      setUser(u, false)
+      setTokens(t)
+      setUser(u)
     } catch (err) {
       loginError.value = err instanceof Error ? err.message : '登录失败'
       throw err
@@ -171,5 +182,7 @@ export const useAuthStore = defineStore('auth', () => {
     loginWithPhone,
     logout,
     agreeProtocol,
+    loadRememberedAccount,
+    clearRememberedAccount,
   }
 })

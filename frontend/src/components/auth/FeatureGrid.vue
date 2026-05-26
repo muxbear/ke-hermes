@@ -40,7 +40,7 @@ const features: FeatureItem[] = [
   <div class="feature-grid">
     <div v-for="feat in features" :key="feat.title" class="feature-item">
       <div class="feature-icon">
-        <component :is="iconMap[feat.icon]" :size="40" />
+        <component :is="iconMap[feat.icon]" :size="20" />
       </div>
       <div class="feature-text">
         <span class="feature-title">{{ feat.title }}</span>

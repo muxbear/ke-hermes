@@ -11,10 +11,8 @@ const TOKEN_STORAGE_KEY = 'auth_tokens'
 
 function getAccessToken(): string | null {
   try {
-    const fromLocal = localStorage.getItem(TOKEN_STORAGE_KEY)
-    if (fromLocal) return JSON.parse(fromLocal).accessToken ?? null
-    const fromSession = sessionStorage.getItem(TOKEN_STORAGE_KEY)
-    if (fromSession) return JSON.parse(fromSession).accessToken ?? null
+    const raw = sessionStorage.getItem(TOKEN_STORAGE_KEY)
+    if (raw) return JSON.parse(raw).accessToken ?? null
   } catch {
     // ignore
   }
@@ -23,10 +21,8 @@ function getAccessToken(): string | null {
 
 function getRefreshTokenValue(): string | null {
   try {
-    const fromLocal = localStorage.getItem(TOKEN_STORAGE_KEY)
-    if (fromLocal) return JSON.parse(fromLocal).refreshToken ?? null
-    const fromSession = sessionStorage.getItem(TOKEN_STORAGE_KEY)
-    if (fromSession) return JSON.parse(fromSession).refreshToken ?? null
+    const raw = sessionStorage.getItem(TOKEN_STORAGE_KEY)
+    if (raw) return JSON.parse(raw).refreshToken ?? null
   } catch {
     // ignore
   }
@@ -102,21 +98,14 @@ instance.interceptors.response.use(
 )
 
 function updateStoredTokens(accessToken: string, refreshToken: string) {
-  const payload = JSON.stringify({
+  sessionStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify({
     accessToken,
     refreshToken,
     expiresIn: 7200,
-  })
-  // 在 localStorage 中查找并更新，否则更新 sessionStorage
-  if (localStorage.getItem(TOKEN_STORAGE_KEY)) {
-    localStorage.setItem(TOKEN_STORAGE_KEY, payload)
-  } else {
-    sessionStorage.setItem(TOKEN_STORAGE_KEY, payload)
-  }
+  }))
 }
 
 function clearTokensFromStorage() {
-  localStorage.removeItem(TOKEN_STORAGE_KEY)
   sessionStorage.removeItem(TOKEN_STORAGE_KEY)
 }
 

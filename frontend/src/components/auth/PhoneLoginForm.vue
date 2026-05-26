@@ -105,7 +105,7 @@ defineExpose({
         maxlength="11"
       >
         <template #prefix>
-          <Phone :size="18" class="input-icon" />
+          <Phone :size="20" class="input-icon" />
         </template>
       </el-input>
       <FormError :message="errors.phone" />
@@ -121,7 +121,7 @@ defineExpose({
         maxlength="6"
       >
         <template #prefix>
-          <KeyRound :size="18" class="input-icon" />
+          <KeyRound :size="20" class="input-icon" />
         </template>
       </el-input>
       <CountdownButton

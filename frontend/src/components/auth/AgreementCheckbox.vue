@@ -49,7 +49,8 @@ function openAgreement(type: 'user' | 'privacy') {
 <style scoped>
 .agreement-checkbox {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
+  justify-content: center;
   gap: 6px;
 }
 

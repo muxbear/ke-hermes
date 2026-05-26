@@ -12,7 +12,7 @@ import { useAuth } from '@/composables/useAuth'
 
 const activeTab = ref<'account' | 'phone'>('account')
 const { loading, error, loginWithPassword, loginWithPhone } = useAuth()
-const agreementChecked = ref(false)
+const agreementChecked = ref(true)
 const agreementShake = ref(false)
 
 const accountFormRef = ref<InstanceType<typeof AccountLoginForm> | null>(null)
@@ -20,7 +20,13 @@ const phoneFormRef = ref<InstanceType<typeof PhoneLoginForm> | null>(null)
 
 const submitError = ref<string | null>(null)
 
-async function handleSubmit() {
+async function doLogin(data: {
+  account?: string
+  password?: string
+  rememberMe?: boolean
+  phone?: string
+  smsCode?: string
+}) {
   submitError.value = null
 
   if (!agreementChecked.value) {
@@ -30,24 +36,24 @@ async function handleSubmit() {
     return
   }
 
-  const formRef = activeTab.value === 'account' ? accountFormRef.value : phoneFormRef.value
-  if (!formRef) return
-
-  const ok = formRef.submit()
-  if (!ok) return
-
-  const data = formRef.getFormData()
   try {
-    if ('account' in data) {
-      await loginWithPassword(data.account, data.password, data.rememberMe)
-    } else {
-      await loginWithPhone(data.phone, data.smsCode)
+    if ('account' in data && data.account) {
+      await loginWithPassword(data.account, data.password!, data.rememberMe ?? false)
+    } else if ('phone' in data && data.phone) {
+      await loginWithPhone(data.phone, data.smsCode!)
     }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : '登录失败，请稍后重试'
     submitError.value = msg
     ElMessage.error(msg)
   }
+}
+
+/** 按钮点击 → 触发表单验证 → 验证通过后 emit('submit') → doLogin */
+function handleSubmit() {
+  const formRef = activeTab.value === 'account' ? accountFormRef.value : phoneFormRef.value
+  if (!formRef) return
+  formRef.submit()
 }
 </script>
 
@@ -56,19 +62,21 @@ async function handleSubmit() {
     <LoginCard :loading="loading">
       <LoginTabs v-model="activeTab" />
 
-      <AccountLoginForm
-        v-if="activeTab === 'account'"
-        ref="accountFormRef"
-      />
-      <PhoneLoginForm
-        v-else
-        ref="phoneFormRef"
-      />
+      <div class="form-area">
+        <div
+          :class="{ 'form-panel': true, hidden: activeTab !== 'account' }"
+        >
+          <AccountLoginForm ref="accountFormRef" @submit="doLogin" />
+        </div>
+        <div
+          :class="{ 'form-panel': true, hidden: activeTab !== 'phone' }"
+        >
+          <PhoneLoginForm ref="phoneFormRef" @submit="doLogin" />
+        </div>
+      </div>
 
       <div v-if="submitError" class="login-error">{{ submitError }}</div>
       <div v-else-if="error" class="login-error">{{ error }}</div>
-
-      <AgreementCheckbox v-model="agreementChecked" :class="{ shake: agreementShake }" />
 
       <el-button
         type="primary"
@@ -79,6 +87,8 @@ async function handleSubmit() {
       >
         登录
       </el-button>
+
+      <AgreementCheckbox v-model="agreementChecked" :class="{ shake: agreementShake }" />
 
       <OAuthPanel />
 
@@ -94,6 +104,24 @@ async function handleSubmit() {
   align-items: center;
   justify-content: center;
   padding: 40px;
+}
+
+.form-area {
+  display: grid;
+}
+
+.form-area > * {
+  grid-area: 1 / 1;
+}
+
+.form-panel {
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+}
+
+.form-panel.hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .login-error {

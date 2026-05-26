@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { Eye, EyeOff } from 'lucide-vue-next'
+import { Eye, EyeOff, Lock } from 'lucide-vue-next'
 
 const props = withDefaults(
   defineProps<{
@@ -30,6 +30,7 @@ function onInput(e: Event) {
 
 <template>
   <div class="password-input">
+    <Lock :size="20" class="prefix-icon" />
     <input
       :type="inputType"
       :value="modelValue"
@@ -46,8 +47,8 @@ function onInput(e: Event) {
       :disabled="disabled"
       @click="showPassword = !showPassword"
     >
-      <EyeOff v-if="showPassword" :size="18" />
-      <Eye v-else :size="18" />
+      <EyeOff v-if="showPassword" :size="20" />
+      <Eye v-else :size="20" />
     </button>
   </div>
 </template>
@@ -67,6 +68,12 @@ function onInput(e: Event) {
 .password-input:focus-within {
   border-color: var(--color-accent);
   box-shadow: 0px 0px 0px 2px rgba(59, 130, 246, 0.15);
+}
+
+.prefix-icon {
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+  margin-right: 8px;
 }
 
 .input-field {

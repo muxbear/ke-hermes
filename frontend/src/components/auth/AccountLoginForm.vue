@@ -1,18 +1,35 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
-import { User, Lock, KeyRound } from 'lucide-vue-next'
+import { reactive, onMounted, watch } from 'vue'
+import { User } from 'lucide-vue-next'
 import PasswordInput from '@/components/common/PasswordInput.vue'
 import FormError from '@/components/common/FormError.vue'
+import { useAuthStore } from '@/stores/auth'
 
 const emit = defineEmits<{
   submit: [payload: { account: string; password: string; rememberMe: boolean }]
   'forgot-password': []
 }>()
 
+const authStore = useAuthStore()
+
 const form = reactive({
   account: '',
   password: '',
   rememberMe: false,
+})
+
+onMounted(() => {
+  const saved = authStore.loadRememberedAccount()
+  if (saved) {
+    form.account = saved
+    form.rememberMe = true
+  }
+})
+
+watch(() => form.rememberMe, (val) => {
+  if (!val) {
+    authStore.clearRememberedAccount()
+  }
 })
 
 const errors = reactive({
@@ -82,7 +99,7 @@ defineExpose({
         class="auth-input"
       >
         <template #prefix>
-          <User :size="18" class="input-icon" />
+          <User :size="20" class="input-icon" />
         </template>
       </el-input>
       <FormError :message="errors.account" />

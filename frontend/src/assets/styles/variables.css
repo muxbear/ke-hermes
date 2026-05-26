@@ -6,13 +6,13 @@
   /* === 品牌色系 === */
   --color-bg-page: #060b1a;
   --color-bg-form-area: #090e1f;
-  --color-bg-card: rgba(13, 19, 41, 0.9);
+  --color-bg-card: rgba(20, 29, 56, 0.95);
   --color-bg-input: #0f172e;
   --color-bg-brand-start: #050a1f;
   --color-bg-brand-mid: #0a173d;
   --color-bg-brand-end: #050d29;
 
-  --color-border-card: rgba(38, 51, 89, 0.4);
+  --color-border-card: rgba(59, 130, 246, 0.13);
   --color-border-input: #1f293d;
 
   --color-accent: #3b82f6;
@@ -37,35 +37,35 @@
   /* === 尺寸 === */
   --size-input-height: 52px;
   --size-button-height: 52px;
-  --size-card-max-width: 520px;
-  --size-card-padding: 40px;
-  --size-card-gap: 24px;
+  --size-card-max-width: 480px;
+  --size-card-padding: 36px;
+  --size-card-gap: 20px;
   --size-checkbox: 20px;
-  --size-oauth-icon: 52px;
-  --size-oauth-gap: 20px;
-  --size-logo: 96px;
-  --size-brand-padding-v: 40px;
-  --size-brand-padding-h: 30px;
-  --size-brand-block-gap: 40px;
-  --size-feature-icon: 40px;
-  --size-feature-row-gap: 24px;
-  --size-feature-col-gap: 32px;
-  --size-feature-icon-text-gap: 14px;
+  --size-oauth-icon: 42px;
+  --size-oauth-gap: 16px;
+  --size-logo: 80px;
+  --size-brand-padding-v: 32px;
+  --size-brand-padding-h: 28px;
+  --size-brand-block-gap: 32px;
+  --size-feature-icon: 32px;
+  --size-feature-row-gap: 20px;
+  --size-feature-col-gap: 28px;
+  --size-feature-icon-text-gap: 12px;
   --size-login-tab-indicator-height: 3px;
   --size-login-tab-indicator-width: 36px;
 
   /* === 字号/字重 === */
-  --font-size-system-name: 36px;
-  --font-size-tagline: 20px;
+  --font-size-system-name: 28px;
+  --font-size-tagline: 16px;
   --font-size-feature-title: 18px;
-  --font-size-feature-desc: 15px;
-  --font-size-button: 19px;
+  --font-size-feature-desc: 14px;
+  --font-size-button: 18px;
   --font-size-input: 16px;
   --font-size-login-tab: 18px;
-  --font-size-remember-forgot: 15px;
+  --font-size-remember-forgot: 14px;
   --font-size-agreement: 14px;
-  --font-size-oauth-label: 15px;
-  --font-size-register-link: 15px;
+  --font-size-oauth-label: 14px;
+  --font-size-register-link: 14px;
   --font-size-copyright: 12px;
   --font-size-oauth-text: 17px;
 
@@ -77,7 +77,7 @@
   --font-family-base: 'Inter', 'Noto Sans SC', system-ui, -apple-system, sans-serif;
 
   /* === 阴影 === */
-  --shadow-card: 0px 8px 32px rgba(0, 0, 0, 0.4);
+  --shadow-card: 0px 4px 24px rgba(0, 0, 0, 0.5), 0px 0px 0px 1px rgba(59, 130, 246, 0.06);
   --shadow-button: 0px 4px 16px rgba(59, 130, 246, 0.3);
   --shadow-logo: 0px 4px 20px rgba(59, 130, 246, 0.25);
 

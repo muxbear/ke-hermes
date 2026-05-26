@@ -1,16 +1,31 @@
 <script setup lang="ts">
-import type { OAuthProvider } from '@/types/components'
+import {
+  MessageCircle,
+  CircleDollarSign,
+  Send,
+  Bell,
+  Building2,
+} from 'lucide-vue-next'
+import type { Component } from 'vue'
+
+interface OAuthItem {
+  name: string
+  icon: Component
+  bgColor: string
+  textColor: string
+  shadowColor: string
+}
 
 const emit = defineEmits<{
-  select: [provider: OAuthProvider]
+  select: [item: OAuthItem]
 }>()
 
-const providers: OAuthProvider[] = [
-  { name: '微信', icon: 'W', bgColor: 'var(--color-oauth-wechat)', textColor: '#fff', shadowColor: 'rgba(7,193,96,0.25)' },
-  { name: '支付宝', icon: 'A', bgColor: 'var(--color-oauth-alipay)', textColor: '#fff', shadowColor: 'rgba(23,119,249,0.25)' },
-  { name: '飞书', icon: 'F', bgColor: 'var(--color-oauth-feishu)', textColor: '#fff', shadowColor: 'rgba(51,112,250,0.25)' },
-  { name: '钉钉', icon: 'D', bgColor: 'var(--color-oauth-dingtalk)', textColor: '#fff', shadowColor: 'rgba(0,137,249,0.25)' },
-  { name: '企业微信', icon: 'W', bgColor: 'var(--color-oauth-wework)', textColor: '#fff', shadowColor: 'rgba(7,193,96,0.2)' },
+const providers: OAuthItem[] = [
+  { name: '微信', icon: MessageCircle, bgColor: 'var(--color-oauth-wechat)', textColor: '#fff', shadowColor: 'rgba(7,193,96,0.25)' },
+  { name: '支付宝', icon: CircleDollarSign, bgColor: 'var(--color-oauth-alipay)', textColor: '#fff', shadowColor: 'rgba(23,119,249,0.25)' },
+  { name: '飞书', icon: Send, bgColor: 'var(--color-oauth-feishu)', textColor: '#fff', shadowColor: 'rgba(51,112,250,0.25)' },
+  { name: '钉钉', icon: Bell, bgColor: 'var(--color-oauth-dingtalk)', textColor: '#fff', shadowColor: 'rgba(0,137,249,0.25)' },
+  { name: '企业微信', icon: Building2, bgColor: 'var(--color-oauth-wework)', textColor: '#fff', shadowColor: 'rgba(7,193,96,0.2)' },
 ]
 </script>
 
@@ -35,7 +50,7 @@ const providers: OAuthProvider[] = [
         :title="provider.name"
         @click="emit('select', provider)"
       >
-        {{ provider.icon }}
+        <component :is="provider.icon" :size="22" />
       </button>
     </div>
   </div>
@@ -77,8 +92,6 @@ const providers: OAuthProvider[] = [
   height: var(--size-oauth-icon);
   border-radius: var(--radius-oauth-icon);
   border: none;
-  font-size: var(--font-size-oauth-text);
-  font-weight: var(--font-weight-bold);
   cursor: pointer;
   display: flex;
   align-items: center;
