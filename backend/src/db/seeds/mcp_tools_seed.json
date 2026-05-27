@@ -1,0 +1,482 @@
+[
+  {
+    "name": "Code Interpreter",
+    "description": "Execute Python code in a sandboxed environment with data analysis, visualization, and file processing capabilities.",
+    "icon": "🐍",
+    "author": "Hermes Official",
+    "version": "1.2.0",
+    "license": "MIT",
+    "repository": "https://github.com/ke-hermes/mcp-code-interpreter",
+    "rating": 4.8,
+    "category": "code_execution",
+    "tags": ["python", "sandbox", "data-analysis", "visualization"],
+    "features": [
+      "Execute Python code safely in isolated sandbox",
+      "Built-in data science libraries (pandas, numpy, matplotlib)",
+      "File I/O and format conversion",
+      "Chart and visualization generation"
+    ],
+    "official": true,
+    "config_schema": [
+      {
+        "name": "timeout",
+        "label": "Timeout (seconds)",
+        "type": "number",
+        "required": false,
+        "default": 30,
+        "description": "Maximum execution time in seconds"
+      },
+      {
+        "name": "memory_limit",
+        "label": "Memory Limit",
+        "type": "select",
+        "required": false,
+        "default": "512MB",
+        "options": ["256MB", "512MB", "1GB", "2GB"],
+        "description": "Maximum memory allocation for code execution"
+      }
+    ]
+  },
+  {
+    "name": "Shell Runner",
+    "description": "Run shell commands and scripts in a controlled environment with output capture and exit code handling.",
+    "icon": "💻",
+    "author": "Hermes Official",
+    "version": "1.0.0",
+    "license": "MIT",
+    "repository": "https://github.com/ke-hermes/mcp-shell-runner",
+    "rating": 4.3,
+    "category": "code_execution",
+    "tags": ["shell", "bash", "commands", "automation"],
+    "features": [
+      "Execute shell commands with timeout control",
+      "Capture stdout and stderr separately",
+      "Environment variable injection",
+      "Working directory configuration"
+    ],
+    "official": true,
+    "config_schema": [
+      {
+        "name": "shell",
+        "label": "Shell Type",
+        "type": "select",
+        "required": false,
+        "default": "/bin/bash",
+        "options": ["/bin/bash", "/bin/sh", "cmd.exe", "powershell.exe"],
+        "description": "Shell interpreter to use"
+      },
+      {
+        "name": "timeout",
+        "label": "Timeout (seconds)",
+        "type": "number",
+        "required": false,
+        "default": 60,
+        "description": "Maximum command execution time"
+      }
+    ]
+  },
+  {
+    "name": "Web Search",
+    "description": "Search the web and retrieve real-time information from multiple search engines with result summarization.",
+    "icon": "🔍",
+    "author": "Hermes Official",
+    "version": "2.0.1",
+    "license": "MIT",
+    "repository": "https://github.com/ke-hermes/mcp-web-search",
+    "rating": 4.6,
+    "category": "search",
+    "tags": ["search", "web", "real-time", "crawling"],
+    "features": [
+      "Multi-engine search aggregation",
+      "Result summarization with AI",
+      "Source citation and linking",
+      "Configurable result count"
+    ],
+    "official": true,
+    "config_schema": [
+      {
+        "name": "api_key",
+        "label": "API Key",
+        "type": "string",
+        "required": true,
+        "description": "Search provider API key"
+      },
+      {
+        "name": "max_results",
+        "label": "Max Results",
+        "type": "number",
+        "required": false,
+        "default": 5,
+        "description": "Maximum number of results per query"
+      },
+      {
+        "name": "search_engine",
+        "label": "Search Engine",
+        "type": "select",
+        "required": false,
+        "default": "tavily",
+        "options": ["tavily", "serpapi", "brave"],
+        "description": "Search engine provider"
+      }
+    ]
+  },
+  {
+    "name": "Data Analyzer",
+    "description": "Analyze datasets with statistical methods, generate insights, and create visual reports from structured data.",
+    "icon": "📊",
+    "author": "Hermes Official",
+    "version": "1.3.0",
+    "license": "MIT",
+    "repository": "https://github.com/ke-hermes/mcp-data-analyzer",
+    "rating": 4.5,
+    "category": "data_analysis",
+    "tags": ["data", "statistics", "visualization", "reports"],
+    "features": [
+      "CSV/JSON/Excel data ingestion",
+      "Statistical analysis and aggregation",
+      "Auto-generated charts and graphs",
+      "Export reports to PDF/HTML"
+    ],
+    "official": true,
+    "config_schema": [
+      {
+        "name": "max_rows",
+        "label": "Max Rows",
+        "type": "number",
+        "required": false,
+        "default": 10000,
+        "description": "Maximum number of rows to process"
+      },
+      {
+        "name": "chart_style",
+        "label": "Chart Style",
+        "type": "select",
+        "required": false,
+        "default": "seaborn",
+        "options": ["seaborn", "matplotlib", "plotly"],
+        "description": "Chart rendering library"
+      }
+    ]
+  },
+  {
+    "name": "File Manager",
+    "description": "Browse, read, write, and organize files in local or cloud storage with format conversion support.",
+    "icon": "📁",
+    "author": "Hermes Official",
+    "version": "1.1.0",
+    "license": "MIT",
+    "repository": "https://github.com/ke-hermes/mcp-file-manager",
+    "rating": 4.2,
+    "category": "file_management",
+    "tags": ["files", "storage", "upload", "organize"],
+    "features": [
+      "Directory browsing and search",
+      "Read/write files with encoding detection",
+      "Batch rename and move operations",
+      "Format conversion (PDF, DOCX, images)"
+    ],
+    "official": true,
+    "config_schema": [
+      {
+        "name": "root_path",
+        "label": "Root Path",
+        "type": "string",
+        "required": true,
+        "description": "Base directory path for file operations"
+      },
+      {
+        "name": "read_only",
+        "label": "Read Only",
+        "type": "boolean",
+        "required": false,
+        "default": false,
+        "description": "Restrict to read-only operations"
+      }
+    ]
+  },
+  {
+    "name": "Notification Hub",
+    "description": "Send notifications via email, Slack, webhook, and push notifications with template support.",
+    "icon": "🔔",
+    "author": "Hermes Official",
+    "version": "1.0.0",
+    "license": "MIT",
+    "repository": "https://github.com/ke-hermes/mcp-notification-hub",
+    "rating": 4.0,
+    "category": "notification",
+    "tags": ["email", "slack", "webhook", "push"],
+    "features": [
+      "Multi-channel delivery (email, Slack, webhook)",
+      "Message template engine",
+      "Delivery status tracking",
+      "Rate limiting and retry logic"
+    ],
+    "official": true,
+    "config_schema": [
+      {
+        "name": "smtp_host",
+        "label": "SMTP Host",
+        "type": "string",
+        "required": false,
+        "description": "SMTP server hostname for email delivery"
+      },
+      {
+        "name": "smtp_port",
+        "label": "SMTP Port",
+        "type": "number",
+        "required": false,
+        "default": 587,
+        "description": "SMTP server port"
+      },
+      {
+        "name": "slack_webhook",
+        "label": "Slack Webhook URL",
+        "type": "string",
+        "required": false,
+        "description": "Slack incoming webhook URL"
+      }
+    ]
+  },
+  {
+    "name": "Database Explorer",
+    "description": "Connect to SQL databases, run queries, visualize schemas, and generate data reports.",
+    "icon": "🗄️",
+    "author": "Hermes Official",
+    "version": "1.1.0",
+    "license": "MIT",
+    "repository": "https://github.com/ke-hermes/mcp-db-explorer",
+    "rating": 4.5,
+    "category": "database",
+    "tags": ["sql", "database", "query", "schema"],
+    "features": [
+      "SQL query execution with syntax highlighting",
+      "Schema visualization and ER diagrams",
+      "Export results to CSV/JSON",
+      "Query history and favorites"
+    ],
+    "official": true,
+    "config_schema": [
+      {
+        "name": "connection_string",
+        "label": "Connection String",
+        "type": "string",
+        "required": true,
+        "description": "Database connection URL (e.g., postgresql://user:pass@host/db)"
+      },
+      {
+        "name": "read_only",
+        "label": "Read Only",
+        "type": "boolean",
+        "required": false,
+        "default": true,
+        "description": "Restrict to read-only queries"
+      },
+      {
+        "name": "max_rows",
+        "label": "Max Result Rows",
+        "type": "number",
+        "required": false,
+        "default": 1000,
+        "description": "Maximum rows returned per query"
+      }
+    ]
+  },
+  {
+    "name": "Dev Toolkit",
+    "description": "Development utilities including API testing, JSON formatting, regex testing, and code generation.",
+    "icon": "🛠️",
+    "author": "Hermes Official",
+    "version": "1.4.0",
+    "license": "MIT",
+    "repository": "https://github.com/ke-hermes/mcp-dev-toolkit",
+    "rating": 4.4,
+    "category": "dev_tools",
+    "tags": ["api", "testing", "json", "regex", "codegen"],
+    "features": [
+      "HTTP API testing with request builder",
+      "JSON/XML formatter and validator",
+      "Regex pattern tester with explanation",
+      "Code snippet generation from templates"
+    ],
+    "official": true,
+    "config_schema": [
+      {
+        "name": "default_timeout",
+        "label": "Default Request Timeout",
+        "type": "number",
+        "required": false,
+        "default": 30,
+        "description": "Default timeout for HTTP requests in seconds"
+      },
+      {
+        "name": "proxy_url",
+        "label": "Proxy URL",
+        "type": "string",
+        "required": false,
+        "description": "HTTP proxy for outgoing requests"
+      }
+    ]
+  },
+  {
+    "name": "Team Collab",
+    "description": "Collaborative workspace tools for team communication, task tracking, and document sharing.",
+    "icon": "👥",
+    "author": "Hermes Official",
+    "version": "1.0.0",
+    "license": "MIT",
+    "repository": "https://github.com/ke-hermes/mcp-team-collab",
+    "rating": 3.9,
+    "category": "collaboration",
+    "tags": ["team", "collaboration", "tasks", "sharing"],
+    "features": [
+      "Shared task boards and kanban",
+      "Real-time document collaboration",
+      "Team chat and mentions",
+      "File sharing with permissions"
+    ],
+    "official": true,
+    "config_schema": [
+      {
+        "name": "workspace_id",
+        "label": "Workspace ID",
+        "type": "string",
+        "required": true,
+        "description": "Team workspace identifier"
+      },
+      {
+        "name": "api_token",
+        "label": "API Token",
+        "type": "string",
+        "required": true,
+        "description": "Authentication token for the workspace"
+      }
+    ]
+  },
+  {
+    "name": "Docker Runtime",
+    "description": "Manage Docker containers, images, and compose stacks with monitoring and log streaming.",
+    "icon": "🐳",
+    "author": "Hermes Official",
+    "version": "1.2.0",
+    "license": "MIT",
+    "repository": "https://github.com/ke-hermes/mcp-docker-runtime",
+    "rating": 4.7,
+    "category": "container",
+    "tags": ["docker", "container", "devops", "deployment"],
+    "features": [
+      "Container lifecycle management (start/stop/restart)",
+      "Image pull, build, and cleanup",
+      "Real-time log streaming",
+      "Resource usage monitoring (CPU, memory, network)"
+    ],
+    "official": true,
+    "config_schema": [
+      {
+        "name": "docker_host",
+        "label": "Docker Host",
+        "type": "string",
+        "required": false,
+        "default": "unix:///var/run/docker.sock",
+        "description": "Docker daemon connection URL"
+      },
+      {
+        "name": "network",
+        "label": "Default Network",
+        "type": "string",
+        "required": false,
+        "default": "bridge",
+        "description": "Default Docker network for new containers"
+      }
+    ]
+  },
+  {
+    "name": "Custom Bridge",
+    "description": "Connect any external API or service through a configurable bridge with authentication and rate limiting.",
+    "icon": "🔗",
+    "author": "Hermes Official",
+    "version": "1.0.0",
+    "license": "MIT",
+    "repository": "https://github.com/ke-hermes/mcp-custom-bridge",
+    "rating": 4.1,
+    "category": "custom",
+    "tags": ["api", "integration", "bridge", "custom"],
+    "features": [
+      "Configurable API endpoint mapping",
+      "OAuth2 and API key authentication",
+      "Rate limiting and retry with backoff",
+      "Request/response transformation rules"
+    ],
+    "official": true,
+    "config_schema": [
+      {
+        "name": "base_url",
+        "label": "Base URL",
+        "type": "string",
+        "required": true,
+        "description": "Target API base URL"
+      },
+      {
+        "name": "auth_type",
+        "label": "Authentication Type",
+        "type": "select",
+        "required": false,
+        "default": "api_key",
+        "options": ["api_key", "oauth2", "bearer", "none"],
+        "description": "Authentication method for the target API"
+      },
+      {
+        "name": "auth_token",
+        "label": "Auth Token",
+        "type": "string",
+        "required": false,
+        "description": "Authentication token or API key"
+      }
+    ]
+  },
+  {
+    "name": "Knowledge Base",
+    "description": "Build and query a vector-based knowledge base from documents, websites, and structured data sources.",
+    "icon": "📚",
+    "author": "Hermes Official",
+    "version": "1.1.0",
+    "license": "MIT",
+    "repository": "https://github.com/ke-hermes/mcp-knowledge-base",
+    "rating": 4.6,
+    "category": "data_analysis",
+    "tags": ["rag", "vector", "embedding", "knowledge"],
+    "features": [
+      "Document ingestion (PDF, TXT, Markdown, HTML)",
+      "Vector embedding with semantic search",
+      "Chunk management and re-indexing",
+      "Citation-aware retrieval"
+    ],
+    "official": true,
+    "config_schema": [
+      {
+        "name": "embedding_model",
+        "label": "Embedding Model",
+        "type": "select",
+        "required": false,
+        "default": "text-embedding-v4",
+        "options": ["text-embedding-v4", "text-embedding-ada-002"],
+        "description": "Model used for generating vector embeddings"
+      },
+      {
+        "name": "chunk_size",
+        "label": "Chunk Size",
+        "type": "number",
+        "required": false,
+        "default": 500,
+        "description": "Number of tokens per document chunk"
+      },
+      {
+        "name": "top_k",
+        "label": "Top K Results",
+        "type": "number",
+        "required": false,
+        "default": 5,
+        "description": "Number of results to return per query"
+      }
+    ]
+  }
+]

@@ -29,6 +29,15 @@ from agent.graph import init_graph, shutdown_graph
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+
+    # Seed MCP tools on first run
+    from api.mcp.service import seed_mcp_tools
+    from db.engine import async_session
+
+    async with async_session() as session:
+        await seed_mcp_tools(session)
+        await session.commit()
+
     await init_graph()
     store = await create_store()
     set_store(store)

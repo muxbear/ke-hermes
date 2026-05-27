@@ -1,4 +1,5 @@
 """Skill upload business logic: archive extraction, validation, and installation."""
+import json
 import logging
 import os
 import re
@@ -382,6 +383,7 @@ async def process_skills_upload(
             shutil.copytree(skill_path, dest_path)
 
             description, license_ = _read_skill_metadata(skill_path)
+            errors_json = json.dumps([e.model_dump() for e in result.errors]) if not result.valid else ""
             db.add(
                 Skill(
                     name=skill_name,
@@ -390,6 +392,7 @@ async def process_skills_upload(
                     description=description,
                     license=license_,
                     user_id=user_id,
+                    validation_errors=errors_json,
                 )
             )
             logger.info("Installed skill '%s' (valid=%s)", skill_name, result.valid)

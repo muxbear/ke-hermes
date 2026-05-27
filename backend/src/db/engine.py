@@ -1,6 +1,10 @@
+import logging
+
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from agent.config import settings
+
+logger = logging.getLogger(__name__)
 
 async_engine = None
 if settings.DATABASE_BACKEND == "sqlite":
@@ -28,5 +32,7 @@ async def get_db():
 async def init_db():
     from db.base import Base
 
+    logger.info("Initializing database...")
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    logger.info("Database tables created")

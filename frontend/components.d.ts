@@ -24,6 +24,7 @@ declare module 'vue' {
     ElSkeleton: typeof import('element-plus/es')['ElSkeleton']
     ElSwitch: typeof import('element-plus/es')['ElSwitch']
     ElTag: typeof import('element-plus/es')['ElTag']
+    ElTooltip: typeof import('element-plus/es')['ElTooltip']
     EmailRegisterForm: typeof import('./src/components/auth/EmailRegisterForm.vue')['default']
     FeatureGrid: typeof import('./src/components/auth/FeatureGrid.vue')['default']
     FormError: typeof import('./src/components/common/FormError.vue')['default']

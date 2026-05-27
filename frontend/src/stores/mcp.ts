@@ -18,7 +18,7 @@ export const useMcpStore = defineStore('mcp', () => {
     error.value = null
     try {
       const res = await fetchMcpTools(params)
-      tools.value = res.data
+      tools.value = res
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '加载 MCP 工具列表失败'
       error.value = msg
@@ -32,7 +32,7 @@ export const useMcpStore = defineStore('mcp', () => {
     error.value = null
     try {
       const res = await fetchMcpToolById(id)
-      currentTool.value = res.data
+      currentTool.value = res
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '加载 MCP 工具详情失败'
       error.value = msg

@@ -82,9 +82,15 @@ const menuGroups: MenuGroup[] = [
     label: '代理',
     items: [
       { icon: Bot, text: '代理' },
-      { icon: Zap, text: '技能', route: '/skills' },
-      { icon: CloudMoon, text: 'MCP 广场', route: '/mcp' },      
+      { icon: Zap, text: '技能 Hub', route: '/skills' },
       { icon: Network, text: '节点' },
+    ],
+  },
+  {
+    label: 'MCP',
+    items: [
+      { icon: CloudMoon, text: 'MCP 广场', route: '/mcp' },      
+      { icon: CloudMoon, text: 'MCP 管理' },      
     ],
   },
   {

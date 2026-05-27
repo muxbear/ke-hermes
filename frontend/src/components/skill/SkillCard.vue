@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Pencil, Trash2 } from 'lucide-vue-next'
+import { Pencil, Trash2, CircleCheck, CircleAlert } from 'lucide-vue-next'
 import type { Skill } from '@/types/skill'
 import { CATEGORY_LABELS } from '@/types/skill'
 import { getSkillIcon } from './iconMap'
@@ -15,6 +15,25 @@ const emit = defineEmits<{
 
 const iconComponent = computed(() => getSkillIcon(props.skill.icon))
 const categoryLabel = computed(() => CATEGORY_LABELS[props.skill.category] || props.skill.category)
+
+interface ValidationError {
+  field: string
+  message: string
+}
+
+const validationErrors = computed<ValidationError[]>(() => {
+  if (!props.skill.validation_errors) return []
+  try {
+    return JSON.parse(props.skill.validation_errors)
+  } catch {
+    return []
+  }
+})
+
+const validationTooltip = computed(() => {
+  if (validationErrors.value.length === 0) return ''
+  return validationErrors.value.map(e => `[${e.field}] ${e.message}`).join('\n')
+})
 </script>
 
 <template>
@@ -26,6 +45,20 @@ const categoryLabel = computed(() => CATEGORY_LABELS[props.skill.category] || pr
         </div>
         <span class="skill-name">{{ skill.name }}</span>
         <el-tag v-if="skill.is_builtin" size="small" type="info">内置</el-tag>
+        <!-- 校验状态指示 -->
+        <el-tooltip
+          v-if="!skill.valid && validationTooltip"
+          :content="validationTooltip"
+          placement="top"
+          :show-after="300"
+        >
+          <CircleAlert :size="16" class="validation-badge validation-badge--error" />
+        </el-tooltip>
+        <CircleCheck
+          v-else-if="skill.valid"
+          :size="16"
+          class="validation-badge validation-badge--success"
+        />
       </div>
       <el-switch
         :model-value="skill.enabled"
@@ -96,6 +129,21 @@ const categoryLabel = computed(() => CATEGORY_LABELS[props.skill.category] || pr
   font-size: var(--font-size-md);
   font-weight: var(--font-weight-semibold);
   color: var(--foreground-primary);
+}
+
+/* 校验状态徽章 */
+.validation-badge {
+  flex-shrink: 0;
+  cursor: default;
+}
+
+.validation-badge--success {
+  color: #22c55e;
+}
+
+.validation-badge--error {
+  color: #ef4444;
+  cursor: help;
 }
 
 .card-description {
