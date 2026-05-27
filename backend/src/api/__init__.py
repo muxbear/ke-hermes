@@ -7,6 +7,7 @@ from api.email import router as email_router
 from api.oauth import router as oauth_router
 from api.sms import router as sms_router
 from api.conversation import router as conversation_router
+from api.skill import router as skill_router
 
 router = APIRouter()
 router.include_router(agent_router)
@@ -16,5 +17,6 @@ router.include_router(email_router)
 router.include_router(sms_router)
 router.include_router(oauth_router)
 router.include_router(conversation_router)
+router.include_router(skill_router)
 
 __all__ = ["router"]

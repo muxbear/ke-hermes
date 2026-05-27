@@ -3,6 +3,7 @@ import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { X, Search, Download, ChevronDown, Upload, Check, AlertTriangle } from 'lucide-vue-next'
 import type { Skill, SkillCreateRequest } from '@/types/skill'
+import { useSkillStore } from '@/stores/skill'
 
 const props = defineProps<{
   visible: boolean
@@ -15,7 +16,7 @@ const emit = defineEmits<{
 }>()
 
 const isEditing = computed(() => !!props.skill)
-const activeTab = ref<'download' | 'upload' | 'manual'>('download')
+const activeTab = ref<'download' | 'upload' | 'manual'>('upload')
 
 // ---- Click-outside & keyboard ----
 const repoSelectRef = ref<HTMLElement | null>(null)
@@ -188,10 +189,18 @@ function importSelected() {
 // ============================================================
 //  Tab 2: Local Upload
 // ============================================================
+const skillStore = useSkillStore()
 const uploadResult = ref<{ name: string; valid: boolean; message: string }[]>([])
 const uploadMessage = ref('')
 const isDragging = ref(false)
+const uploading = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
+const uploadFile = ref<File | null>(null)
+
+const uploadFileName = computed(() => uploadFile.value?.name || '')
+const uploadSummary = ref<{
+  total: number; valid_count: number; invalid_count: number; skipped_count: number
+} | null>(null)
 
 function triggerFileInput() {
   fileInput.value?.click()
@@ -200,35 +209,55 @@ function triggerFileInput() {
 function handleFileDrop(e: DragEvent) {
   isDragging.value = false
   const file = e.dataTransfer?.files?.[0]
-  if (file) validateFile(file)
+  if (file) checkFile(file)
 }
 
 function handleFileInputChange() {
   const file = fileInput.value?.files?.[0]
-  if (file) validateFile(file)
+  if (file) checkFile(file)
 }
 
-async function validateFile(file: File) {
+function checkFile(file: File) {
+  uploadFile.value = file
   uploadResult.value = []
-  const ext = file.name.split('.').pop()?.toLowerCase()
-  const allowed = ['json', 'yaml', 'yml', 'md', 'zip']
-  if (!ext || !allowed.includes(ext)) {
-    uploadMessage.value = `不支持的文件格式: .${ext}`
-    uploadResult.value.push({ name: file.name, valid: false, message: `不支持 .${ext} 格式` })
-    return
+  uploadSummary.value = null
+  uploadMessage.value = ''
+}
+
+async function doUpload() {
+  if (!uploadFile.value) return
+  uploading.value = true
+  uploadMessage.value = ''
+  uploadResult.value = []
+  uploadSummary.value = null
+  try {
+    const res = await skillStore.uploadSkillPackage(uploadFile.value)
+    uploadSummary.value = {
+      total: res.total,
+      valid_count: res.valid_count,
+      invalid_count: res.invalid_count,
+      skipped_count: res.skipped_count,
+    }
+    if (res.invalid_count > 0) {
+      uploadMessage.value = `校验完成: ${res.valid_count} 通过, ${res.invalid_count} 未通过`
+    } else {
+      uploadMessage.value = `全部 ${res.valid_count} 个技能校验通过`
+    }
+    uploadResult.value = res.results.map((r) => ({
+      name: r.name,
+      valid: r.valid,
+      message: r.valid ? '通过' : r.errors.map((e) => `${e.field}: ${e.message}`).join('; '),
+    }))
+    ElMessage.success(`成功导入 ${res.valid_count} 个技能`)
+  } catch (err: unknown) {
+    uploadMessage.value = err instanceof Error ? err.message : '上传失败'
+    ElMessage.error(uploadMessage.value)
+  } finally {
+    uploading.value = false
   }
-  await new Promise((r) => setTimeout(r, 600))
-  uploadMessage.value = '校验通过'
-  uploadResult.value = [
-    { name: '文件格式校验', valid: true, message: '通过' },
-    { name: '必需字段检查 (name)', valid: true, message: '通过' },
-    { name: '必需字段检查 (description)', valid: true, message: '通过' },
-    { name: '必需字段检查 (prompt)', valid: true, message: '通过' },
-  ]
 }
 
 function handleUploadImport() {
-  ElMessage.success('技能导入成功')
   emit('close')
 }
 
@@ -279,11 +308,11 @@ function totalPages() {
 
           <!-- Tab Navigation -->
           <div v-if="!isEditing" class="modal-tabs">
-            <button class="tab-btn" :class="{ active: activeTab === 'download' }" @click="activeTab = 'download'">
-              从仓库下载
-            </button>
             <button class="tab-btn" :class="{ active: activeTab === 'upload' }" @click="activeTab = 'upload'">
               本地上传
+            </button>
+            <button class="tab-btn" :class="{ active: activeTab === 'download' }" @click="activeTab = 'download'">
+              从仓库下载
             </button>
             <button class="tab-btn" :class="{ active: activeTab === 'manual' }" @click="activeTab = 'manual'">
               手动创建
@@ -291,7 +320,68 @@ function totalPages() {
           </div>
 
           <div class="modal-body">
-            <!-- =========== TAB 1: DOWNLOAD =========== -->
+            <!-- =========== TAB 1: UPLOAD =========== -->
+            <div v-if="activeTab === 'upload' && !isEditing" class="tab-inner">
+              <!-- Custom drop zone -->
+              <div
+                class="dropzone"
+                :class="{ dragging: isDragging }"
+                @click="triggerFileInput"
+                @dragover.prevent="isDragging = true"
+                @dragleave.prevent="isDragging = false"
+                @drop.prevent="handleFileDrop"
+              >
+                <input
+                  ref="fileInput"
+                  type="file"
+                  accept=".zip,.tar.gz,.tgz,.tar.bz2,.tbz2,.tar.xz,.txz,.tar"
+                  hidden
+                  @change="handleFileInputChange"
+                />
+                <div class="dz-icon-circle">
+                  <Upload :size="22" />
+                </div>
+                <div class="dz-text">拖拽文件到此处或 <span class="dz-link">点击上传</span></div>
+                <div class="dz-formats">
+                  <span v-for="f in ['.zip','.tar.gz','.tar.bz2','.tar.xz']" :key="f" class="dz-tag">{{ f }}</span>
+                </div>
+              </div>
+
+              <!-- Selected file info -->
+              <div v-if="uploadFile && uploadResult.length === 0" class="file-info-box">
+                <span class="file-name">{{ uploadFileName }}</span>
+                <button class="btn btn-primary" :disabled="uploading" @click="doUpload">
+                  <span v-if="uploading" class="spinner" />
+                  <Upload v-else :size="14" />
+                  {{ uploading ? '上传中...' : '上传并校验' }}
+                </button>
+              </div>
+
+              <!-- Validation -->
+              <div v-if="uploadResult.length > 0" class="valid-panel">
+                <div class="valid-header">
+                  <Check v-if="uploadSummary && uploadSummary.invalid_count === 0" :size="16" class="icon-ok" />
+                  <AlertTriangle v-else :size="16" class="icon-warn" />
+                  <span>校验结果: {{ uploadMessage }}</span>
+                </div>
+                <div v-if="uploadSummary" class="upload-summary">
+                  <span>共 {{ uploadSummary.total }} 个</span>
+                  <span class="dot-ok">通过 {{ uploadSummary.valid_count }}</span>
+                  <span v-if="uploadSummary.invalid_count > 0" class="dot-fail">不通过 {{ uploadSummary.invalid_count }}</span>
+                  <span v-if="uploadSummary.skipped_count > 0">跳过 {{ uploadSummary.skipped_count }}</span>
+                </div>
+                <div v-for="r in uploadResult" :key="r.name" class="valid-row">
+                  <span class="valid-dot" :class="{ ok: r.valid, fail: !r.valid }" />
+                  <span class="valid-name">{{ r.name }}</span>
+                  <span class="valid-msg">{{ r.message }}</span>
+                </div>
+                <div class="actions">
+                  <button class="btn btn-ghost" @click="emit('close')">关闭</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- =========== TAB 2: DOWNLOAD =========== -->
             <div v-if="activeTab === 'download' && !isEditing" class="tab-inner">
               <!-- Unified Panel -->
               <div class="download-panel">
@@ -431,55 +521,6 @@ function totalPages() {
                 class="hint-box"
               >
                 选择或输入一个技能仓库地址，点击"获取"加载技能列表
-              </div>
-            </div>
-
-            <!-- =========== TAB 2: UPLOAD =========== -->
-            <div v-if="activeTab === 'upload' && !isEditing" class="tab-inner">
-              <!-- Custom drop zone -->
-              <div
-                class="dropzone"
-                :class="{ dragging: isDragging }"
-                @click="triggerFileInput"
-                @dragover.prevent="isDragging = true"
-                @dragleave.prevent="isDragging = false"
-                @drop.prevent="handleFileDrop"
-              >
-                <input
-                  ref="fileInput"
-                  type="file"
-                  accept=".json,.yaml,.yml,.md,.zip"
-                  hidden
-                  @change="handleFileInputChange"
-                />
-                <div class="dz-icon-circle">
-                  <Upload :size="22" />
-                </div>
-                <div class="dz-text">拖拽文件到此处或 <span class="dz-link">点击上传</span></div>
-                <div class="dz-formats">
-                  <span v-for="f in ['.json','.yaml','.yml','.md','.zip']" :key="f" class="dz-tag">{{ f }}</span>
-                </div>
-              </div>
-
-              <!-- Validation -->
-              <div v-if="uploadResult.length > 0" class="valid-panel">
-                <div class="valid-header">
-                  <Check v-if="uploadResult.every(r => r.valid)" :size="16" class="icon-ok" />
-                  <AlertTriangle v-else :size="16" class="icon-warn" />
-                  <span>校验结果: {{ uploadMessage }}</span>
-                </div>
-                <div v-for="r in uploadResult" :key="r.name" class="valid-row">
-                  <span class="valid-dot" :class="{ ok: r.valid, fail: !r.valid }" />
-                  <span class="valid-name">{{ r.name }}</span>
-                  <span class="valid-msg">{{ r.message }}</span>
-                </div>
-                <div class="actions">
-                  <button class="btn btn-ghost" @click="emit('close')">取消</button>
-                  <button class="btn btn-primary" @click="handleUploadImport">
-                    <Upload :size="14" />
-                    导入
-                  </button>
-                </div>
               </div>
             </div>
 
@@ -1194,4 +1235,34 @@ function totalPages() {
 .modal-leave-to {
   opacity: 0;
 }
+
+/* ============================================
+   UPLOAD: FILE INFO & SUMMARY
+   ============================================ */
+.file-info-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 14px;
+  padding: 12px 16px;
+  background: rgba(15, 23, 46, 0.5);
+  border: 1px solid var(--color-border-card);
+  border-radius: var(--radius-lg);
+}
+
+.file-name {
+  font-size: var(--font-size-base);
+  color: var(--color-text-primary);
+}
+
+.upload-summary {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 10px;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.dot-ok { color: #22c55e; }
+.dot-fail { color: #ef4444; }
 </style>

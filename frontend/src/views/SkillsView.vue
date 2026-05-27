@@ -71,8 +71,10 @@ async function handleDelete(skill: Skill) {
     )
     await skillStore.removeSkill(skill.id)
     ElMessage.success('技能已删除')
-  } catch {
-    // cancelled
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message !== 'cancel') {
+      ElMessage.error(err.message)
+    }
   }
 }
 

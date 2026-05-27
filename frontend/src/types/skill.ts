@@ -8,6 +8,9 @@ export interface Skill {
   prompt: string
   enabled: boolean
   is_builtin: boolean
+  valid: boolean
+  source: string
+  license: string
   user_id: string | null
   created_at: string
   updated_at: string

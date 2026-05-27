@@ -34,7 +34,7 @@ function getRefreshTokenValue(): string | null {
 const instance: AxiosInstance = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
   timeout: 15000,
-  headers: { 'Content-Type': 'application/json' },
+  headers: {},
 })
 
 // 请求拦截器：从存储读取并注入 token
