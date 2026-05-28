@@ -2,16 +2,16 @@
 import {
   Settings,
   Sparkles,
-  GitBranch,
-  Users,
+  FileText,
+  Clock,
   Plus,
   Trash2,
   Zap,
   Activity,
-  Play,
   Pause,
   ChevronRight,
 } from 'lucide-vue-next'
+import { ref, computed } from 'vue'
 import type { Agent, ConfigType } from '@/types/agent'
 import { CONFIG_TYPE_MAP, STATUS_LABELS } from '@/types/agent'
 
@@ -27,6 +27,12 @@ const emit = defineEmits<{
   (e: 'selectAgent', id: string): void
 }>()
 
+const activeTab = ref<ConfigType>('file')
+
+const activeSection = computed(() =>
+  configSections.find((s) => s.type === activeTab.value) ?? configSections[0],
+)
+
 /** 配置区域定义 */
 interface ConfigSection {
   type: ConfigType
@@ -34,10 +40,18 @@ interface ConfigSection {
   icon: typeof Zap
   colorClass: string
   iconBg: string
-  key: 'tools' | 'skills' | 'prompts'
+  key: 'tools' | 'skills' | 'prompts' | 'files'
 }
 
 const configSections: ConfigSection[] = [
+  {
+    type: 'file',
+    label: '文件 (Files)',
+    icon: FileText,
+    colorClass: 'section--yellow',
+    iconBg: 'rgba(234, 179, 8, 0.1)',
+    key: 'files',
+  },
   {
     type: 'tool',
     label: '工具 (Tools)',
@@ -56,8 +70,8 @@ const configSections: ConfigSection[] = [
   },
   {
     type: 'prompt',
-    label: '提示词 (Prompts)',
-    icon: GitBranch,
+    label: 'Cron Jobs',
+    icon: Clock,
     colorClass: 'section--green',
     iconBg: 'rgba(34, 197, 94, 0.1)',
     key: 'prompts',
@@ -75,9 +89,7 @@ function getStatusColor(status: string): string {
   }
 }
 
-function getSubAgent(id: string, agents: Agent[]): Agent | undefined {
-  return agents.find((a) => a.id === id)
-}
+
 </script>
 
 <template>
@@ -98,11 +110,11 @@ function getSubAgent(id: string, agents: Agent[]): Agent | undefined {
             class="type-badge type-badge--main"
           >
             <Sparkles :size="11" />
-            主代理
+            主智能体
           </span>
           <span v-else class="type-badge type-badge--sub">
             <ChevronRight :size="11" />
-            子代理
+            子智能体
           </span>
         </div>
         <p class="agent-desc">{{ agent.description || '暂无描述' }}</p>
@@ -120,54 +132,50 @@ function getSubAgent(id: string, agents: Agent[]): Agent | undefined {
             <Sparkles :size="13" />
             {{ agent.skills?.length ?? 0 }}
           </span>
+          <span class="hstat hstat--yellow">
+            <FileText :size="13" />
+            {{ agent.files?.length ?? 0 }}
+          </span>
           <span class="hstat hstat--green">
-            <GitBranch :size="13" />
+            <Clock :size="13" />
             {{ agent.prompts?.length ?? 0 }}
           </span>
         </div>
       </div>
       <div class="header-actions">
-        <button class="action-btn action-btn--blue" @click="emit('addConfig', 'tool')">
-          <Plus :size="14" /> 工具
-        </button>
-        <button class="action-btn action-btn--purple" @click="emit('addConfig', 'skill')">
-          <Plus :size="14" /> 技能
-        </button>
-        <button class="action-btn action-btn--green" @click="emit('addConfig', 'prompt')">
-          <Plus :size="14" /> 提示词
-        </button>
-        <div class="action-divider" />
-        <button class="action-btn action-btn--default" @click="emit('toggleStatus')">
-          <Pause v-if="agent.status === 'active'" :size="14" />
-          <Play v-else :size="14" />
-          {{ agent.status === 'active' ? '停止' : '启动' }}
+        <button
+          v-for="section in configSections"
+          :key="section.type"
+          class="tab-btn"
+          :class="[section.colorClass, { active: activeTab === section.type }]"
+          @click="activeTab = section.type"
+        >
+          <component :is="section.icon" :size="14" />
+          {{ section.label }}
         </button>
       </div>
     </div>
 
     <!-- Config Sections -->
     <div class="config-sections">
-      <div
-        v-for="section in configSections"
-        :key="section.type"
-        class="config-section"
-      >
+      <!-- Active tab section -->
+      <div class="config-section">
         <div class="section-header">
           <div class="section-title-row">
-            <div class="section-icon" :style="{ background: section.iconBg }">
-              <component :is="section.icon" :size="16" />
+            <div class="section-icon" :style="{ background: activeSection.iconBg }">
+              <component :is="activeSection.icon" :size="16" />
             </div>
             <div>
-              <h3 class="section-label">{{ section.label }}</h3>
+              <h3 class="section-label">{{ activeSection.label }}</h3>
               <span class="section-count">
-                {{ agent[section.key]?.length ?? 0 }} 个已配置
+                {{ agent[activeSection.key]?.length ?? 0 }} 个已配置
               </span>
             </div>
           </div>
           <button
             class="add-btn"
-            :class="section.colorClass"
-            @click="emit('addConfig', section.type)"
+            :class="activeSection.colorClass"
+            @click="emit('addConfig', activeSection.type)"
           >
             <Plus :size="13" />
             添加
@@ -175,107 +183,29 @@ function getSubAgent(id: string, agents: Agent[]): Agent | undefined {
         </div>
 
         <div class="tags-wrap">
-          <template v-if="agent[section.key] && agent[section.key].length > 0">
+          <template v-if="agent[activeSection.key] && agent[activeSection.key].length > 0">
             <span
-              v-for="item in agent[section.key]"
+              v-for="item in agent[activeSection.key]"
               :key="item"
               class="config-tag"
-              :class="section.colorClass"
+              :class="activeSection.colorClass"
             >
-              <component :is="section.icon" :size="12" class="tag-icon" />
+              <component :is="activeSection.icon" :size="12" class="tag-icon" />
               {{ item }}
               <button
                 class="tag-delete"
-                @click="emit('removeConfig', section.type, item)"
+                @click="emit('removeConfig', activeSection.type, item)"
               >
                 <Trash2 :size="11" />
               </button>
             </span>
           </template>
           <div v-else class="empty-section">
-            <component :is="section.icon" :size="20" class="empty-icon" />
-            <p>暂无{{ CONFIG_TYPE_MAP[section.type].label }}</p>
+            <component :is="activeSection.icon" :size="20" class="empty-icon" />
+            <p>暂无{{ CONFIG_TYPE_MAP[activeSection.type].label }}</p>
             <span class="empty-hint">点击上方"添加"按钮</span>
           </div>
         </div>
-      </div>
-
-      <!-- Subagents Section (main agent only) -->
-      <div v-if="agent.type === 'main'" class="config-section">
-        <div class="section-header">
-          <div class="section-title-row">
-            <div class="section-icon" style="background: rgba(249, 115, 22, 0.1)">
-              <Users :size="16" style="color: #f97316" />
-            </div>
-            <div>
-              <h3 class="section-label">子代理 (Subagents)</h3>
-              <span class="section-count">
-                {{ agent.subAgents?.length ?? 0 }} 个子代理
-              </span>
-            </div>
-          </div>
-          <button
-            class="add-btn section--orange"
-            @click="emit('addConfig', 'subagent')"
-          >
-            <Plus :size="13" />
-            添加
-          </button>
-        </div>
-
-        <div class="subagent-list">
-          <template
-            v-if="agent.subAgents && agent.subAgents.length > 0"
-          >
-            <div
-              v-for="subId in agent.subAgents"
-              :key="subId"
-              class="subagent-card"
-              @click="emit('selectAgent', subId)"
-            >
-              <div class="sub-card-left">
-                <div class="sub-icon-box">
-                  <ChevronRight :size="14" style="color: #f97316" />
-                </div>
-                <div>
-                  <p class="sub-name">
-                    {{ getSubAgent(subId, agents)?.name ?? subId }}
-                  </p>
-                  <p class="sub-desc">
-                    {{ getSubAgent(subId, agents)?.description ?? '' }}
-                  </p>
-                </div>
-              </div>
-              <div class="sub-card-right">
-                <span
-                  v-if="getSubAgent(subId, agents)"
-                  class="status-badge-sm"
-                  :class="getStatusColor(getSubAgent(subId, agents)!.status)"
-                />
-                <button
-                  class="sub-delete"
-                  @click.stop="emit('removeConfig', 'subagent', subId)"
-                >
-                  <Trash2 :size="14" />
-                </button>
-              </div>
-            </div>
-          </template>
-          <p v-else class="no-sub">暂无子代理</p>
-        </div>
-      </div>
-
-      <!-- Sub agent nesting notice -->
-      <div v-else class="nesting-notice">
-        <GitBranch :size="24" class="notice-icon" />
-        <p class="notice-title">子代理不支持嵌套</p>
-        <p class="notice-desc">如需添加子代理，请选择主代理</p>
-        <button
-          class="action-btn action-btn--default"
-          @click="emit('selectAgent', agents.find(a => a.type === 'main')?.id ?? '')"
-        >
-          切换到主代理
-        </button>
       </div>
     </div>
   </div>
@@ -370,6 +300,7 @@ function getSubAgent(id: string, agents: Agent[]): Agent | undefined {
 
 .hstat--blue { color: var(--color-accent); }
 .hstat--purple { color: #a78bfa; }
+.hstat--yellow { color: #eab308; }
 .hstat--green { color: #4ade80; }
 
 .header-actions {
@@ -412,12 +343,51 @@ function getSubAgent(id: string, agents: Agent[]): Agent | undefined {
 
 .action-btn--purple:hover { background: rgba(139, 92, 246, 0.08); }
 
+.action-btn--yellow {
+  border-color: rgba(234, 179, 8, 0.3);
+  color: #eab308;
+}
+
+.action-btn--yellow:hover { background: rgba(234, 179, 8, 0.08); }
+
 .action-btn--green {
   border-color: rgba(34, 197, 94, 0.3);
   color: #4ade80;
 }
 
 .action-btn--green:hover { background: rgba(34, 197, 94, 0.08); }
+
+.tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  border: 1px solid var(--border-subtle);
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  color: var(--foreground-muted);
+}
+
+.tab-btn:hover {
+  color: var(--foreground-primary);
+  background: var(--surface-secondary);
+}
+
+.tab-btn.active {
+  color: var(--foreground-primary);
+  background: var(--surface-secondary);
+  border-bottom-color: currentColor;
+}
+
+.tab-btn.section--yellow.active { border-bottom-color: #eab308; color: #eab308; }
+.tab-btn.section--blue.active { border-bottom-color: var(--color-accent); color: var(--color-accent); }
+.tab-btn.section--purple.active { border-bottom-color: #a78bfa; color: #a78bfa; }
+.tab-btn.section--green.active { border-bottom-color: #4ade80; color: #4ade80; }
 
 .action-divider {
   width: 1px;
@@ -517,6 +487,14 @@ function getSubAgent(id: string, agents: Agent[]): Agent | undefined {
 
 .add-btn.section--green:hover { background: rgba(34, 197, 94, 0.08); }
 
+.section--yellow .add-btn,
+.add-btn.section--yellow {
+  border-color: rgba(234, 179, 8, 0.3);
+  color: #eab308;
+}
+
+.add-btn.section--yellow:hover { background: rgba(234, 179, 8, 0.08); }
+
 .section--orange .add-btn,
 .add-btn.section--orange {
   border-color: rgba(249, 115, 22, 0.3);
@@ -559,6 +537,11 @@ function getSubAgent(id: string, agents: Agent[]): Agent | undefined {
   background: rgba(139, 92, 246, 0.06);
 }
 
+.config-tag.section--yellow:hover {
+  border-color: rgba(234, 179, 8, 0.4);
+  background: rgba(234, 179, 8, 0.06);
+}
+
 .config-tag.section--green:hover {
   border-color: rgba(34, 197, 94, 0.4);
   background: rgba(34, 197, 94, 0.06);
@@ -568,6 +551,7 @@ function getSubAgent(id: string, agents: Agent[]): Agent | undefined {
 
 .section--blue .tag-icon { color: var(--color-accent); }
 .section--purple .tag-icon { color: #a78bfa; }
+.section--yellow .tag-icon { color: #eab308; }
 .section--green .tag-icon { color: #4ade80; }
 
 .tag-delete {

@@ -23,7 +23,7 @@ export const useAgentStore = defineStore('agent', () => {
 
   const filteredAgents = computed(() => {
     if (!searchQuery.value) {
-      // 无搜索时只返回主代理（树根）
+      // 无搜索时只返回主智能体（树根）
       return agents.value.filter((a) => a.type === 'main')
     }
     // 搜索时展平，返回所有匹配项
@@ -48,7 +48,7 @@ export const useAgentStore = defineStore('agent', () => {
     error.value = null
     try {
       agents.value = await agentApi.fetchAgents()
-      // 默认选中主代理
+      // 默认选中主智能体
       if (!selectedAgentId.value && agents.value.length > 0) {
         selectedAgentId.value = agents.value.find((a) => a.type === 'main')?.id ?? agents.value[0].id
       }
@@ -93,7 +93,7 @@ export const useAgentStore = defineStore('agent', () => {
     try {
       const cloned = await agentApi.cloneAgent(id)
       agents.value.push(cloned)
-      // 刷新主代理（subAgents 可能变了）
+      // 刷新主智能体（subAgents 可能变了）
       const updatedMain = await agentApi.fetchAgents()
       agents.value = updatedMain
     } catch (err: unknown) {
@@ -105,12 +105,12 @@ export const useAgentStore = defineStore('agent', () => {
     try {
       await agentApi.deleteAgent(id)
       agents.value = agents.value.filter((a) => a.id !== id)
-      // 从主代理 subAgents 中移除
+      // 从主智能体 subAgents 中移除
       const main = agents.value.find((a) => a.type === 'main')
       if (main && main.subAgents) {
         main.subAgents = main.subAgents.filter((sid) => sid !== id)
       }
-      // 如果删除的是当前选中项，切换到主代理
+      // 如果删除的是当前选中项，切换到主智能体
       if (selectedAgentId.value === id && main) {
         selectedAgentId.value = main.id
       }
@@ -148,7 +148,7 @@ export const useAgentStore = defineStore('agent', () => {
     try {
       const newAgent = await agentApi.createAgent({ name, description })
       agents.value = await agentApi.fetchAgents()
-      // 自动展开主代理并选中新创建的子代理
+      // 自动展开主智能体并选中新创建的子代理
       expandedIds.value = new Set([...expandedIds.value, 'main-agent'])
       selectedAgentId.value = newAgent.id
     } catch (err: unknown) {

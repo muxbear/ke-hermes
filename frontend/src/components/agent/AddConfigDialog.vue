@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { Zap, Sparkles, GitBranch, Users } from 'lucide-vue-next'
+import { Zap, Sparkles, Clock, FileText, Users } from 'lucide-vue-next'
 import type { ConfigType } from '@/types/agent'
 import { CONFIG_TYPE_MAP } from '@/types/agent'
 
@@ -25,7 +25,8 @@ const iconComponent = computed(() => {
   switch (props.type) {
     case 'tool': return Zap
     case 'skill': return Sparkles
-    case 'prompt': return GitBranch
+    case 'file': return FileText
+    case 'prompt': return Clock
     case 'subagent': return Users
   }
 })
@@ -34,7 +35,8 @@ const placeholders = computed(() => {
   switch (props.type) {
     case 'tool': return { name: '例如: web_search, file_reader', desc: '描述此工具的功能和用途...' }
     case 'skill': return { name: '例如: code_analysis, debugging', desc: '描述此技能的能力和应用场景...' }
-    case 'prompt': return { name: '例如: 系统提示词, 代码审查提示词', desc: '输入提示词的完整内容...' }
+    case 'file': return { name: '例如: config.yaml, data.json', desc: '描述此文件的用途和内容...' }
+    case 'prompt': return { name: '例如: 每天执行一次, 每小时检查', desc: '输入 Cron 表达式和执行任务...' }
     case 'subagent': return { name: '例如: 数据处理子代理', desc: '描述此子代理的职责和功能...' }
   }
 })
@@ -81,14 +83,14 @@ watch(
           <h3 class="dialog-title">添加{{ config.label }}</h3>
           <p class="dialog-desc">
             为 <span class="highlight">"{{ agentName }}"</span>
-            {{ agentType === 'main' ? ' (主代理)' : ' (子代理)' }}
+            {{ agentType === 'main' ? ' (主智能体)' : ' (子代理)' }}
             添加新的{{ config.label }}
           </p>
           <p
             v-if="type === 'subagent' && agentType === 'sub'"
             class="dialog-warning"
           >
-            注意：子代理不能添加子代理，将为主代理添加
+            注意：子代理不能添加子代理，将为主智能体添加
           </p>
         </div>
       </div>
@@ -144,6 +146,7 @@ watch(
 .config--purple { background: rgba(139, 92, 246, 0.1); }
 .config--green { background: rgba(34, 197, 94, 0.1); }
 .config--orange { background: rgba(249, 115, 22, 0.1); }
+.config--yellow { background: rgba(234, 179, 8, 0.1); }
 
 .dialog-title {
   font-size: 16px;

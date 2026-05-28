@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search, X, EyeOff, Eye, Upload, Download } from 'lucide-vue-next'
+import { Plus, Search, X } from 'lucide-vue-next'
 import { useAgentStore } from '@/stores/agent'
 import type { ConfigType, Agent } from '@/types/agent'
 import AgentListItem from '@/components/agent/AgentListItem.vue'
@@ -26,7 +26,7 @@ async function handleAddConfig(type: ConfigType, value: string) {
       ElMessage.success('子代理创建成功')
     } else {
       await agentStore.addConfig(type, value)
-      ElMessage.success(`${type === 'tool' ? '工具' : type === 'skill' ? '技能' : '提示词'}已添加`)
+      ElMessage.success(`${type === 'tool' ? '工具' : type === 'skill' ? '技能' : type === 'file' ? '文件' : 'Cron Job'}已添加`)
     }
     dialogVisible.value = false
   } catch (err: unknown) {
@@ -77,7 +77,7 @@ async function handleDelete(id: string) {
 }
 
 function handleNewSubAgent() {
-  // 如果当前选中的是子代理，先切换到主代理
+  // 如果当前选中的是子代理，先切换到主智能体
   if (agentStore.selectedAgent?.type === 'sub') {
     const main = agentStore.mainAgent
     if (main) agentStore.selectAgent(main.id)
@@ -92,28 +92,6 @@ onMounted(() => {
 
 <template>
   <div class="agents-page">
-    <!-- Page Header -->
-    <div class="page-header">
-      <div class="page-header__info">
-        <h1>代理管理中心</h1>
-        <p>管理和配置您的智能代理系统</p>
-      </div>
-      <div class="page-header__actions">
-        <el-button size="small" plain>
-          <Upload :size="14" style="margin-right: 4px" />
-          导入
-        </el-button>
-        <el-button size="small" plain>
-          <Download :size="14" style="margin-right: 4px" />
-          导出
-        </el-button>
-        <el-button type="primary" size="small" @click="handleNewSubAgent">
-          <Plus :size="14" style="margin-right: 4px" />
-          新建子代理
-        </el-button>
-      </div>
-    </div>
-
     <!-- Error Banner -->
     <div v-if="agentStore.error" class="error-banner">
       <el-alert :title="agentStore.error" type="warning" show-icon :closable="true">
@@ -168,6 +146,7 @@ onMounted(() => {
               @toggle-status="handleToggleStatus"
               @clone="handleClone"
               @delete="handleDelete"
+              @new-sub-agent="handleNewSubAgent"
             />
           </template>
 
@@ -226,32 +205,6 @@ onMounted(() => {
   height: 100%;
   background: var(--surface-primary);
   overflow: hidden;
-}
-
-/* ---- Page Header ---- */
-.page-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-shrink: 0;
-}
-
-.page-header__info h1 {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-bold);
-  color: var(--foreground-primary);
-  margin: 0;
-}
-
-.page-header__info p {
-  font-size: var(--font-size-sm);
-  color: var(--foreground-secondary);
-  margin: 4px 0 0;
-}
-
-.page-header__actions {
-  display: flex;
-  gap: 8px;
 }
 
 /* ---- Error Banner ---- */

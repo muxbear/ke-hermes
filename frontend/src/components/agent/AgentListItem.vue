@@ -13,6 +13,7 @@ import {
   Sparkles,
   GitBranch,
   Edit,
+  UserPlus,
 } from 'lucide-vue-next'
 import type { Agent } from '@/types/agent'
 import { STATUS_LABELS } from '@/types/agent'
@@ -35,6 +36,7 @@ const emit = defineEmits<{
   (e: 'toggleStatus', id: string): void
   (e: 'clone', agent: Agent): void
   (e: 'delete', id: string): void
+  (e: 'newSubAgent'): void
 }>()
 
 const isSelected = computed(() => props.selectedId === props.agent.id)
@@ -94,7 +96,7 @@ function getStatusLabel(status: string): string {
             {{ getStatusLabel(agent.status) }}
           </span>
           <span v-if="agent.type === 'main'" class="type-badge type-badge--main">
-            主代理
+            主智能体
           </span>
         </div>
         <p class="item-desc">{{ agent.description }}</p>
@@ -124,7 +126,8 @@ function getStatusLabel(status: string): string {
 
       <!-- 操作菜单 -->
       <el-dropdown trigger="click" @click.stop @command="(cmd: string) => {
-        if (cmd === 'toggle') emit('toggleStatus', agent.id)
+        if (cmd === 'newSubAgent') emit('newSubAgent')
+        else if (cmd === 'toggle') emit('toggleStatus', agent.id)
         else if (cmd === 'clone') emit('clone', agent)
         else if (cmd === 'delete') emit('delete', agent.id)
       }">
@@ -133,7 +136,11 @@ function getStatusLabel(status: string): string {
         </button>
         <template #dropdown>
           <el-dropdown-menu>
-            <el-dropdown-item command="toggle">
+            <el-dropdown-item command="newSubAgent">
+              <UserPlus :size="14" />
+              <span style="margin-left: 8px">新建子代理</span>
+            </el-dropdown-item>
+            <el-dropdown-item divided command="toggle">
               <Pause v-if="agent.status === 'active'" :size="14" />
               <Play v-else :size="14" />
               <span style="margin-left: 8px">
@@ -144,7 +151,7 @@ function getStatusLabel(status: string): string {
               <Copy :size="14" />
               <span style="margin-left: 8px">克隆</span>
             </el-dropdown-item>
-            <el-dropdown-item divided command="delete" style="color: #ef4444">
+            <el-dropdown-item v-if="!agent.undeletable" divided command="delete" style="color: #ef4444">
               <Trash2 :size="14" />
               <span style="margin-left: 8px">删除</span>
             </el-dropdown-item>
@@ -174,6 +181,7 @@ function getStatusLabel(status: string): string {
         @toggle-status="(id) => emit('toggleStatus', id)"
         @clone="(a) => emit('clone', a)"
         @delete="(id) => emit('delete', id)"
+        @new-sub-agent="() => emit('newSubAgent')"
       />
     </div>
   </div>

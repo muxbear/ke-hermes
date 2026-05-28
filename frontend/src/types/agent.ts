@@ -7,11 +7,13 @@ export interface Agent {
   tools: string[]
   skills: string[]
   prompts: string[]
+  files: string[]
   subAgents?: string[]
   parentId?: string
   description?: string
   lastActive?: string
   callCount?: number
+  undeletable?: boolean
 }
 
 /** 创建代理请求 */
@@ -21,7 +23,7 @@ export interface AgentCreateRequest {
 }
 
 /** 配置项类型 */
-export type ConfigType = 'tool' | 'skill' | 'prompt' | 'subagent'
+export type ConfigType = 'tool' | 'skill' | 'prompt' | 'subagent' | 'file'
 
 /** 状态中文标签 */
 export const STATUS_LABELS: Record<string, string> = {
@@ -39,4 +41,5 @@ export const CONFIG_TYPE_MAP: Record<
   skill: { label: '技能', color: '#8b5cf6', bgClass: 'config--purple' },
   prompt: { label: '提示词', color: '#22c55e', bgClass: 'config--green' },
   subagent: { label: '子代理', color: '#f97316', bgClass: 'config--orange' },
+  file: { label: '文件', color: '#eab308', bgClass: 'config--yellow' },
 }
