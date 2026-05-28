@@ -107,12 +107,8 @@ onMounted(() => {
       <div class="panel-left">
         <div class="panel-left-header">
           <div class="panel-left-title-row">
-            <span class="panel-title">代理列表</span>
-            <div class="panel-title-actions">
-              <button class="text-btn" @click="agentStore.expandAll()">展开</button>
-              <button class="text-btn" @click="agentStore.collapseAll()">折叠</button>
-              <span class="count-badge">{{ agentStore.agents.length }}</span>
-            </div>
+            <span class="panel-title">代理列表<span class="count-badge">{{ agentStore.agents.length }}</span></span>
+            <div class="panel-title-actions" />
           </div>
           <div class="search-box">
             <Search :size="14" class="search-icon" />
