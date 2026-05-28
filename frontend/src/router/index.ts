@@ -16,6 +16,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/HomeView.vue'),
       },
       {
+        path: 'overview',
+        name: 'overview',
+        component: () => import('@/views/OverviewView.vue'),
+        meta: { title: '概览' },
+      },
+      {
         path: 'skills',
         name: 'skills',
         component: () => import('@/views/SkillsView.vue'),

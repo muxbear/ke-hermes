@@ -23,6 +23,7 @@ const breadcrumb = computed(() => {
     '/': { group: '聊天', item: '对话' },
     '/agents': { group: '代理', item: '代理' },
     '/skills': { group: '代理', item: '技能 Hub' },
+    '/overview': { group: '控制', item: '概览' },
     '/mcp': { group: 'MCP', item: 'MCP 广场' },
   }
   const path = route.path

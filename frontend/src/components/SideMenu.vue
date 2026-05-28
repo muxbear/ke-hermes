@@ -72,7 +72,7 @@ const menuGroups: MenuGroup[] = [
   {
     label: '控制',
     items: [
-      { icon: LayoutDashboard, text: '概览' },
+      { icon: LayoutDashboard, text: '概览', route: '/overview' },
       { icon: Server, text: '实例' },
       { icon: MessagesSquare, text: '会话' },
       { icon: BarChart3, text: '使用情况' },
