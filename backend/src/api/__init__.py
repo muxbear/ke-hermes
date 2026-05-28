@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from api.agent import router as agent_router
+from api.agents import router as agents_router
 from api.auth import router as auth_router
 from api.captcha import router as captcha_router
 from api.conversation import router as conversation_router
@@ -12,6 +13,7 @@ from api.sms import router as sms_router
 
 router = APIRouter()
 router.include_router(agent_router)
+router.include_router(agents_router)
 router.include_router(auth_router)
 router.include_router(captcha_router)
 router.include_router(email_router)

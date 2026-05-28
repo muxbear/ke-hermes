@@ -30,7 +30,7 @@ const features: FeatureItem[] = [
   { icon: 'terminal', title: '丰富的工具生态', description: '40+ 工具，MCP 扩展' },
   { icon: 'globe', title: '全平台消息网关', description: '15+ 平台，指令直达' },
   { icon: 'shield-check', title: '安全与隐私', description: '沙盒隔离，零数据收集' },
-  { icon: 'cpu', title: '子代理与并行处理', description: '子代理，多线推进' },
+  { icon: 'cpu', title: '子智能体与并行处理', description: '子智能体，多线推进' },
   { icon: 'timer', title: '调度与自动化', description: 'Cron 定时，自动推送' },
   { icon: 'settings', title: '模型灵活可切换', description: '多提供商，热切换' },
 ]

@@ -32,11 +32,11 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (e: 'select', agent: Agent): void
-  (e: 'toggleExpand', id: string): void
-  (e: 'toggleStatus', id: string): void
+  (e: 'toggle-expand', id: string): void
+  (e: 'toggle-status', id: string): void
   (e: 'clone', agent: Agent): void
   (e: 'delete', id: string): void
-  (e: 'newSubAgent'): void
+  (e: 'new-sub-agent'): void
 }>()
 
 const isSelected = computed(() => props.selectedId === props.agent.id)
@@ -78,7 +78,7 @@ function getStatusLabel(status: string): string {
       <button
         v-if="hasChildren && !searchQuery"
         class="expand-btn"
-        @click.stop="emit('toggleExpand', agent.id)"
+        @click.stop="emit('toggle-expand', agent.id)"
       >
         <ChevronDown v-if="isExpanded" :size="14" />
         <ChevronRight v-else :size="14" />
@@ -126,8 +126,8 @@ function getStatusLabel(status: string): string {
 
       <!-- 操作菜单 -->
       <el-dropdown trigger="click" @click.stop @command="(cmd: string) => {
-        if (cmd === 'newSubAgent') emit('newSubAgent')
-        else if (cmd === 'toggle') emit('toggleStatus', agent.id)
+        if (cmd === 'newSubAgent') emit('new-sub-agent')
+        else if (cmd === 'toggle') emit('toggle-status', agent.id)
         else if (cmd === 'clone') emit('clone', agent)
         else if (cmd === 'delete') emit('delete', agent.id)
       }">
@@ -138,7 +138,7 @@ function getStatusLabel(status: string): string {
           <el-dropdown-menu>
             <el-dropdown-item command="newSubAgent">
               <UserPlus :size="14" />
-              <span style="margin-left: 8px">新建子代理</span>
+              <span style="margin-left: 8px">新建子智能体</span>
             </el-dropdown-item>
             <el-dropdown-item divided command="toggle">
               <Pause v-if="agent.status === 'active'" :size="14" />
@@ -160,7 +160,7 @@ function getStatusLabel(status: string): string {
       </el-dropdown>
     </div>
 
-    <!-- 子代理（递归） -->
+    <!-- 子智能体（递归） -->
     <div v-if="hasChildren && (isExpanded || searchQuery)" class="children">
       <div
         v-if="!searchQuery"
@@ -177,11 +177,11 @@ function getStatusLabel(status: string): string {
         :search-query="searchQuery"
         :level="level + 1"
         @select="(a) => emit('select', a)"
-        @toggle-expand="(id) => emit('toggleExpand', id)"
-        @toggle-status="(id) => emit('toggleStatus', id)"
+        @toggle-expand="(id) => emit('toggle-expand', id)"
+        @toggle-status="(id) => emit('toggle-status', id)"
         @clone="(a) => emit('clone', a)"
         @delete="(id) => emit('delete', id)"
-        @new-sub-agent="() => emit('newSubAgent')"
+        @new-sub-agent="() => emit('new-sub-agent')"
       />
     </div>
   </div>

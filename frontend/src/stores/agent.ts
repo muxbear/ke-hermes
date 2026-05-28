@@ -10,7 +10,7 @@ export const useAgentStore = defineStore('agent', () => {
   const loading = ref(false)
   const error = ref<string | null>(null)
   const searchQuery = ref('')
-  const expandedIds = ref<Set<string>>(new Set(['main-agent']))
+  const expandedIds = ref<Set<string>>(new Set())
 
   /* ---------- computed ---------- */
   const selectedAgent = computed(() =>
@@ -51,6 +51,11 @@ export const useAgentStore = defineStore('agent', () => {
       // 默认选中主智能体
       if (!selectedAgentId.value && agents.value.length > 0) {
         selectedAgentId.value = agents.value.find((a) => a.type === 'main')?.id ?? agents.value[0].id
+      }
+      // 默认展开主智能体（使其子智能体可见）
+      const mainId = agents.value.find((a) => a.type === 'main')?.id
+      if (mainId && !expandedIds.value.has(mainId)) {
+        expandedIds.value = new Set([...expandedIds.value, mainId])
       }
     } catch (err: unknown) {
       error.value = err instanceof Error ? err.message : '加载代理列表失败'
@@ -121,10 +126,10 @@ export const useAgentStore = defineStore('agent', () => {
 
   async function addConfig(type: ConfigType, value: string) {
     const targetId = selectedAgentId.value
-    if (!targetId) return
+    if (!targetId) throw new Error('未选中代理')
 
     try {
-      const updated = await agentApi.addConfig(targetId, type, value)
+      await agentApi.addConfig(targetId, type, value)
       // 刷新整个列表以保持数据一致性
       agents.value = await agentApi.fetchAgents()
     } catch (err: unknown) {
@@ -134,10 +139,10 @@ export const useAgentStore = defineStore('agent', () => {
 
   async function removeConfig(type: ConfigType, value: string) {
     const targetId = selectedAgentId.value
-    if (!targetId) return
+    if (!targetId) throw new Error('未选中代理')
 
     try {
-      const updated = await agentApi.removeConfig(targetId, type, value)
+      await agentApi.removeConfig(targetId, type, value)
       agents.value = await agentApi.fetchAgents()
     } catch (err: unknown) {
       throw err instanceof Error ? err : new Error('移除配置失败')
@@ -145,14 +150,16 @@ export const useAgentStore = defineStore('agent', () => {
   }
 
   async function createSubAgent(name: string, description?: string) {
+    const main = mainAgent.value
+    if (!main) throw new Error('主智能体不存在，无法创建子智能体')
     try {
-      const newAgent = await agentApi.createAgent({ name, description })
+      const newAgent = await agentApi.createAgent({ name, description, parentId: main.id })
       agents.value = await agentApi.fetchAgents()
-      // 自动展开主智能体并选中新创建的子代理
-      expandedIds.value = new Set([...expandedIds.value, 'main-agent'])
+      // 自动展开主智能体并选中新创建的子智能体
+      expandedIds.value = new Set([...expandedIds.value, main.id])
       selectedAgentId.value = newAgent.id
     } catch (err: unknown) {
-      throw err instanceof Error ? err : new Error('创建子代理失败')
+      throw err instanceof Error ? err : new Error('创建子智能体失败')
     }
   }
 

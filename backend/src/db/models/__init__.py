@@ -1,3 +1,4 @@
+from db.models.agent import Agent
 from db.models.conversation import Conversation
 from db.models.login_record import LoginRecord
 from db.models.mcp_installation import McpInstallation
@@ -7,6 +8,7 @@ from db.models.user import User
 from db.models.user_oauth import UserOAuth
 
 __all__ = [
+    "Agent",
     "User",
     "UserOAuth",
     "LoginRecord",

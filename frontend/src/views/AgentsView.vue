@@ -25,7 +25,7 @@ async function handleAddConfig(type: ConfigType, value: string) {
   try {
     if (type === 'subagent') {
       await agentStore.createSubAgent(value)
-      ElMessage.success('子代理创建成功')
+      ElMessage.success('子智能体创建成功')
     } else {
       await agentStore.addConfig(type, value)
       ElMessage.success(`${type === 'tool' ? '工具' : type === 'skill' ? '技能' : type === 'file' ? '文件' : 'Cron Job'}已添加`)
@@ -79,7 +79,7 @@ async function handleDelete(id: string) {
 }
 
 function handleNewSubAgent() {
-  // 如果当前选中的是子代理，先切换到主智能体
+  // 如果当前选中的是子智能体，先切换到主智能体
   if (agentStore.selectedAgent?.type === 'sub') {
     const main = agentStore.mainAgent
     if (main) agentStore.selectAgent(main.id)

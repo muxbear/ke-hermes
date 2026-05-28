@@ -21,10 +21,10 @@ defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'addConfig', type: ConfigType): void
-  (e: 'removeConfig', type: ConfigType, value: string): void
-  (e: 'toggleStatus'): void
-  (e: 'selectAgent', id: string): void
+  (e: 'add-config', type: ConfigType): void
+  (e: 'remove-config', type: ConfigType, value: string): void
+  (e: 'toggle-status'): void
+  (e: 'select-agent', id: string): void
 }>()
 
 const activeTab = ref<ConfigType>('file')
@@ -175,7 +175,7 @@ function getStatusColor(status: string): string {
           <button
             class="add-btn"
             :class="activeSection.colorClass"
-            @click="emit('addConfig', activeSection.type)"
+            @click="emit('add-config', activeSection.type)"
           >
             <Plus :size="13" />
             添加
@@ -194,7 +194,7 @@ function getStatusColor(status: string): string {
               {{ item }}
               <button
                 class="tag-delete"
-                @click="emit('removeConfig', activeSection.type, item)"
+                @click="emit('remove-config', activeSection.type, item)"
               >
                 <Trash2 :size="11" />
               </button>

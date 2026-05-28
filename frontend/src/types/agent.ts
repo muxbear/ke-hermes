@@ -20,6 +20,7 @@ export interface Agent {
 export interface AgentCreateRequest {
   name: string
   description?: string
+  parentId?: string
 }
 
 /** 配置项类型 */
@@ -40,6 +41,6 @@ export const CONFIG_TYPE_MAP: Record<
   tool: { label: '工具', color: '#3b82f6', bgClass: 'config--blue' },
   skill: { label: '技能', color: '#8b5cf6', bgClass: 'config--purple' },
   prompt: { label: '提示词', color: '#22c55e', bgClass: 'config--green' },
-  subagent: { label: '子代理', color: '#f97316', bgClass: 'config--orange' },
+  subagent: { label: '子智能体', color: '#f97316', bgClass: 'config--orange' },
   file: { label: '文件', color: '#eab308', bgClass: 'config--yellow' },
 }

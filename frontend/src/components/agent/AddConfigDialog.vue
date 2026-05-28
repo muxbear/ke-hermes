@@ -19,6 +19,12 @@ const emit = defineEmits<{
 const nameValue = ref('')
 const descValue = ref('')
 
+// Local v-model for el-dialog, synced with parent prop
+const dialogVisible = computed({
+  get: () => props.visible,
+  set: (val) => { if (!val) handleClose() },
+})
+
 const config = computed(() => CONFIG_TYPE_MAP[props.type])
 
 const iconComponent = computed(() => {
@@ -37,7 +43,7 @@ const placeholders = computed(() => {
     case 'skill': return { name: '例如: code_analysis, debugging', desc: '描述此技能的能力和应用场景...' }
     case 'file': return { name: '例如: config.yaml, data.json', desc: '描述此文件的用途和内容...' }
     case 'prompt': return { name: '例如: 每天执行一次, 每小时检查', desc: '输入 Cron 表达式和执行任务...' }
-    case 'subagent': return { name: '例如: 数据处理子代理', desc: '描述此子代理的职责和功能...' }
+    case 'subagent': return { name: '例如: 数据处理子智能体', desc: '描述此子智能体的职责和功能...' }
   }
 })
 
@@ -68,11 +74,10 @@ watch(
 
 <template>
   <el-dialog
-    :model-value="visible"
-    :title="''"
+    v-model="dialogVisible"
     width="480px"
     :close-on-click-modal="false"
-    @update:model-value="(val: boolean) => { if (!val) handleClose() }"
+    append-to-body
   >
     <template #header>
       <div class="dialog-header">
@@ -83,14 +88,14 @@ watch(
           <h3 class="dialog-title">添加{{ config.label }}</h3>
           <p class="dialog-desc">
             为 <span class="highlight">"{{ agentName }}"</span>
-            {{ agentType === 'main' ? ' (主智能体)' : ' (子代理)' }}
+            {{ agentType === 'main' ? ' (主智能体)' : ' (子智能体)' }}
             添加新的{{ config.label }}
           </p>
           <p
             v-if="type === 'subagent' && agentType === 'sub'"
             class="dialog-warning"
           >
-            注意：子代理不能添加子代理，将为主智能体添加
+            注意：子智能体不能添加子智能体，将为主智能体添加
           </p>
         </div>
       </div>
@@ -118,7 +123,7 @@ watch(
 
     <template #footer>
       <el-button @click="handleClose">取消</el-button>
-      <el-button type="primary" :disabled="!nameValue.trim()" @click="handleSubmit">
+      <el-button type="primary" :disabled="!nameValue.trim()" native-type="submit">
         添加{{ config.label }}
       </el-button>
     </template>
