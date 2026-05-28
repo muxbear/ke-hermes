@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { Search, Bell, CircleUser, LogOut } from 'lucide-vue-next'
+import { useRoute } from 'vue-router'
+import { Search, Bell, CircleUser, LogOut, ChevronRight } from 'lucide-vue-next'
 import { useUiStore } from '@/stores/ui'
 import { useAuthStore } from '@/stores/auth'
 import { useAuth } from '@/composables/useAuth'
 
+const route = useRoute()
 const uiStore = useUiStore()
 const authStore = useAuthStore()
 const { logout } = useAuth()
@@ -14,6 +16,18 @@ const searchFocused = ref(false)
 
 const displayName = computed(() => {
   return authStore.user?.nickname || '未登录'
+})
+
+const breadcrumb = computed(() => {
+  const map: Record<string, { group: string; item: string }> = {
+    '/': { group: '聊天', item: '对话' },
+    '/agents': { group: '代理', item: '代理' },
+    '/skills': { group: '代理', item: '技能 Hub' },
+    '/mcp': { group: 'MCP', item: 'MCP 广场' },
+  }
+  const path = route.path
+  if (path.startsWith('/mcp/')) return map['/mcp']
+  return map[path] ?? null
 })
 
 function toggleUserMenu() {
@@ -59,6 +73,13 @@ onUnmounted(() => {
 <template>
   <div class="topbar">
     <div class="topbar-left">
+      <div v-if="breadcrumb" class="breadcrumb">
+        <span class="breadcrumb-group">{{ breadcrumb.group }}</span>
+        <ChevronRight :size="14" class="breadcrumb-sep" />
+        <span class="breadcrumb-item">{{ breadcrumb.item }}</span>
+      </div>
+    </div>
+    <div class="topbar-right">
       <div class="search-box" :class="{ focused: searchFocused }">
         <Search :size="16" class="search-icon" />
         <input
@@ -77,8 +98,6 @@ onUnmounted(() => {
           &times;
         </button>
       </div>
-    </div>
-    <div class="topbar-right">
       <button class="action-btn" title="通知">
         <Bell :size="18" />
       </button>
@@ -125,6 +144,27 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-size-sm);
+}
+
+.breadcrumb-group {
+  color: var(--foreground-muted);
+}
+
+.breadcrumb-sep {
+  color: var(--foreground-muted);
+  flex-shrink: 0;
+}
+
+.breadcrumb-item {
+  color: var(--foreground-primary);
+  font-weight: var(--font-weight-medium);
 }
 
 .search-box {
