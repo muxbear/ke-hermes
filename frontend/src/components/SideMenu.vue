@@ -50,7 +50,8 @@ function toggleGroup(label: string) {
 
 function isItemActive(item: MenuItem): boolean {
   if (item.route) {
-    return route.path === item.route
+    if (item.route === '/') return route.path === '/'
+    return route.path.startsWith(item.route)
   }
   return false
 }
@@ -81,7 +82,7 @@ const menuGroups: MenuGroup[] = [
   {
     label: '代理',
     items: [
-      { icon: Bot, text: '代理' },
+      { icon: Bot, text: '代理', route: '/agents' },
       { icon: Zap, text: '技能 Hub', route: '/skills' },
       { icon: Network, text: '节点' },
     ],

@@ -8,6 +8,9 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     AccountLoginForm: typeof import('./src/components/auth/AccountLoginForm.vue')['default']
+    AddConfigDialog: typeof import('./src/components/agent/AddConfigDialog.vue')['default']
+    AgentDetail: typeof import('./src/components/agent/AgentDetail.vue')['default']
+    AgentListItem: typeof import('./src/components/agent/AgentListItem.vue')['default']
     AgreementCheckbox: typeof import('./src/components/auth/AgreementCheckbox.vue')['default']
     AppShell: typeof import('./src/components/AppShell.vue')['default']
     AuthLayout: typeof import('./src/components/auth/AuthLayout.vue')['default']
@@ -19,6 +22,10 @@ declare module 'vue' {
     ElAlert: typeof import('element-plus/es')['ElAlert']
     ElButton: typeof import('element-plus/es')['ElButton']
     ElCheckbox: typeof import('element-plus/es')['ElCheckbox']
+    ElDialog: typeof import('element-plus/es')['ElDialog']
+    ElDropdown: typeof import('element-plus/es')['ElDropdown']
+    ElDropdownItem: typeof import('element-plus/es')['ElDropdownItem']
+    ElDropdownMenu: typeof import('element-plus/es')['ElDropdownMenu']
     ElEmpty: typeof import('element-plus/es')['ElEmpty']
     ElInput: typeof import('element-plus/es')['ElInput']
     ElSkeleton: typeof import('element-plus/es')['ElSkeleton']

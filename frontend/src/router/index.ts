@@ -22,6 +22,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Skills' },
       },
       {
+        path: 'agents',
+        name: 'agents',
+        component: () => import('@/views/AgentsView.vue'),
+        meta: { title: '代理管理中心' },
+      },
+      {
         path: 'mcp',
         name: 'mcp-square',
         component: () => import('@/views/McpSquareView.vue'),
