@@ -1,4 +1,4 @@
-# Ke-Hermes 详细设计说明书 — v1.3.0
+# Ke-Hermes 详细设计说明书 — v1.4.0
 
 | 版本    | 日期         | 作者  | 变更说明                                         |
 | ----- | ---------- | --- | -------------------------------------------- |
@@ -8,6 +8,7 @@
 | 1.2.1 | 2026-05-19 | -   | 文档对照实际代码更新：测试目录迁移至 tests/、路由改为 AuthLayout 嵌套结构、普通对话 API 已实现、ChatHeader 模型选择器已实现、auth store 持久化增强、captcha store 新增 smsErrorCount、useAuth 密码加密降级策略 |
 | 1.2.2 | 2026-05-22 | -   | 文档对照实际代码更新：chatStore 增加 threadId 状态管理、sendStreamRequest/sendChatRequest 支持 thread_id 参数、SSE 解析增加 onThreadId 回调、clearMessages 重置 threadId、ChatMessage 增加 thread_id 流转 |
 | 1.3.0 | 2026-05-26 | -   | 文档对照实际代码更新：新增 MainLayout 根布局组件重构路由结构；新增 MCP 广场模块（列表/详情/安装/卸载）；新增 Skills 技能管理模块（CRUD/仓库导入/本地上传）；新增 conversationApi 服务对接后端对话历史 API；RightPanel 接入真实对话历史数据；SideMenu 增加可折叠菜单分组 + 路由导航；uiStore 重构 HistoryItem/activeThreadId；chatStore 增加 loadConversation |
+| 1.4.0 | 2026-05-28 | -   | 新增代理管理模块（Part D）：智能体列表树、多标签配置面板（文件/工具/技能/Cron Jobs）、Vue Flow 主子智能体关系图（拖动/缩放/锁定/最大化）、dagre 自动布局、自定义节点边组件、Agent Store/API/Types 完整设计；TopBar 新增面包屑导航；术语统一（主智能体/子智能体/Cron Jobs）；新增 vue-flow/dagre/vueuse-motion 依赖 |
 
 
 ---
@@ -41,16 +42,26 @@
 20. [MCP 广场模块](#20-mcp-广场模块)
 21. [Skills 技能管理模块](#21-skills-技能管理模块)
 
+**Part D — 代理管理模块（v1.4.0 新增）**
+22. [代理管理模块概述](#22-代理管理模块概述)
+23. [代理页面布局](#23-代理页面布局)
+24. [代理核心组件设计](#24-代理核心组件设计)
+25. [代理关系图设计](#25-代理关系图设计)
+26. [代理状态管理](#26-代理状态管理)
+27. [代理 API 服务层](#27-代理-api-服务层)
+28. [代理类型定义](#28-代理类型定义)
+
 ---
 
 ## 1. 概述
 
 ### 1.1 文档目的
 
-本文档为 Ke-Hermes 前端（桌面版）的详细设计说明书 v1.3.0，基于实际代码库编写。文档覆盖三大核心模块：
+本文档为 Ke-Hermes 前端（桌面版）的详细设计说明书 v1.4.0，基于实际代码库编写。文档覆盖四大核心模块：
 - **Part A — 基础架构与登录模块**：TypeScript 技术栈、暗色主题、国际化、测试套件
 - **Part B — 聊天模块**：AppShell 三栏布局、SSE 流式对话（含 thread_id 上下文管理）、Markdown 渲染、状态管理、对话历史对接
 - **Part C — MCP 广场与技能模块**：MCP 工具广场（浏览/详情/安装/卸载）、Skills 技能管理（CRUD/仓库导入/本地上传/手动创建）
+- **Part D — 代理管理模块（v1.4.0 新增）**：智能体列表树、多标签配置面板（文件/工具/技能/Cron Jobs）、Vue Flow 主子智能体关系图（拖动/缩放/锁定/最大化）、dagre 自动布局
 
 文档供前端开发人员编码实现、代码审查和后期维护使用。
 
@@ -76,12 +87,19 @@
 | 组件自动导入  | unplugin-vue-components | ^0.27  |
 | 代码格式化   | Prettier               | ^3.3   |
 | SCSS     | sass                   | ^1.80  |
+| 图引擎      | @vue-flow/core         | ^1.48  | (v1.4.0)|
+| 图背景      | @vue-flow/background   | ^1.3   | (v1.4.0)|
+| 图控件      | @vue-flow/controls     | ^1.1   | (v1.4.0)|
+| 图小地图     | @vue-flow/minimap      | ^1.5   | (v1.4.0)|
+| 图布局      | dagre                  | ^0.8   | (v1.4.0)|
+| 动画引擎     | @vueuse/motion         | ^2.2   | (v1.4.0)|
 
 ### 1.3 适用模块
 
 - **Part A**：PC Web 端登录/注册页面、OAuth 回调处理、路由守卫、Token 刷新、权限校验
 - **Part B**：智能体对话界面（三栏布局）、流式 SSE 对话、Markdown 渲染、对话历史管理
-- **Part C**：MCP 工具广场、Skills 技能管理（仓库导入/本地上传/手动创建）
+- **Part C**：MCP 工具广场、Skills 技能管理（仓库导入/本身上传/手动创建）
+- **Part D**：智能体列表管理、配置面板（文件/工具/技能/Cron Jobs）、主子智能体关系图、智能体 CRUD
 
 ### 1.4 相关文档
 
@@ -133,6 +151,7 @@ frontend/
     │   ├── captcha.ts                 # 验证码/倒计时状态
     │   ├── chat.ts                    # 聊天消息 + SSE 流式 + loadConversation
     │   ├── ui.ts                      # UI 状态（侧栏/面板/模型）+ 对话历史（后端对接）
+    │   ├── agent.ts                   # 智能体状态（v1.4.0 新增）
     │   ├── mcp.ts                     # MCP 工具状态（v1.3.0 新增）
     │   └── skill.ts                   # Skills 技能状态（v1.3.0 新增）
     │
@@ -141,6 +160,7 @@ frontend/
     │   ├── auth.ts                    # AuthTokens, UserInfo, Request/Response
     │   ├── captcha.ts                 # SlidePuzzleData, SlideVerifyRequest
     │   ├── components.ts              # FeatureItem, OAuthProvider, CaptchaResult
+    │   ├── agent.ts                   # Agent, ConfigType, STATUS_LABELS, CONFIG_TYPE_MAP（v1.4.0 新增）
     │   ├── mcp.ts                     # McpTool, McpConfigField, InstallMcpRequest（v1.3.0 新增）
     │   ├── skill.ts                   # Skill, SkillCreateRequest, CATEGORY_LABELS（v1.3.0 新增）
     │   └── router.d.ts                # RouteMeta 扩展
@@ -150,6 +170,7 @@ frontend/
     │   ├── authApi.ts                 # 认证接口（8 个）
     │   ├── captchaApi.ts              # 验证码 + 短信接口（5 个）
     │   ├── oauthApi.ts                # OAuth 接口（2 个）
+    │   ├── agentApi.ts                # 智能体 Mock API（8 个）（v1.4.0 新增）
     │   ├── conversationApi.ts         # 对话历史 CRUD（4 个）（v1.3.0 新增）
     │   ├── mcpApi.ts                  # MCP 接口（4 个）（v1.3.0 新增）
     │   └── skillApi.ts                # Skills 接口（6 个）（v1.3.0 新增）
@@ -159,7 +180,8 @@ frontend/
     │   ├── usePasswordEncrypt.ts      # RSA 加密（含公钥缓存）
     │   ├── useCountdown.ts            # 倒计时
     │   ├── useCaptcha.ts              # 验证码流程
-    │   └── useAgreement.ts            # 协议勾选
+    │   ├── useAgreement.ts            # 协议勾选
+    │   └── useAgentGraph.ts           # 智能体关系图数据 + dagre 布局（v1.4.0 新增）
     │
     ├── components/
     │   ├── MainLayout.vue             # 认证页面根布局（SideMenu + TopBar + RouterView）（v1.3.0 新增）
@@ -195,6 +217,13 @@ frontend/
     │   │   └── ImageCaptcha.vue        # 图形验证码降级方案
     │   ├── mcp/
     │   │   └── McpCard.vue            # MCP 工具卡片（v1.3.0 新增）
+    │   ├── agent/
+    │   │   ├── AgentListItem.vue      # 智能体列表树节点（v1.4.0 新增）
+    │   │   ├── AgentDetail.vue        # 智能体详情 + 标签配置面板（v1.4.0 新增）
+    │   │   ├── AgentGraph.vue         # 主子智能体关系图组件（v1.4.0 新增）
+    │   │   ├── AgentNode.vue          # 自定义 Vue Flow 节点（v1.4.0 新增）
+    │   │   ├── AgentEdge.vue          # 自定义 Vue Flow 边（v1.4.0 新增）
+    │   │   └── AddConfigDialog.vue    # 添加配置弹窗（v1.4.0 新增）
     │   └── skill/
     │       ├── SkillCard.vue           # Skills 技能卡片（v1.3.0 新增）
     │       ├── SkillDialog.vue         # Skills 创建/编辑弹窗（3 标签页）（v1.3.0 新增）
@@ -208,7 +237,8 @@ frontend/
     │   ├── OAuthCallbackView.vue      # OAuth 回调处理页
     │   ├── SkillsView.vue             # Skills 管理页面（v1.3.0 新增）
     │   ├── McpSquareView.vue          # MCP 广场页面（v1.3.0 新增）
-    │   └── McpDetailView.vue          # MCP 工具详情页面（v1.3.0 新增）
+    │   ├── McpDetailView.vue          # MCP 工具详情页面（v1.3.0 新增）
+    │   └── AgentsView.vue             # 智能体管理页面（v1.4.0 新增）
     │
     ├── assets/
     │   └── styles/
@@ -254,6 +284,7 @@ Views (HomeView, LoginView, SkillsView, McpSquareView, ...)
 | ----------------- | --------------- | ------------------------------ | ---------------------------- |
 | `/`               | home            | MainLayout → `@/views/HomeView.vue` (child) | requiresAuth: true           |
 | `/skills`         | skills          | MainLayout → `@/views/SkillsView.vue` (child) | requiresAuth: true, title: 'Skills' |
+| `/agents`         | agents          | MainLayout → `@/views/AgentsView.vue` (child) | requiresAuth: true, title: '代理' | (v1.4.0)|
 | `/mcp`            | mcp-square      | MainLayout → `@/views/McpSquareView.vue` (child) | requiresAuth: true, title: 'MCP 广场' |
 | `/mcp/:id`        | mcp-detail      | MainLayout → `@/views/McpDetailView.vue` (child) | requiresAuth: true, title: 'MCP 详情' |
 | `/login`          | login           | AuthLayout → `@/views/LoginView.vue` (child) | guest: true, title: '登录'     |
@@ -630,7 +661,7 @@ MainLayout.vue (flex row, 100vh)
 |------|------|
 | 聊天 | 对话 (→ /) |
 | 控制 | 概览, 实例, 会话, 使用情况, 定时任务 |
-| 代理 | 代理, 技能 (→ /skills), MCP 广场 (→ /mcp), 节点 |
+| 代理 | 代理 (→ /agents), 技能 Hub (→ /skills), 节点 |
 | 设置 | 配置, 文档 |
 | 后台 | 后台 |
 
@@ -648,7 +679,28 @@ MainLayout.vue (flex row, 100vh)
 | 点击历史 | `chatStore.loadConversation(threadId)` → 加载消息并渲染 |
 | 删除历史 | `uiStore.deleteHistory(threadId)` → 后端删除 + 本地更新 |
 
-### 15.5 MessageList / MessageItem / InputBar / ChatHeader / TopBar
+### 15.5 TopBar（v1.4.0 更新）
+
+| 属性 | 说明 |
+|------|------|
+| 文件 | `src/components/TopBar.vue` |
+| 功能 | 顶部栏：面包屑导航 + 搜索框 + 通知 + 用户菜单 |
+
+**v1.4.0 变更：**
+- 搜索框从左侧移至右侧（靠右对齐）
+- 左侧新增面包屑：根据 `useRoute()` 显示当前激活菜单的全路径（如 `聊天 > 对话`、`代理 > 代理`），路由映射在 `breadcrumb` computed 中
+- 面包屑样式：分组名灰色 + ChevronRight 分隔符 + 当前项高亮
+
+**路由到面包屑映射：**
+
+| 路由 | 面包屑 |
+|------|--------|
+| `/` | 聊天 > 对话 |
+| `/agents` | 代理 > 代理 |
+| `/skills` | 代理 > 技能 Hub |
+| `/mcp` | MCP > MCP 广场 |
+
+### 15.6 MessageList / MessageItem / InputBar / ChatHeader
 
 （与 v1.2.2 保持一致。）
 
@@ -947,4 +999,380 @@ interface SkillCreateRequest {
 
 ---
 
-> 本文档 v1.3.0 基于实际代码实现全面更新。v1.3.0 重点新增了 MCP 广场（浏览/详情/安装/卸载）和 Skills 技能管理（CRUD/仓库导入/本地上传/手动创建）两大功能模块；路由结构重构为 MainLayout 父布局 + 多页面子路由；RightPanel 对话历史接入后端 Conversation API；SideMenu 升级为可折叠多分组路由导航；Token 存储统一为 sessionStorage。后续版本应完善搜索功能、通知系统和用户菜单。
+> 本文档 v1.4.0 基于实际代码实现全面更新。v1.4.0 重点新增了代理管理模块：智能体列表树、文件/工具/技能/Cron Jobs 四标签配置面板、基于 Vue Flow 的主子智能体关系图（拖动/缩放/锁定/最大化）、dagre 自动树布局、自定义节点/边组件；TopBar 新增面包屑导航；术语统一（主智能体/子智能体/Cron Jobs）。后续版本应完善搜索功能、通知系统和用户菜单。
+
+---
+
+## 22. 代理管理模块概述
+
+### 22.1 需求背景
+
+代理管理模块（左侧菜单"代理" → `/agents`）提供智能体（Agent）的集中管理功能：树形列表浏览、配置项管理（文件/工具/技能/Cron Jobs）、主子智能体关系图可视化。
+
+### 22.2 核心功能
+
+| 功能 | 说明 |
+|------|------|
+| 智能体列表树 | 左侧面板，主智能体为根节点，子智能体为子节点，支持搜索过滤、展开/折叠、状态图标 |
+| 多标签配置面板 | 右侧面板四个标签页：文件 (Files)、工具 (Tools)、技能 (Skills)、Cron Jobs，点击标签切换 |
+| 关系图可视化 | 点击眼睛图标切换，Vue Flow 绘制主子智能体连接关系图 |
+| 智能体操作 | 新建子智能体（三点下拉菜单）、克隆、删除（不可删除智能体受保护）、启停状态 |
+| 配置管理 | 每个标签页内添加/移除配置项（通过弹窗表单） |
+
+### 22.3 术语规范（v1.4.0）
+
+| 术语 | 说明 |
+|------|------|
+| 主智能体 | 顶层 Agent，type='main'，可拥有子智能体 |
+| 子智能体 | 从属 Agent，type='sub'，挂载于主智能体下 |
+| 通用子智能体 | 默认不可删除的子智能体 (sub-1)，具备与主智能体相同的全部工具 |
+| 研究子智能体 | 默认子智能体 (sub-2)，专注于网络搜索和深入研究 |
+| Cron Jobs | 原"提示词"功能重命名，type='prompt'，定时任务配置 |
+| 文件 | 新增配置类型，type='file'，默认 7 个 .md 文件 |
+
+---
+
+## 23. 代理页面布局
+
+### 23.1 页面层级
+
+```
+MainLayout.vue
+└── work-area → <RouterView />
+    └── AgentsView.vue (双栏布局: flex row)
+        ├── panel-left (300px, 卡片容器)
+        │   ├── panel-left-header
+        │   │   ├── title-row: "代理列表" + 计数徽章 + 眼睛切换按钮
+        │   │   └── search-box: 搜索输入框
+        │   └── panel-left-body
+        │       └── AgentListItem.vue（树形递归组件）
+        │           └── [递归] AgentListItem（子智能体）
+        └── panel-right (flex:1, 卡片容器)
+            ├── Transition name="graph-mode" mode="out-in"
+            │   ├── AgentGraph.vue（眼睛睁开时）
+            │   └── AgentDetail.vue（眼睛闭上时）
+            └── detail-empty（无选中时代理提示）
+```
+
+### 23.2 双栏切换逻辑
+
+- `showRelationGraph: Ref<boolean>`（默认 `false`）由眼睛按钮切换
+- `<Transition name="graph-mode" mode="out-in">` 提供视图切换动画（淡入缩放 / 淡出）
+- 关系图模式时右侧全幅显示图，详情模式时显示配置标签面板
+
+---
+
+## 24. 代理核心组件设计
+
+### 24.1 AgentListItem — 智能体列表树节点
+
+| 属性 | 说明 |
+|------|------|
+| 文件 | `src/components/agent/AgentListItem.vue` |
+| Props | `agent: Agent`, `agents: Agent[]`, `selectedId`, `expandedIds`, `searchQuery`, `level` |
+| Emits | `select`, `toggleExpand`, `toggleStatus`, `clone`, `delete`, `newSubAgent` |
+| 功能 | 递归树节点组件，支持展开/折叠、三点下拉菜单、状态标签 |
+
+**展示内容：** 名称 + 状态标签（运行中/已停止/错误）+ 类型标识（主智能体 Blue 徽章）+ 描述 + 统计（调用数/工具数/技能数/子智能体数）
+
+**三点下拉菜单项：**
+
+| 命令 | 图标 | 说明 |
+|------|------|------|
+| newSubAgent | UserPlus | 新建子智能体 |
+| toggle | Pause/Play | 启动/停止（分隔线前） |
+| clone | Copy | 克隆 |
+| delete | Trash2 | 删除（分隔线前，红色，v-if="!agent.undeletable" 时显示） |
+
+**v1.4.0 关键特性：**
+- 不可删除智能体（`undeletable: true`）隐藏"删除"菜单项
+- 搜索时展平显示所有匹配项，无搜索时树形递归渲染
+- 选中状态蓝色渐变高亮 + "编辑中"标签
+
+### 24.2 AgentDetail — 智能体详情配置面板
+
+| 属性 | 说明 |
+|------|------|
+| 文件 | `src/components/agent/AgentDetail.vue` |
+| Props | `agent: Agent`, `agents: Agent[]` |
+| Emits | `addConfig(type)`, `removeConfig(type, value)`, `toggleStatus`, `selectAgent(id)` |
+
+**Header 区域：**
+- 智能体名称 + 状态标签（Activity/Pause/Zap）+ 类型徽章（主智能体/子智能体）
+- 描述文本 + 统计栏（调用数、最后活跃、工具数、技能数、文件数、Cron Jobs 数）
+- 四个标签按钮：文件（黄色）/ 工具（蓝色）/ 技能（紫色）/ Cron Jobs（绿色）
+
+**Tab 切换逻辑：**
+- `activeTab: Ref<ConfigType>`（默认 `'file'`）
+- `activeSection: Computed<ConfigSection>` 根据 activeTab 查找当前配置区
+- 仅渲染当前激活标签页的配置区块，其余隐藏
+
+**配置区块结构（每个标签页相同模式）：**
+```
+.config-section
+├── .section-header
+│   ├── .section-icon（颜色背景 + Lucide 图标）
+│   ├── 标签名称 + 计数（"X 个已配置"）
+│   └── .add-btn（"添加"按钮，触发 addConfig(type)）
+└── .tags-wrap
+    ├── .config-tag × N（可删除配置标签，hover 显示删除按钮）
+    └── .empty-section（无配置时的空状态提示）
+```
+
+**四项配置区定义：**
+
+| type | label | 图标 | 颜色 | key |
+|------|-------|------|------|-----|
+| file | 文件 (Files) | FileText | yellow (#eab308) | files |
+| tool | 工具 (Tools) | Settings | blue (#3b82f6) | tools |
+| skill | 技能 (Skills) | Sparkles | purple (#8b5cf6) | skills |
+| prompt | Cron Jobs | Clock | green (#22c55e) | prompts |
+
+### 24.3 AddConfigDialog — 添加配置弹窗
+
+| 属性 | 说明 |
+|------|------|
+| 文件 | `src/components/agent/AddConfigDialog.vue` |
+| Props | `visible`, `type: ConfigType`, `agentName`, `agentType` |
+| Emits | `close`, `add(type, value)` |
+
+**弹窗内容：** 头部（类型图标 + "添加{类型}" + 目标智能体信息）、表单（名称 + 可选描述）、底部（取消/添加按钮）
+
+**各类型占位提示：**
+
+| type | 名称占位 | 描述占位 |
+|------|---------|---------|
+| file | 例如: config.yaml, data.json | 描述此文件的用途和内容... |
+| tool | 例如: web_search, file_reader | 描述此工具的功能和用途... |
+| skill | 例如: code_analysis, debugging | 描述此技能的能力和应用场景... |
+| prompt | 例如: 每天执行一次, 每小时检查 | 输入 Cron 表达式和执行任务... |
+| subagent | 例如: 数据处理子智能体 | 描述此子智能体的职责和功能... |
+
+---
+
+## 25. 代理关系图设计
+
+### 25.1 整体架构
+
+主子智能体关系图使用 Vue Flow（ReactFlow 的 Vue 3 移植）构建，dagre 自动布局，@vueuse/motion 动画。
+
+### 25.2 AgentGraph — 主图组件
+
+| 属性 | 说明 |
+|------|------|
+| 文件 | `src/components/agent/AgentGraph.vue` |
+| 依赖 | `useAgentGraph()` composable |
+| 功能 | Vue Flow 画布容器，包含 header 控制栏、画布区域、空状态 |
+
+**Header 控制栏：**
+- 标题"主智能体关系图"
+- "实时拓扑"徽章（蓝色描边圆角标签）
+- 锁定按钮（Lock/Unlock 图标，切换 `isLocked` 状态）
+- 最大化按钮（Maximize2/Minimize2 图标，切换 `isMaximized` 状态）
+
+**Vue Flow 画布：**
+```
+<VueFlow v-model:nodes="graphNodes" v-model:edges="graphEdges"
+  :node-types :edge-types
+  :nodes-draggable="!isLocked"
+  :pan-on-drag="!isLocked"
+  :zoom-on-scroll="!isLocked"
+  @node-click @pane-ready>
+  <Background pattern-color="rgba(255,255,255,0.04)" />
+  <Controls position="bottom-right" />
+  <MiniMap position="bottom-left" />
+</VueFlow>
+```
+
+**交互能力：**
+
+| 操作 | 解锁状态 | 锁定状态 |
+|------|---------|---------|
+| 画布拖动 | ✓ | ✗ |
+| 节点拖动 | ✓ | ✗ |
+| 滚轮缩放 | ✓ | ✗ |
+| Controls 缩放 | ✓ | ✓ |
+| 节点点击 | ✓ | ✓ |
+| MiniMap 导航 | ✓ | ✓ |
+
+**最大化模式：** `isMaximized=true` 时组件使用 `position: fixed; inset: 0; z-index: 1000` 覆盖全屏，带动画过渡。
+
+**锁定/解锁按钮：** 点击时旋转动画反馈（CSS transition）。
+
+### 25.3 AgentNode — 自定义 Vue Flow 节点
+
+| 属性 | 说明 |
+|------|------|
+| 文件 | `src/components/agent/AgentNode.vue` |
+| Vue Flow Props | `id`, `data: { agent, isMain }`, `selected` |
+
+**节点卡片设计：**
+- **主智能体节点：** `linear-gradient(135deg, #1e3a8a 0%, #7c3aed 100%)` 渐变背景，绿色边框 + teal 发光阴影
+- **子智能体节点：** `linear-gradient(135deg, #4c1d95 0%, #7c3aed 100%)` 渐变背景，紫色边框 + 紫色发光阴影
+- **选中状态：** `box-shadow: 0 0 28px rgba(59, 130, 246, 0.4)` 蓝色增强发光
+
+**卡片内容：**
+1. 状态图标（Activity=运行中 / Pause=停止 / Zap=错误）+ 名称 + 类型标签
+2. 三列统计网格（工具数 / 技能数 / 子智能体数或调用数）
+
+**Handle 连接点：**
+- 主智能体：Source Handle（Bottom，连接子智能体）
+- 子智能体：Target Handle（Top，接收主智能体连接）
+- 连接不可交互（`:connectable="false"`，`opacity: 0`），仅用于边附着
+
+**拖拽交互：**
+- `cursor: grab`（默认）/ `cursor: grabbing`（拖拽中）
+- 选中状态蓝色增强发光
+
+### 25.4 AgentEdge — 自定义 Vue Flow 边
+
+| 属性 | 说明 |
+|------|------|
+| 文件 | `src/components/agent/AgentEdge.vue` |
+| Vue Flow Props | `sourceX/Y`, `targetX/Y`, `sourcePosition`, `targetPosition`, `id`, `data: { status }` |
+
+**边样式：**
+- 使用 `getBezierPath()` 计算贝塞尔曲线路径
+- 活跃代理：蓝紫渐变（`#3b82f6` → `#8b5cf6`）实线 + 紫色箭头（`MarkerType.ArrowClosed`）
+- 非活跃代理：灰色渐变（`#6b7280` → `#4b5563`）虚线 (`stroke-dasharray: 6,4`) + 灰色箭头
+- 活跃边添加 `animated: true`，产生流动动画
+
+**渐变实现：** 每条边内部定义唯一 ID 的 `<linearGradient>` + `<defs>`，通过 `stroke: url(#edge-grad-{id})` 引用。
+
+### 25.5 useAgentGraph — 图数据 Composables
+
+| 属性 | 说明 |
+|------|------|
+| 文件 | `src/composables/useAgentGraph.ts` |
+
+**状态管理：**
+- `graphNodes: Ref<Node[]>`（`ref` 非 `computed`，支持 Vue Flow v-model 更新位置）
+- `graphEdges: Ref<Edge[]>`（`ref`）
+- `watch([agentStore.mainAgent, agentStore.subAgents], applyLayout, { deep, immediate })` 监听代理变化重新布局
+
+**构建逻辑：**
+- `buildNodes()`: 从 `agentStore.mainAgent` + `agentStore.subAgents` 构建 Node[]，每个节点 `draggable: true`
+- `buildEdges()`: 从主智能体向每个子智能体连边
+- `applyLayout()`: 调用 dagre 执行 TB 布局
+
+**dagre 布局参数：**
+```typescript
+const NODE_WIDTH = 240   // .node-card 宽度
+const NODE_HEIGHT = 130  // 卡片预估高度
+g.setGraph({ rankdir: 'TB', ranksep: 140, nodesep: 120, marginx: 80, marginy: 80 })
+```
+
+主智能体在 rank 0（顶部），所有子智能体在 rank 1 对称分布，居中于主智能体下方。
+
+---
+
+## 26. 代理状态管理
+
+### 26.1 agentStore (src/stores/agent.ts)
+
+| State | 类型 | 说明 |
+|-------|------|------|
+| agents | `Ref<Agent[]>` | 所有智能体 |
+| selectedAgentId | `Ref<string \| null>` | 当前选中智能体 ID |
+| loading | `Ref<boolean>` | 列表加载中 |
+| error | `Ref<string \| null>` | 错误消息 |
+| searchQuery | `Ref<string>` | 搜索关键词 |
+| expandedIds | `Ref<Set<string>>` | 已展开的智能体 ID 集合 |
+
+| Getter | 说明 |
+|--------|------|
+| selectedAgent | 当前选中智能体对象 |
+| mainAgent | type='main' 的智能体 |
+| subAgents | type='sub' 的所有智能体 |
+| filteredAgents | 搜索时展平匹配，无搜索时返回主智能体（树根） |
+| stats | { total, active, inactive, error } 计数 |
+
+| Action | 说明 |
+|--------|------|
+| fetchAgents | 调用 agentApi.fetchAgents() 加载列表，默认选中主智能体 |
+| selectAgent(id) | 设置 selectedAgentId |
+| toggleExpand(id) | 在 expandedIds 中添加/移除 |
+| expandAll / collapseAll | 全展开 / 全折叠 |
+| toggleStatus(id) | 调用 agentApi.toggleAgentStatus() 切换运行/停止 |
+| cloneAgent(id) | 调用 agentApi.cloneAgent() 克隆 |
+| deleteAgent(id) | 调用 agentApi.deleteAgent() 删除 |
+| addConfig(type, value) | 调用 agentApi.addConfig() 添加配置 |
+| removeConfig(type, value) | 调用 agentApi.removeConfig() 移除配置 |
+| createSubAgent(name) | 调用 agentApi.createAgent() 创建子智能体，自动展开主智能体并选中新节点 |
+
+---
+
+## 27. 代理 API 服务层
+
+### 27.1 agentApi — Mock 实现
+
+| 属性 | 说明 |
+|------|------|
+| 文件 | `src/services/agentApi.ts` |
+| 说明 | Mock 实现，后端 Agent CRUD API 就绪后仅需替换本文件内部实现 |
+
+**Mock 数据（v1.4.0）：**
+
+| ID | 名称 | 类型 | 状态 | 说明 |
+|----|------|------|------|------|
+| main-agent | 主智能体 | main | active | 负责整体任务协调和分发 |
+| sub-1 | 通用子智能体 | sub | active | `undeletable: true`，具备与主智能体相同的全部工具 |
+| sub-2 | 研究子智能体 | sub | inactive | 专门用于使用网络搜索进行深入研究并综合分析结果 |
+
+**默认文件（所有智能体共享 7 个 .md）：**
+`AGENTS.md`, `SOUL.md`, `TOOLS.md`, `IDENTITY.md`, `USER.md`, `HEARTBEAT.md`, `MEMORY.md`
+
+**API 方法：**
+
+| 方法 | 说明 |
+|------|------|
+| fetchAgents() | 返回所有智能体（deepClone） |
+| createAgent(data) | 创建新子智能体（id: `sub-{timestamp}`），加入主智能体 subAgents |
+| deleteAgent(id) | 删除智能体（`undeletable` 保护：抛出错误），从主智能体移除 |
+| toggleAgentStatus(id) | 切换 active ↔ inactive 状态 |
+| cloneAgent(id) | 克隆智能体（name + "(副本)"，id + "-clone-{timestamp}"） |
+| addConfig(agentId, type, value) | 添加配置项（支持 tool/skill/file/prompt/subagent） |
+| removeConfig(agentId, type, value) | 移除配置项 |
+
+---
+
+## 28. 代理类型定义
+
+### 28.1 Agent 接口（src/types/agent.ts）
+
+```typescript
+export interface Agent {
+  id: string
+  name: string
+  type: 'main' | 'sub'
+  status: 'active' | 'inactive' | 'error'
+  tools: string[]
+  skills: string[]
+  prompts: string[]
+  files: string[]           // v1.4.0 新增
+  subAgents?: string[]
+  parentId?: string
+  description?: string
+  lastActive?: string
+  callCount?: number
+  undeletable?: boolean     // v1.4.0 新增
+}
+```
+
+### 28.2 ConfigType 与配置映射
+
+```typescript
+export type ConfigType = 'tool' | 'skill' | 'prompt' | 'subagent' | 'file'
+
+export const STATUS_LABELS: Record<string, string> = {
+  active: '运行中', inactive: '已停止', error: '错误',
+}
+
+export const CONFIG_TYPE_MAP: Record<ConfigType, { label; color; bgClass }> = {
+  tool:     { label: '工具',   color: '#3b82f6', bgClass: 'config--blue' },
+  skill:    { label: '技能',   color: '#8b5cf6', bgClass: 'config--purple' },
+  prompt:   { label: '提示词', color: '#22c55e', bgClass: 'config--green' },
+  subagent: { label: '子代理', color: '#f97316', bgClass: 'config--orange' },
+  file:     { label: '文件',   color: '#eab308', bgClass: 'config--yellow' },
+}
+```
