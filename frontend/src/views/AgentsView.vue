@@ -6,6 +6,7 @@ import { useAgentStore } from '@/stores/agent'
 import type { ConfigType, Agent } from '@/types/agent'
 import AgentListItem from '@/components/agent/AgentListItem.vue'
 import AgentDetail from '@/components/agent/AgentDetail.vue'
+import AgentGraph from '@/components/agent/AgentGraph.vue'
 import AddConfigDialog from '@/components/agent/AddConfigDialog.vue'
 
 const agentStore = useAgentStore()
@@ -84,10 +85,6 @@ function handleNewSubAgent() {
     if (main) agentStore.selectAgent(main.id)
   }
   openDialog('subagent')
-}
-
-function branchWidth(idx: number): string {
-  return `${120 + idx * 40}px`
 }
 
 onMounted(() => {
@@ -178,61 +175,23 @@ onMounted(() => {
 
       <!-- Right Panel: Agent Detail or Relation Graph -->
       <div class="panel-right">
-        <!-- Relation Graph -->
-        <div v-if="showRelationGraph" class="relation-graph">
-          <div class="graph-title">主智能体关系图</div>
-          <div class="graph-canvas">
-            <template v-if="agentStore.mainAgent">
-              <!-- Main agent node -->
-              <div class="graph-node graph-node--main" @click="agentStore.selectAgent(agentStore.mainAgent.id)">
-                <div class="node-avatar">
-                  <span>{{ agentStore.mainAgent.name.charAt(0) }}</span>
-                </div>
-                <div class="node-info">
-                  <span class="node-name">{{ agentStore.mainAgent.name }}</span>
-                  <span class="node-desc">{{ agentStore.mainAgent.description }}</span>
-                </div>
-              </div>
-              <!-- Connector lines -->
-              <div v-if="agentStore.subAgents.length > 0" class="graph-lines">
-                <div
-                  v-for="(sub, idx) in agentStore.subAgents"
-                  :key="sub.id"
-                  class="graph-branch"
-                >
-                  <div class="line-vertical" />
-                  <div class="line-horizontal" :style="{ width: branchWidth(idx) }" />
-                  <!-- Sub agent node -->
-                  <div class="graph-node graph-node--sub" @click="agentStore.selectAgent(sub.id)">
-                    <div class="node-avatar node-avatar--sub">
-                      <span>{{ sub.name.charAt(0) }}</span>
-                    </div>
-                    <div class="node-info">
-                      <span class="node-name">{{ sub.name }}</span>
-                      <span class="node-desc">{{ sub.description }}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </template>
-          </div>
-        </div>
-
-        <!-- Agent Detail (default) -->
-        <template v-else>
-          <AgentDetail
-            v-if="agentStore.selectedAgent"
-            :agent="agentStore.selectedAgent"
-            :agents="agentStore.agents"
-            @add-config="openDialog"
-            @remove-config="handleRemoveConfig"
-            @toggle-status="handleToggleStatus(agentStore.selectedAgent!.id)"
-            @select-agent="(id) => agentStore.selectAgent(id)"
-          />
-          <div v-else class="detail-empty">
-            <p>请在左侧选择一个代理</p>
-          </div>
-        </template>
+        <Transition name="graph-mode" mode="out-in">
+          <AgentGraph v-if="showRelationGraph" key="graph" />
+          <template v-else key="detail">
+            <AgentDetail
+              v-if="agentStore.selectedAgent"
+              :agent="agentStore.selectedAgent"
+              :agents="agentStore.agents"
+              @add-config="openDialog"
+              @remove-config="handleRemoveConfig"
+              @toggle-status="handleToggleStatus(agentStore.selectedAgent!.id)"
+              @select-agent="(id) => agentStore.selectAgent(id)"
+            />
+            <div v-else class="detail-empty">
+              <p>请在左侧选择一个代理</p>
+            </div>
+          </template>
+        </Transition>
       </div>
     </div>
 
@@ -448,129 +407,20 @@ onMounted(() => {
   font-size: var(--font-size-sm);
 }
 
-/* ---- Relation Graph ---- */
-.relation-graph {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  padding: 24px 32px;
-  overflow: auto;
+.graph-mode-enter-active {
+  transition: all 0.35s ease-out;
 }
 
-.graph-title {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-bold);
-  color: var(--foreground-primary);
-  margin-bottom: 32px;
-  text-align: center;
+.graph-mode-leave-active {
+  transition: all 0.2s ease-in;
 }
 
-.graph-canvas {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0;
-  flex: 1;
+.graph-mode-enter-from {
+  opacity: 0;
+  transform: scale(0.96);
 }
 
-.graph-node {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 16px 20px;
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--border-subtle);
-  background: var(--surface-card);
-  cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-  min-width: 320px;
-}
-
-.graph-node:hover {
-  border-color: var(--color-accent);
-  box-shadow: 0 0 24px rgba(59, 130, 246, 0.12);
-}
-
-.graph-node--main {
-  border-color: rgba(59, 130, 246, 0.3);
-}
-
-.graph-node--sub {
-  border-color: rgba(249, 115, 22, 0.3);
-}
-
-.graph-node--sub:hover {
-  border-color: #f97316;
-  box-shadow: 0 0 24px rgba(249, 115, 22, 0.12);
-}
-
-.node-avatar {
-  width: 44px;
-  height: 44px;
-  border-radius: var(--radius-full);
-  background: rgba(59, 130, 246, 0.15);
-  color: var(--color-accent);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  font-weight: var(--font-weight-bold);
-  flex-shrink: 0;
-}
-
-.node-avatar--sub {
-  background: rgba(249, 115, 22, 0.15);
-  color: #f97316;
-}
-
-.node-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.node-name {
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-semibold);
-  color: var(--foreground-primary);
-}
-
-.node-desc {
-  font-size: var(--font-size-xs);
-  color: var(--foreground-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 360px;
-}
-
-.graph-lines {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  padding-left: 80px;
-  margin-top: 8px;
-  gap: 0;
-}
-
-.graph-branch {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  position: relative;
-}
-
-.line-vertical {
-  width: 2px;
-  height: 24px;
-  background: var(--border-subtle);
-  margin-left: 60px;
-}
-
-.line-horizontal {
-  height: 2px;
-  background: var(--border-subtle);
-  margin: 4px 0;
+.graph-mode-leave-to {
+  opacity: 0;
 }
 </style>
