@@ -34,6 +34,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '代理管理中心' },
       },
       {
+        path: 'models',
+        name: 'models',
+        component: () => import('@/views/ModelsView.vue'),
+        meta: { title: '模型' },
+      },
+      {
+        path: 'scheduled-tasks',
+        name: 'scheduled-tasks',
+        component: () => import('@/views/ScheduledTasksView.vue'),
+        meta: { title: '定时任务' },
+      },
+      {
         path: 'mcp',
         name: 'mcp-square',
         component: () => import('@/views/McpSquareView.vue'),

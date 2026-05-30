@@ -48,6 +48,7 @@ const placeholders = computed(() => {
 })
 
 function handleSubmit() {
+  console.log('trigger  handleSubmit()')
   if (!nameValue.value.trim()) return
   emit('add', props.type, nameValue.value.trim())
   resetForm()

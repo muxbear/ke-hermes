@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus } from 'lucide-vue-next'
+import { Plus, Zap, CheckCircle2, PauseCircle, XCircle } from 'lucide-vue-next'
 import { useSkillStore } from '@/stores/skill'
 import type { Skill, SkillCreateRequest } from '@/types/skill'
 import { CATEGORY_LABELS, CATEGORY_FILTERS } from '@/types/skill'
@@ -124,7 +124,7 @@ onMounted(() => {
     <div class="stats-bar">
       <div class="stat-card">
         <div class="stat-icon-box stat-icon--primary">
-          <span class="stat-icon-text">{{ skillStore.skills.length }}</span>
+          <Zap :size="20" />
         </div>
         <div class="stat-info">
           <span class="stat-value">{{ skillStore.skills.length }}</span>
@@ -133,7 +133,7 @@ onMounted(() => {
       </div>
       <div class="stat-card">
         <div class="stat-icon-box stat-icon--success">
-          <span class="stat-icon-text">{{ skillStore.enabledSkills.length }}</span>
+          <CheckCircle2 :size="20" />
         </div>
         <div class="stat-info">
           <span class="stat-value">{{ skillStore.enabledSkills.length }}</span>
@@ -142,7 +142,7 @@ onMounted(() => {
       </div>
       <div class="stat-card">
         <div class="stat-icon-box stat-icon--warning">
-          <span class="stat-icon-text">{{ skillStore.disabledSkills.length }}</span>
+          <PauseCircle :size="20" />
         </div>
         <div class="stat-info">
           <span class="stat-value">{{ skillStore.disabledSkills.length }}</span>
@@ -151,7 +151,7 @@ onMounted(() => {
       </div>
       <div class="stat-card">
         <div class="stat-icon-box stat-icon--danger">
-          <span class="stat-icon-text">0</span>
+          <XCircle :size="20" />
         </div>
         <div class="stat-info">
           <span class="stat-value">0</span>
@@ -311,16 +311,25 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-.stat-icon-text {
-  font-size: 16px;
-  font-weight: var(--font-weight-bold);
-  color: #fff;
+.stat-icon--primary {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
 }
 
-.stat-icon--primary { background: rgba(59, 130, 246, 0.2); }
-.stat-icon--success { background: rgba(34, 197, 94, 0.2); }
-.stat-icon--warning { background: rgba(245, 158, 11, 0.2); }
-.stat-icon--danger  { background: rgba(239, 68, 68, 0.2); }
+.stat-icon--success {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+}
+
+.stat-icon--warning {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+}
+
+.stat-icon--danger {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
 
 .stat-info {
   display: flex;

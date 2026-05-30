@@ -24,6 +24,8 @@ const breadcrumb = computed(() => {
     '/agents': { group: '代理', item: '代理' },
     '/skills': { group: '代理', item: '技能 Hub' },
     '/overview': { group: '控制', item: '概览' },
+    '/models': { group: '控制', item: '模型' },
+    '/scheduled-tasks': { group: '控制', item: '定时任务' },
     '/mcp': { group: 'MCP', item: 'MCP 广场' },
   }
   const path = route.path
