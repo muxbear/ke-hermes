@@ -65,8 +65,25 @@ export async function addConfig(
   agentId: string,
   type: ConfigType,
   value: string,
+  description: string = '',
 ): Promise<Agent> {
-  const res = await request.post(`/agents/${agentId}/config`, { type, value })
+  const res = await request.post(`/agents/${agentId}/config`, { type, value, description })
+  return toAgent(res.data.data)
+}
+
+export async function updateConfig(
+  agentId: string,
+  type: ConfigType,
+  value: string,
+  newValue: string = '',
+  description: string = '',
+): Promise<Agent> {
+  const res = await request.put(`/agents/${agentId}/config`, {
+    type,
+    value,
+    new_value: newValue,
+    description,
+  })
   return toAgent(res.data.data)
 }
 
@@ -89,6 +106,7 @@ function toFileContent(raw: Record<string, unknown>): AgentFileContent {
   return {
     filename: raw.filename as string,
     content: (raw.content as string) || '',
+    description: (raw.description as string) || '',
     createdAt: raw.created_at as string,
     updatedAt: raw.updated_at as string,
   }
@@ -114,4 +132,16 @@ export async function saveFileContent(
     { content },
   )
   return toFileContent(res.data.data)
+}
+
+export async function fetchFileDescriptions(
+  agentId: string,
+): Promise<Record<string, string>> {
+  const res = await request.get(`/agents/${agentId}/file-descriptions`)
+  const items: Array<{ filename: string; description: string }> = res.data.data || []
+  const map: Record<string, string> = {}
+  for (const item of items) {
+    map[item.filename] = item.description
+  }
+  return map
 }

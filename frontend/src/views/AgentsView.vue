@@ -21,18 +21,29 @@ function openDialog(type: ConfigType) {
   dialogVisible.value = true
 }
 
-async function handleAddConfig(type: ConfigType, value: string) {
+async function handleAddConfig(type: ConfigType, value: string, description?: string) {
   try {
     if (type === 'subagent') {
       await agentStore.createSubAgent(value)
       ElMessage.success('子智能体创建成功')
     } else {
-      await agentStore.addConfig(type, value)
+      await agentStore.addConfig(type, value, description || '')
       ElMessage.success(`${type === 'tool' ? '工具' : type === 'skill' ? '技能' : type === 'file' ? '文件' : 'Cron Job'}已添加`)
     }
     dialogVisible.value = false
   } catch (err: unknown) {
     ElMessage.error(err instanceof Error ? err.message : '操作失败')
+  }
+}
+
+async function handleUpdateConfig(type: ConfigType, value: string, newValue?: string, description?: string) {
+  const agentId = agentStore.selectedAgent?.id
+  if (!agentId) return
+  try {
+    await agentStore.updateConfig(type, value, newValue || '', description || '')
+    ElMessage.success(newValue && newValue !== value ? '已重命名' : '已更新')
+  } catch (err: unknown) {
+    ElMessage.error(err instanceof Error ? err.message : '更新失败')
   }
 }
 

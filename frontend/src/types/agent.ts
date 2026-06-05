@@ -27,6 +27,7 @@ export interface AgentCreateRequest {
 export interface AgentFileContent {
   filename: string
   content: string
+  description: string
   createdAt: string
   updatedAt: string
 }

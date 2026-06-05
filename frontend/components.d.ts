@@ -37,6 +37,7 @@ declare module 'vue' {
     ElTooltip: typeof import('element-plus/es')['ElTooltip']
     EmailRegisterForm: typeof import('./src/components/auth/EmailRegisterForm.vue')['default']
     FeatureGrid: typeof import('./src/components/auth/FeatureGrid.vue')['default']
+    FileEditDialog: typeof import('./src/components/agent/FileEditDialog.vue')['default']
     FormError: typeof import('./src/components/common/FormError.vue')['default']
     ImageCaptcha: typeof import('./src/components/captcha/ImageCaptcha.vue')['default']
     InputBar: typeof import('./src/components/InputBar.vue')['default']

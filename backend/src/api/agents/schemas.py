@@ -17,6 +17,7 @@ class AgentConfigRequest(BaseModel):
 
     type: str  # tool | skill | prompt | file | subagent
     value: str
+    description: str = ""
 
 
 class AgentInfo(BaseModel):
@@ -55,6 +56,7 @@ class AgentFileContent(BaseModel):
 
     filename: str
     content: str
+    description: str = ""
     created_at: datetime
     updated_at: datetime
 
@@ -67,3 +69,12 @@ class AgentFileUpdateRequest(BaseModel):
     """Request body for updating file content."""
 
     content: str
+
+
+class AgentConfigUpdateRequest(BaseModel):
+    """Request body for updating a config item (rename / change description)."""
+
+    type: str  # tool | skill | prompt | file
+    value: str  # current name (用于定位要更新的项)
+    new_value: str = ""  # 新文件名（空则不重命名）
+    description: str = ""

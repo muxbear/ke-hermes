@@ -16,6 +16,7 @@ export const useAgentStore = defineStore('agent', () => {
   const currentFileContent = ref<AgentFileContent | null>(null)
   const fileLoading = ref(false)
   const selectedFilename = ref<string | null>(null)
+  const fileDescriptions = ref<Record<string, string>>({})
 
   /* ---------- computed ---------- */
   const selectedAgent = computed(() =>
@@ -129,16 +130,32 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
-  async function addConfig(type: ConfigType, value: string) {
+  async function addConfig(type: ConfigType, value: string, description: string = '') {
     const targetId = selectedAgentId.value
     if (!targetId) throw new Error('未选中代理')
 
     try {
-      await agentApi.addConfig(targetId, type, value)
+      await agentApi.addConfig(targetId, type, value, description)
       // 刷新整个列表以保持数据一致性
       agents.value = await agentApi.fetchAgents()
     } catch (err: unknown) {
       throw err instanceof Error ? err : new Error('添加配置失败')
+    }
+  }
+
+  async function updateConfig(type: ConfigType, value: string, newValue: string = '', description: string = '') {
+    const targetId = selectedAgentId.value
+    if (!targetId) throw new Error('未选中代理')
+
+    try {
+      await agentApi.updateConfig(targetId, type, value, newValue, description)
+      agents.value = await agentApi.fetchAgents()
+      // If file was renamed, update selectedFilename
+      if (type === 'file' && newValue && newValue !== value && selectedFilename.value === value) {
+        selectedFilename.value = newValue
+      }
+    } catch (err: unknown) {
+      throw err instanceof Error ? err : new Error('更新配置失败')
     }
   }
 
@@ -195,6 +212,14 @@ export const useAgentStore = defineStore('agent', () => {
     selectedFilename.value = null
   }
 
+  async function fetchFileDescriptionsAction(agentId: string) {
+    try {
+      fileDescriptions.value = await agentApi.fetchFileDescriptions(agentId)
+    } catch {
+      fileDescriptions.value = {}
+    }
+  }
+
   return {
     agents,
     selectedAgentId,
@@ -218,6 +243,7 @@ export const useAgentStore = defineStore('agent', () => {
     addConfig,
     removeConfig,
     createSubAgent,
+    updateConfig,
     // file content
     currentFileContent,
     fileLoading,
@@ -225,5 +251,7 @@ export const useAgentStore = defineStore('agent', () => {
     fetchFileContent,
     saveFileContent,
     clearFileContent,
+    fileDescriptions,
+    fetchFileDescriptions: fetchFileDescriptionsAction,
   }
 })

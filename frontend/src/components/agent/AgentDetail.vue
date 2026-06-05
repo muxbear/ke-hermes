@@ -10,12 +10,15 @@ import {
   Activity,
   Pause,
   ChevronRight,
+  Pencil,
 } from 'lucide-vue-next'
 import { ref, computed, watch } from 'vue'
 import type { Agent, ConfigType } from '@/types/agent'
 import { CONFIG_TYPE_MAP, STATUS_LABELS } from '@/types/agent'
 import { useAgentStore } from '@/stores/agent'
 import MarkdownEditor from '@/components/agent/MarkdownEditor.vue'
+import FileEditDialog from '@/components/agent/FileEditDialog.vue'
+import { ElMessage } from 'element-plus'
 
 const props = defineProps<{
   agent: Agent
@@ -45,14 +48,16 @@ watch(
   },
 )
 
-// Reset editor when agent changes
+// Reset editor + load descriptions when agent changes
 watch(
   () => props.agent.id,
   () => {
     selectedFile.value = null
     editContent.value = ''
     agentStore.clearFileContent()
+    agentStore.fetchFileDescriptions(props.agent.id)
   },
+  { immediate: true },
 )
 
 function selectFile(filename: string) {
@@ -74,6 +79,42 @@ function handleRemoveFile(filename: string) {
   }
   emit('remove-config', 'file', filename)
 }
+
+// File edit dialog state
+const editDialogVisible = ref(false)
+const editingFilename = ref('')
+const editingDescription = ref('')
+
+function openEditDialog(filename: string) {
+  editingFilename.value = filename
+  editingDescription.value = agentStore.currentFileContent?.description || ''
+  editDialogVisible.value = true
+}
+
+async function handleFileEdit(filename: string, description: string) {
+  const agentId = props.agent.id
+  try {
+    await agentStore.updateConfig('file', editingFilename.value, filename, description)
+    // If renamed, update selected file
+    if (filename !== editingFilename.value) {
+      selectedFile.value = filename
+    }
+    editDialogVisible.value = false
+    ElMessage.success('已更新')
+  } catch (err: unknown) {
+    ElMessage.error(err instanceof Error ? err.message : '更新失败')
+  }
+}
+
+// Auto-select newly added file
+watch(
+  () => props.agent.files,
+  (newFiles, oldFiles) => {
+    if (!oldFiles || newFiles.length <= oldFiles.length) return
+    const added = newFiles.find((f) => !oldFiles.includes(f))
+    if (added) selectFile(added)
+  },
+)
 
 const activeSection = computed(() =>
   configSections.find((s) => s.type === activeTab.value) ?? configSections[0],
@@ -231,22 +272,35 @@ function getStatusColor(status: string): string {
 
           <div class="tags-wrap">
             <template v-if="agent.files && agent.files.length > 0">
-              <span
+              <el-tooltip
                 v-for="item in agent.files"
                 :key="item"
-                class="config-tag section--yellow"
-                :class="{ 'tag-selected': selectedFile === item }"
-                @click="selectFile(item)"
+                :content="agentStore.fileDescriptions[item] || '暂无描述'"
+                placement="top"
+                :show-after="500"
+                :hide-after="0"
               >
-                <FileText :size="12" class="tag-icon" />
-                {{ item }}
-                <button
-                  class="tag-delete"
-                  @click.stop="handleRemoveFile(item)"
+                <span
+                  class="config-tag section--yellow"
+                  :class="{ 'tag-selected': selectedFile === item }"
+                  @click="selectFile(item)"
                 >
-                  <Trash2 :size="11" />
-                </button>
-              </span>
+                  <FileText :size="12" class="tag-icon" />
+                  {{ item }}
+                  <button
+                    class="tag-edit"
+                    @click.stop="openEditDialog(item)"
+                  >
+                    <Pencil :size="11" />
+                  </button>
+                  <button
+                    class="tag-delete"
+                    @click.stop="handleRemoveFile(item)"
+                  >
+                    <Trash2 :size="11" />
+                  </button>
+                </span>
+              </el-tooltip>
             </template>
             <div v-else class="empty-section">
               <FileText :size="20" class="empty-icon" />
@@ -317,6 +371,15 @@ function getStatusColor(status: string): string {
         </div>
       </div>
     </div>
+
+    <!-- File Edit Dialog -->
+    <FileEditDialog
+      :visible="editDialogVisible"
+      :filename="editingFilename"
+      :description="editingDescription"
+      @close="editDialogVisible = false"
+      @save="handleFileEdit"
+    />
   </div>
 </template>
 
@@ -685,6 +748,7 @@ function getStatusColor(status: string): string {
 .section--yellow .tag-icon { color: #eab308; }
 .section--green .tag-icon { color: #4ade80; }
 
+.tag-edit,
 .tag-delete {
   display: flex;
   align-items: center;
@@ -699,8 +763,13 @@ function getStatusColor(status: string): string {
   transition: opacity 0.15s ease, color 0.15s ease;
 }
 
+.config-tag:hover .tag-edit,
 .config-tag:hover .tag-delete {
   opacity: 1;
+}
+
+.tag-edit:hover {
+  color: var(--color-accent);
 }
 
 .tag-delete:hover {

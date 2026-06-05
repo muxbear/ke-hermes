@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.agents.schemas import (
     AgentConfigRequest,
+    AgentConfigUpdateRequest,
     AgentCreateRequest,
     AgentFileContent,
     AgentFileUpdateRequest,
@@ -272,6 +273,23 @@ async def add_agent_config(
             current.append(req.value)
             setattr(agent, column, current)
 
+        # When adding a file, create an AgentFile record with description
+        if req.type == "file" and req.description:
+            existing = (await db.execute(
+                select(AgentFile).where(
+                    AgentFile.agent_id == agent_id, AgentFile.filename == req.value
+                )
+            )).scalar_one_or_none()
+            if existing is not None:
+                existing.description = req.description
+            else:
+                db.add(AgentFile(
+                    agent_id=agent_id,
+                    filename=req.value,
+                    content="",
+                    description=req.description,
+                ))
+
     await db.flush()
     sub_ids = await _get_sub_agent_ids(db, agent_id, user_id)
     return _agent_to_info(agent, sub_ids)
@@ -309,6 +327,55 @@ async def remove_agent_config(
     return _agent_to_info(agent, sub_ids)
 
 
+async def update_agent_config(
+    db: AsyncSession, agent_id: str, req: AgentConfigUpdateRequest, user_id: str
+) -> AgentInfo:
+    """Update a config item (rename file / change description)."""
+    stmt = select(Agent).where(Agent.id == agent_id, Agent.user_id == user_id)
+    agent = (await db.execute(stmt)).scalar_one_or_none()
+    if agent is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    column = CONFIG_TYPE_TO_COLUMN.get(req.type)
+    if column is None:
+        raise HTTPException(status_code=400, detail=f"Invalid config type: {req.type}")
+
+    current: list = getattr(agent, column)
+    if not isinstance(current, list) or req.value not in current:
+        raise HTTPException(status_code=404, detail=f"Config item '{req.value}' not found")
+
+    if req.type == "file":
+        new_name = req.new_value.strip() if req.new_value else ""
+        # Rename file in agent.files
+        if new_name and new_name != req.value:
+            idx = current.index(req.value)
+            current = list(current)
+            current[idx] = new_name
+            setattr(agent, column, current)
+
+        # Update description in agent_files
+        lookup_name = new_name if new_name else req.value
+        file_stmt = select(AgentFile).where(
+            AgentFile.agent_id == agent_id, AgentFile.filename == req.value
+        )
+        row = (await db.execute(file_stmt)).scalar_one_or_none()
+        if row is not None:
+            if new_name and new_name != req.value:
+                row.filename = new_name
+            row.description = req.description
+        elif req.description:
+            db.add(AgentFile(
+                agent_id=agent_id,
+                filename=lookup_name,
+                content="",
+                description=req.description,
+            ))
+
+    await db.flush()
+    sub_ids = await _get_sub_agent_ids(db, agent_id, user_id)
+    return _agent_to_info(agent, sub_ids)
+
+
 async def get_agent_file(
     db: AsyncSession, agent_id: str, filename: str, user_id: str
 ) -> AgentFileContent:
@@ -334,6 +401,7 @@ async def get_agent_file(
     return AgentFileContent(
         filename=row.filename,
         content=row.content or "",
+        description=row.description or "",
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -366,6 +434,21 @@ async def save_agent_file(
     return AgentFileContent(
         filename=row.filename,
         content=row.content or "",
+        description=row.description or "",
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
+
+
+async def list_agent_file_descriptions(
+    db: AsyncSession, agent_id: str, user_id: str
+) -> list[dict]:
+    """Return {filename, description} for all files of an agent."""
+    stmt = select(Agent).where(Agent.id == agent_id, Agent.user_id == user_id)
+    agent = (await db.execute(stmt)).scalar_one_or_none()
+    if agent is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    file_stmt = select(AgentFile).where(AgentFile.agent_id == agent_id)
+    rows = (await db.execute(file_stmt)).scalars().all()
+    return [{"filename": row.filename, "description": row.description or ""} for row in rows]
