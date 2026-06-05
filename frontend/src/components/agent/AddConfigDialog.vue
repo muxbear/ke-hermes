@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { Zap, Sparkles, Clock, FileText, Users } from 'lucide-vue-next'
+import { X, Zap, Sparkles, Clock, FileText, Users } from 'lucide-vue-next'
 import type { ConfigType } from '@/types/agent'
 import { CONFIG_TYPE_MAP } from '@/types/agent'
 
@@ -18,12 +18,6 @@ const emit = defineEmits<{
 
 const nameValue = ref('')
 const descValue = ref('')
-
-// Local v-model for el-dialog, synced with parent prop
-const dialogVisible = computed({
-  get: () => props.visible,
-  set: (val) => { if (!val) handleClose() },
-})
 
 const config = computed(() => CONFIG_TYPE_MAP[props.type])
 
@@ -48,7 +42,6 @@ const placeholders = computed(() => {
 })
 
 function handleSubmit() {
-  console.log('trigger  handleSubmit()')
   if (!nameValue.value.trim()) return
   emit('add', props.type, nameValue.value.trim())
   resetForm()
@@ -64,7 +57,6 @@ function resetForm() {
   descValue.value = ''
 }
 
-// Reset form when dialog opens
 watch(
   () => props.visible,
   (val) => {
@@ -74,68 +66,115 @@ watch(
 </script>
 
 <template>
-  <el-dialog
-    v-model="dialogVisible"
-    width="480px"
-    :close-on-click-modal="false"
-    append-to-body
-  >
-    <template #header>
-      <div class="dialog-header">
-        <div class="dialog-icon" :class="config.bgClass">
-          <component :is="iconComponent" :size="18" :style="{ color: config.color }" />
-        </div>
-        <div>
-          <h3 class="dialog-title">添加{{ config.label }}</h3>
-          <p class="dialog-desc">
-            为 <span class="highlight">"{{ agentName }}"</span>
-            {{ agentType === 'main' ? ' (主智能体)' : ' (子智能体)' }}
-            添加新的{{ config.label }}
-          </p>
-          <p
-            v-if="type === 'subagent' && agentType === 'sub'"
-            class="dialog-warning"
-          >
-            注意：子智能体不能添加子智能体，将为主智能体添加
-          </p>
-        </div>
-      </div>
-    </template>
+  <Teleport to="body">
+    <Transition name="modal">
+      <div v-if="visible" class="dialog-overlay" @click.self="handleClose">
+        <div class="dialog-modal">
+          <!-- Header -->
+          <div class="dialog-header">
+            <div class="header-left">
+              <div class="dialog-icon" :style="{ background: `${config.color}18` }">
+                <component :is="iconComponent" :size="18" :style="{ color: config.color }" />
+              </div>
+              <div>
+                <h3 class="dialog-title">添加{{ config.label }}</h3>
+                <p class="dialog-desc">
+                  为 <span class="highlight">"{{ agentName }}"</span>
+                  {{ agentType === 'main' ? ' (主智能体)' : ' (子智能体)' }}
+                  添加新的{{ config.label }}
+                </p>
+                <p
+                  v-if="type === 'subagent' && agentType === 'sub'"
+                  class="dialog-warning"
+                >
+                  注意：子智能体不能添加子智能体，将为主智能体添加
+                </p>
+              </div>
+            </div>
+            <button class="modal-close" @click="handleClose">
+              <X :size="18" />
+            </button>
+          </div>
 
-    <form class="dialog-form" @submit.prevent="handleSubmit">
-      <div class="form-field">
-        <label class="field-label">{{ config.label }}名称</label>
-        <el-input
-          v-model="nameValue"
-          :placeholder="placeholders.name"
-          autofocus
-        />
-      </div>
-      <div class="form-field">
-        <label class="field-label">描述 (可选)</label>
-        <el-input
-          v-model="descValue"
-          type="textarea"
-          :rows="3"
-          :placeholder="placeholders.desc"
-        />
-      </div>
-    </form>
+          <!-- Body -->
+          <form class="dialog-body" @submit.prevent="handleSubmit">
+            <div class="form-field">
+              <label class="field-label">{{ config.label }}名称</label>
+              <input
+                v-model="nameValue"
+                type="text"
+                class="text-input"
+                :placeholder="placeholders.name"
+                autofocus
+              />
+            </div>
+            <div class="form-field">
+              <label class="field-label">描述 (可选)</label>
+              <textarea
+                v-model="descValue"
+                class="text-input textarea"
+                :rows="3"
+                :placeholder="placeholders.desc"
+              />
+            </div>
 
-    <template #footer>
-      <el-button @click="handleClose">取消</el-button>
-      <el-button type="primary" :disabled="!nameValue.trim()" native-type="submit">
-        添加{{ config.label }}
-      </el-button>
-    </template>
-  </el-dialog>
+            <!-- Footer (inside form) -->
+            <div class="dialog-footer">
+              <button type="button" class="btn btn-ghost" @click="handleClose">取消</button>
+              <button
+                type="submit"
+                class="btn btn-primary"
+                :disabled="!nameValue.trim()"
+              >
+                添加{{ config.label }}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </Transition>
+  </Teleport>
 </template>
 
 <style scoped>
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-overlay);
+  z-index: 9999;
+}
+
+.dialog-modal {
+  width: 480px;
+  max-width: 92vw;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-modal-bg);
+  border: 1px solid var(--color-border-card);
+  border-radius: var(--radius-card);
+  box-shadow: 0px 12px 60px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+}
+
+/* ---- Header ---- */
 .dialog-header {
   display: flex;
   align-items: flex-start;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--color-border-input);
+  flex-shrink: 0;
+}
+
+.header-left {
+  display: flex;
+  align-items: flex-start;
   gap: 12px;
+  flex: 1;
+  min-width: 0;
 }
 
 .dialog-icon {
@@ -148,28 +187,22 @@ watch(
   flex-shrink: 0;
 }
 
-.config--blue { background: rgba(59, 130, 246, 0.1); }
-.config--purple { background: rgba(139, 92, 246, 0.1); }
-.config--green { background: rgba(34, 197, 94, 0.1); }
-.config--orange { background: rgba(249, 115, 22, 0.1); }
-.config--yellow { background: rgba(234, 179, 8, 0.1); }
-
 .dialog-title {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: var(--font-weight-semibold);
-  color: var(--foreground-primary);
+  color: var(--color-text-primary);
   margin: 0;
 }
 
 .dialog-desc {
   font-size: var(--font-size-sm);
-  color: var(--foreground-secondary);
+  color: var(--color-text-secondary);
   margin: 4px 0 0;
 }
 
 .highlight {
   font-weight: var(--font-weight-semibold);
-  color: var(--foreground-primary);
+  color: var(--color-text-primary);
 }
 
 .dialog-warning {
@@ -178,7 +211,29 @@ watch(
   margin: 6px 0 0;
 }
 
-.dialog-form {
+.modal-close {
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+.modal-close:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-primary);
+}
+
+/* ---- Body ---- */
+.dialog-body {
+  padding: 20px 24px;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -193,41 +248,97 @@ watch(
 .field-label {
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-medium);
-  color: var(--foreground-primary);
+  color: var(--color-text-label);
 }
 
-/* Element Plus dialog overrides */
-:deep(.el-dialog) {
-  background: var(--surface-card) !important;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-card) !important;
+.text-input {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-border-input);
+  border-radius: var(--radius-input);
+  font-size: var(--font-size-base);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-base);
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color var(--transition-fast);
 }
 
-:deep(.el-dialog__header) {
-  padding: 20px 24px 0 !important;
-  margin-right: 0 !important;
+.text-input::placeholder {
+  color: var(--color-text-muted);
 }
 
-:deep(.el-dialog__body) {
-  padding: 16px 24px !important;
+.text-input:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0px 0px 0px 2px rgba(59, 130, 246, 0.12);
 }
 
-:deep(.el-dialog__footer) {
-  padding: 0 24px 20px !important;
+.textarea {
+  resize: vertical;
+  min-height: 60px;
+  line-height: 1.5;
 }
 
-:deep(.el-input__wrapper) {
-  background: var(--color-bg-input) !important;
-  border-color: var(--color-border-input) !important;
+/* ---- Footer ---- */
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border-input);
+  flex-shrink: 0;
 }
 
-:deep(.el-textarea__inner) {
-  background: var(--color-bg-input) !important;
-  border-color: var(--color-border-input) !important;
-  color: var(--foreground-primary) !important;
+/* ---- Buttons ---- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 20px;
+  border: none;
+  border-radius: var(--radius-button);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-medium);
+  font-family: var(--font-family-base);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
 }
 
-:deep(.el-input__inner) {
-  color: var(--foreground-primary) !important;
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--color-accent-dark);
+}
+
+.btn-ghost {
+  background: rgba(135, 148, 173, 0.08);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border-input);
+}
+
+.btn-ghost:hover {
+  background: rgba(135, 148, 173, 0.14);
+  color: var(--color-text-primary);
+}
+
+/* ---- Transition ---- */
+.modal-enter-active,
+.modal-leave-active {
+  transition: opacity var(--transition-normal);
+}
+
+.modal-enter-from,
+.modal-leave-to {
+  opacity: 0;
 }
 </style>
