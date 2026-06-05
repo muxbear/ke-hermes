@@ -1,3 +1,7 @@
+from datetime import timedelta
+
+from agent.sandbox.opensandbox_backend import OpenSandBoxBackend
+from agent.sandbox.opensandbox_operate import create_sandboxsync
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
@@ -69,6 +73,11 @@ async def init_graph():
 
     subagents = [research_subagent]
 
+    # 创建沙盒
+    sandbox = create_sandboxsync()
+    # 创建沙盒后端
+    sandbox_backend = OpenSandBoxBackend(sandbox=sandbox)
+
     _graph = create_deep_agent(
         name="main-agent",
         model=llm,
@@ -77,11 +86,7 @@ async def init_graph():
         context_schema=Context,
         memory=["/memories/AGENT.md"],
         backend=CompositeBackend(
-            default=StoreBackend(
-                namespace=lambda ctx: (
-                    ctx.runtime.context.server_info,
-                ),
-            ),
+            default=sandbox_backend,
             routes={
                 "/memories/": StoreBackend(
                     namespace=lambda ctx: (

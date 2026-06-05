@@ -28,6 +28,8 @@ dependencies = [
     "langgraph-checkpoint-postgres>=3.1.0",
     "psycopg[binary]>=3.3.4",
     "python-multipart>=0.0.20",
+    "opensandbox-code-interpreter>=0.1.2",
+    "opensandbox>=0.1.9",
 ]
 
 
