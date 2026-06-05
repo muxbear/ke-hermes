@@ -12,11 +12,13 @@ from api.providers.schemas import (
     ProviderUpdateRequest,
 )
 from api.providers.service import (
+    clone_model,
     create_model,
     create_provider,
     delete_model,
     delete_provider,
     list_providers,
+    toggle_model_status,
     update_model,
     update_provider,
 )
@@ -135,6 +137,40 @@ async def model_delete(
     try:
         await delete_model(db, provider_id, model_id, user_id)
         return ok(None, "Model deleted successfully")
+    except Exception as e:
+        if hasattr(e, "status_code"):
+            return error(e.status_code, e.detail)
+        raise
+
+
+@router.post("/{provider_id}/models/{model_id}/clone", response_model=ApiResponse[ModelResponse])
+async def model_clone(
+    provider_id: str,
+    model_id: str,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """克隆指定模型，复制所有配置并使用新的 ID。"""  # noqa: D415
+    try:
+        result = await clone_model(db, provider_id, model_id, user_id)
+        return ok(result)
+    except Exception as e:
+        if hasattr(e, "status_code"):
+            return error(e.status_code, e.detail)
+        raise
+
+
+@router.patch("/{provider_id}/models/{model_id}/status", response_model=ApiResponse[ModelResponse])
+async def model_toggle_status(
+    provider_id: str,
+    model_id: str,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """切换模型的启用/禁用状态。"""  # noqa: D415
+    try:
+        result = await toggle_model_status(db, provider_id, model_id, user_id)
+        return ok(result)
     except Exception as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)

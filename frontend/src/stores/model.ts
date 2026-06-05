@@ -149,6 +149,29 @@ export const useModelStore = defineStore('model', () => {
     }
   }
 
+  async function cloneModel(providerId: string, modelId: string) {
+    try {
+      const cloned = await api.cloneModel(providerId, modelId)
+      const pIdx = providers.value.findIndex((p) => p.id === providerId)
+      if (pIdx >= 0) providers.value[pIdx].models.push(cloned)
+    } catch (err: unknown) {
+      throw err instanceof Error ? err : new Error('克隆模型失败')
+    }
+  }
+
+  async function toggleModelStatus(providerId: string, modelId: string) {
+    try {
+      const updated = await api.toggleModelStatus(providerId, modelId)
+      const pIdx = providers.value.findIndex((p) => p.id === providerId)
+      if (pIdx >= 0) {
+        const mIdx = providers.value[pIdx].models.findIndex((m) => m.id === modelId)
+        if (mIdx >= 0) providers.value[pIdx].models[mIdx] = updated
+      }
+    } catch (err: unknown) {
+      throw err instanceof Error ? err : new Error('切换状态失败')
+    }
+  }
+
   function setRightTab(tab: RightTab) {
     rightTab.value = tab
   }
@@ -159,6 +182,6 @@ export const useModelStore = defineStore('model', () => {
     selectedProvider, filteredProviders, filteredModels,
     totalModels, typeCounts, providerTypeCounts, providerStats,
     fetchAll, selectProvider, saveProvider, deleteProvider,
-    saveModel, deleteModel, setRightTab,
+    saveModel, deleteModel, cloneModel, toggleModelStatus, setRightTab,
   }
 })

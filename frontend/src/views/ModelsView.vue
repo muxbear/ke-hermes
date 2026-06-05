@@ -3,7 +3,8 @@ import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Plus, Search, Edit3, Trash2, X, CheckCircle2, AlertCircle,
-  Eye, EyeOff, Bot, Cpu, Zap, Settings2, Activity,
+  Eye, EyeOff, Bot, Cpu, Zap, Settings2, Activity, MoreHorizontal,
+  Copy, Power, PowerOff,
 } from 'lucide-vue-next'
 import { useModelStore } from '@/stores/model'
 import type { Provider, AIModel, ModelType, ModelStatus, ModelParam } from '@/types/model'
@@ -154,6 +155,39 @@ function paramLabel(k: string): string {
   if (k === 'max_tokens') return 'Max Tokens'
   if (k === 'top_p') return 'Top P'
   return k
+}
+
+/* ---- Dropdown handler ---- */
+async function handleModelCommand(command: string, m: AIModel) {
+  const pid = store.selectedProvider?.id
+  if (!pid) return
+  switch (command) {
+    case 'new':
+      openNewModel()
+      break
+    case 'edit':
+      openEditModel(m)
+      break
+    case 'delete':
+      confirmDelete('model', m.id, m.displayName)
+      break
+    case 'clone':
+      try {
+        await store.cloneModel(pid, m.id)
+        ElMessage.success('模型已克隆')
+      } catch (err: unknown) {
+        ElMessage.error(err instanceof Error ? err.message : '克隆失败')
+      }
+      break
+    case 'toggle':
+      try {
+        await store.toggleModelStatus(pid, m.id)
+        ElMessage.success(m.status === 'active' ? '模型已禁用' : '模型已启用')
+      } catch (err: unknown) {
+        ElMessage.error(err instanceof Error ? err.message : '切换状态失败')
+      }
+      break
+  }
 }
 
 /* ---- Lifecycle ---- */
@@ -397,12 +431,32 @@ onMounted(() => {
                   <button title="查看详情" class="action-btn" @click="viewingModel = m">
                     <Activity :size="14" />
                   </button>
-                  <button title="编辑" class="action-btn" @click="openEditModel(m)">
-                    <Edit3 :size="14" />
-                  </button>
-                  <button title="删除" class="action-btn action-btn--danger" @click="confirmDelete('model', m.id, m.displayName)">
-                    <Trash2 :size="14" />
-                  </button>
+                  <el-dropdown trigger="click" @command="(cmd: string) => handleModelCommand(cmd, m)">
+                    <button class="action-btn action-btn--more" @click.stop>
+                      <MoreHorizontal :size="14" />
+                    </button>
+                    <template #dropdown>
+                      <el-dropdown-menu>
+                        <el-dropdown-item command="edit">
+                          <Edit3 :size="14" />
+                          <span>编辑</span>
+                        </el-dropdown-item>
+                        <el-dropdown-item command="delete">
+                          <Trash2 :size="14" />
+                          <span>删除</span>
+                        </el-dropdown-item>
+                        <el-dropdown-item command="clone">
+                          <Copy :size="14" />
+                          <span>克隆</span>
+                        </el-dropdown-item>
+                        <el-dropdown-item command="toggle">
+                          <PowerOff v-if="m.status === 'active'" :size="14" />
+                          <Power v-else :size="14" />
+                          <span>{{ m.status === 'active' ? '禁用' : '启用' }}</span>
+                        </el-dropdown-item>
+                      </el-dropdown-menu>
+                    </template>
+                  </el-dropdown>
                 </div>
               </div>
             </div>
@@ -994,6 +1048,24 @@ onMounted(() => {
 
 .action-btn:hover { background: rgba(255,255,255,0.08); color: var(--foreground-primary); }
 .action-btn--danger:hover { background: rgba(239,68,68,0.15); color: #f87171; }
+
+.action-btn--more {
+  width: 28px;
+  height: 28px;
+}
+
+/* ---- Dropdown Menu ---- */
+:deep(.el-dropdown-menu__item) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--font-size-sm);
+}
+
+:deep(.el-dropdown-menu__item .lucide) {
+  width: 14px;
+  height: 14px;
+}
 
 /* ---- Right Panel ---- */
 .panel-right {

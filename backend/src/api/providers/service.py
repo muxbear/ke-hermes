@@ -199,3 +199,41 @@ async def delete_model(
     model = await _get_model(db, model_id, provider_id, user_id)
     await db.delete(model)
     await db.commit()
+
+
+async def clone_model(
+    db: AsyncSession, provider_id: str, model_id: str, user_id: str
+) -> ModelResponse:
+    """Clone a model — copies all fields with a new ID and modified display name."""
+    await _get_provider(db, provider_id, user_id)
+    original = await _get_model(db, model_id, provider_id, user_id)
+    cloned = AIModel(
+        provider_id=provider_id,
+        name=original.name + "-clone",
+        display_name=original.display_name + " (副本)",
+        type=original.type,
+        status=original.status,
+        context_window=original.context_window,
+        call_count=0,
+        description=original.description,
+        release_date=original.release_date,
+        params=original.params,
+        used_by_agents=[],
+        user_id=user_id,
+    )
+    db.add(cloned)
+    await db.commit()
+    await db.refresh(cloned)
+    return _model_to_response(cloned)
+
+
+async def toggle_model_status(
+    db: AsyncSession, provider_id: str, model_id: str, user_id: str
+) -> ModelResponse:
+    """Toggle model status between active and inactive."""
+    await _get_provider(db, provider_id, user_id)
+    model = await _get_model(db, model_id, provider_id, user_id)
+    model.status = "inactive" if model.status == "active" else "active"
+    await db.commit()
+    await db.refresh(model)
+    return _model_to_response(model)

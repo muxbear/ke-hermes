@@ -2,7 +2,7 @@
 export type ModelType = 'llm' | 'vision' | 'audio' | 'video' | 'embedding' | 'image-gen' | 'speech'
 
 /** 模型状态 */
-export type ModelStatus = 'active' | 'beta' | 'deprecated'
+export type ModelStatus = 'active' | 'beta' | 'deprecated' | 'inactive'
 
 /** 提供商连接状态 */
 export type ProviderStatus = 'connected' | 'error' | 'unconfigured'
@@ -70,4 +70,5 @@ export const MODEL_STATUS_META: Record<ModelStatus, { label: string; color: stri
   active:     { label: '正常',   color: '#6ee7b7', bg: 'rgba(16,185,129,0.1) border: 1px solid rgba(16,185,129,0.2)' },
   beta:       { label: 'Beta',   color: '#fbbf24', bg: 'rgba(245,158,11,0.1) border: 1px solid rgba(245,158,11,0.2)' },
   deprecated: { label: '已弃用', color: '#6b7280', bg: 'rgba(75,85,99,0.2) border: 1px solid rgba(75,85,99,0.3)' },
+  inactive:   { label: '已禁用', color: '#f87171', bg: 'rgba(239,68,68,0.1) border: 1px solid rgba(239,68,68,0.2)' },
 }

@@ -114,3 +114,13 @@ export async function updateModel(providerId: string, modelId: string, data: AIM
 export async function deleteModel(providerId: string, modelId: string): Promise<void> {
   await instance.delete(`/providers/${providerId}/models/${modelId}`)
 }
+
+export async function cloneModel(providerId: string, modelId: string): Promise<AIModel> {
+  const res = await instance.post(`/providers/${providerId}/models/${modelId}/clone`)
+  return toModel(res.data.data as Record<string, unknown>)
+}
+
+export async function toggleModelStatus(providerId: string, modelId: string): Promise<AIModel> {
+  const res = await instance.patch(`/providers/${providerId}/models/${modelId}/status`)
+  return toModel(res.data.data as Record<string, unknown>)
+}
