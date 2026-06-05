@@ -91,6 +91,12 @@ const menuGroups: MenuGroup[] = [
     ],
   },
   {
+    label: '知识库',
+    items: [
+      {icon: Server, text: '知识库', pinyin: 'zhishiku' },
+    ]
+  },
+  {
     label: '控制',
     items: [
       { icon: LayoutDashboard, text: '概览', route: '/overview', pinyin: 'gailan' },
@@ -102,9 +108,9 @@ const menuGroups: MenuGroup[] = [
     ],
   },
   {
-    label: '代理',
+    label: '智能体',
     items: [
-      { icon: Bot, text: '代理', route: '/agents', pinyin: 'daili' },
+      { icon: Bot, text: '智能体', route: '/agents', pinyin: 'zhinengti' },
       { icon: Zap, text: '技能', route: '/skills', pinyin: 'jineng' },
       { icon: Network, text: '节点', pinyin: 'jiedian' },
     ],

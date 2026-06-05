@@ -109,7 +109,7 @@ onMounted(() => {
       <div class="panel-left">
         <div class="panel-left-header">
           <div class="panel-left-title-row">
-            <span class="panel-title">代理列表<span class="count-badge">{{ agentStore.agents.length }}</span></span>
+            <span class="panel-title">智能体列表<span class="count-badge">{{ agentStore.agents.length }}</span></span>
             <div class="panel-title-actions">
               <button
                 class="eye-btn"
@@ -126,7 +126,7 @@ onMounted(() => {
             <input
               v-model="agentStore.searchQuery"
               class="search-input"
-              placeholder="搜索代理..."
+              placeholder="搜索智能体..."
             />
             <button
               v-if="agentStore.searchQuery"
@@ -159,7 +159,7 @@ onMounted(() => {
 
           <!-- Empty state -->
           <div v-else-if="!agentStore.loading" class="list-empty">
-            <p>{{ agentStore.searchQuery ? '未找到匹配的代理' : '暂无代理' }}</p>
+            <p>{{ agentStore.searchQuery ? '未找到匹配的智能体' : '暂无代理' }}</p>
             <el-button
               v-if="!agentStore.searchQuery"
               type="primary"
@@ -167,7 +167,7 @@ onMounted(() => {
               @click="handleNewSubAgent"
             >
               <Plus :size="14" style="margin-right: 4px" />
-              创建第一个代理
+              创建第一个智能体
             </el-button>
           </div>
         </div>
@@ -188,7 +188,7 @@ onMounted(() => {
               @select-agent="(id) => agentStore.selectAgent(id)"
             />
             <div v-else class="detail-empty">
-              <p>请在左侧选择一个代理</p>
+              <p>请在左侧选择一个智能体</p>
             </div>
           </template>
         </Transition>

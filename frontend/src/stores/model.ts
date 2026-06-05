@@ -89,12 +89,15 @@ export const useModelStore = defineStore('model', () => {
   }
 
   async function saveProvider(data: Provider) {
+    const exists = providers.value.some((p) => p.id === data.id)
     try {
-      const saved = await api.saveProvider(data)
-      const idx = providers.value.findIndex((p) => p.id === saved.id)
-      if (idx >= 0) providers.value[idx] = saved
-      else providers.value.push(saved)
-      selectedProviderId.value = saved.id
+      if (exists) {
+        await api.updateProvider(data.id, data)
+      } else {
+        await api.createProvider(data)
+      }
+      await fetchAll()
+      selectedProviderId.value = data.id
     } catch (err: unknown) {
       throw err instanceof Error ? err : new Error('保存提供商失败')
     }
@@ -113,10 +116,22 @@ export const useModelStore = defineStore('model', () => {
   }
 
   async function saveModel(providerId: string, data: AIModel) {
+    const provider = providers.value.find((p) => p.id === providerId)
+    const exists = provider?.models.some((m) => m.id === data.id)
     try {
-      const updated = await api.saveModel(providerId, data)
-      const idx = providers.value.findIndex((p) => p.id === updated.id)
-      if (idx >= 0) providers.value[idx] = updated
+      if (exists) {
+        const updated = await api.updateModel(providerId, data.id, data)
+        const pIdx = providers.value.findIndex((p) => p.id === providerId)
+        if (pIdx >= 0) {
+          const mIdx = providers.value[pIdx].models.findIndex((m) => m.id === updated.id)
+          if (mIdx >= 0) providers.value[pIdx].models[mIdx] = updated
+          else providers.value[pIdx].models.push(updated)
+        }
+      } else {
+        const created = await api.createModel(providerId, data)
+        const pIdx = providers.value.findIndex((p) => p.id === providerId)
+        if (pIdx >= 0) providers.value[pIdx].models.push(created)
+      }
     } catch (err: unknown) {
       throw err instanceof Error ? err : new Error('保存模型失败')
     }
@@ -124,9 +139,11 @@ export const useModelStore = defineStore('model', () => {
 
   async function deleteModel(providerId: string, modelId: string) {
     try {
-      const updated = await api.deleteModel(providerId, modelId)
-      const idx = providers.value.findIndex((p) => p.id === updated.id)
-      if (idx >= 0) providers.value[idx] = updated
+      await api.deleteModel(providerId, modelId)
+      const pIdx = providers.value.findIndex((p) => p.id === providerId)
+      if (pIdx >= 0) {
+        providers.value[pIdx].models = providers.value[pIdx].models.filter((m) => m.id !== modelId)
+      }
     } catch (err: unknown) {
       throw err instanceof Error ? err : new Error('删除模型失败')
     }
