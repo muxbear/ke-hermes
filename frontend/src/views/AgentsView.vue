@@ -45,6 +45,17 @@ async function handleRemoveConfig(type: ConfigType, value: string) {
   }
 }
 
+async function handleSaveFileContent(filename: string, content: string) {
+  const agentId = agentStore.selectedAgent?.id
+  if (!agentId) return
+  try {
+    await agentStore.saveFileContent(agentId, filename, content)
+    ElMessage.success(`${filename} 已保存`)
+  } catch (err: unknown) {
+    ElMessage.error(err instanceof Error ? err.message : '保存失败')
+  }
+}
+
 async function handleToggleStatus(id: string) {
   try {
     await agentStore.toggleStatus(id)
@@ -184,6 +195,7 @@ onMounted(() => {
               :agents="agentStore.agents"
               @add-config="openDialog"
               @remove-config="handleRemoveConfig"
+              @save-file-content="handleSaveFileContent"
               @toggle-status="handleToggleStatus(agentStore.selectedAgent!.id)"
               @select-agent="(id) => agentStore.selectAgent(id)"
             />

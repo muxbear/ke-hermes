@@ -1,7 +1,7 @@
 /**
  * Agent API — 后端真实接口调用
  */
-import type { Agent, AgentCreateRequest, ConfigType } from '@/types/agent'
+import type { Agent, AgentCreateRequest, AgentFileContent, ConfigType } from '@/types/agent'
 import request from '@/services/request'
 
 /* ------------------------------------------------------------------ */
@@ -79,4 +79,39 @@ export async function removeConfig(
     data: { type, value },
   })
   return toAgent(res.data.data)
+}
+
+/* ------------------------------------------------------------------ */
+/*  文件内容 API                                                        */
+/* ------------------------------------------------------------------ */
+
+function toFileContent(raw: Record<string, unknown>): AgentFileContent {
+  return {
+    filename: raw.filename as string,
+    content: (raw.content as string) || '',
+    createdAt: raw.created_at as string,
+    updatedAt: raw.updated_at as string,
+  }
+}
+
+export async function fetchFileContent(
+  agentId: string,
+  filename: string,
+): Promise<AgentFileContent> {
+  const res = await request.get(
+    `/agents/${agentId}/files/${encodeURIComponent(filename)}`,
+  )
+  return toFileContent(res.data.data)
+}
+
+export async function saveFileContent(
+  agentId: string,
+  filename: string,
+  content: string,
+): Promise<AgentFileContent> {
+  const res = await request.put(
+    `/agents/${agentId}/files/${encodeURIComponent(filename)}`,
+    { content },
+  )
+  return toFileContent(res.data.data)
 }

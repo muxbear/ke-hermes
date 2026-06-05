@@ -2,16 +2,19 @@
 import logging
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import func, select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.agents.schemas import (
     AgentConfigRequest,
     AgentCreateRequest,
+    AgentFileContent,
+    AgentFileUpdateRequest,
     AgentInfo,
     AgentListResponse,
 )
 from db.models.agent import Agent
+from db.models.agent_file import AgentFile
 
 logger = logging.getLogger(__name__)
 
@@ -223,6 +226,19 @@ async def clone_agent(db: AsyncSession, agent_id: str, user_id: str) -> AgentInf
     db.add(cloned)
     await db.flush()
 
+    # Clone file contents
+    src_files = source.files if isinstance(source.files, list) else []
+    if src_files:
+        src_contents_stmt = select(AgentFile).where(AgentFile.agent_id == agent_id)
+        src_rows = (await db.execute(src_contents_stmt)).scalars().all()
+        for src_row in src_rows:
+            if src_row.filename in src_files:
+                db.add(AgentFile(
+                    agent_id=cloned.id,
+                    filename=src_row.filename,
+                    content=src_row.content,
+                ))
+
     sub_ids = await _get_sub_agent_ids(db, cloned.id, user_id)
     logger.info("Cloned agent '%s' -> '%s'", source.name, cloned.name)
     return _agent_to_info(cloned, sub_ids)
@@ -281,7 +297,75 @@ async def remove_agent_config(
         if isinstance(current, list) and req.value in current:
             current = [v for v in current if v != req.value]
             setattr(agent, column, current)
+        # Clean up orphaned file content row when removing a file config
+        if req.type == "file":
+            del_stmt = delete(AgentFile).where(
+                AgentFile.agent_id == agent_id, AgentFile.filename == req.value
+            )
+            await db.execute(del_stmt)
 
     await db.flush()
     sub_ids = await _get_sub_agent_ids(db, agent_id, user_id)
     return _agent_to_info(agent, sub_ids)
+
+
+async def get_agent_file(
+    db: AsyncSession, agent_id: str, filename: str, user_id: str
+) -> AgentFileContent:
+    """Get file content for a given agent and filename. Auto-creates empty record on first access."""
+    stmt = select(Agent).where(Agent.id == agent_id, Agent.user_id == user_id)
+    agent = (await db.execute(stmt)).scalar_one_or_none()
+    if agent is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    files = agent.files if isinstance(agent.files, list) else []
+    if filename not in files:
+        raise HTTPException(status_code=404, detail="File not found in agent config")
+
+    file_stmt = select(AgentFile).where(
+        AgentFile.agent_id == agent_id, AgentFile.filename == filename
+    )
+    row = (await db.execute(file_stmt)).scalar_one_or_none()
+    if row is None:
+        row = AgentFile(agent_id=agent_id, filename=filename, content="")
+        db.add(row)
+        await db.flush()
+
+    return AgentFileContent(
+        filename=row.filename,
+        content=row.content or "",
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+async def save_agent_file(
+    db: AsyncSession, agent_id: str, filename: str, content: str, user_id: str
+) -> AgentFileContent:
+    """Save file content for a given agent and filename (upsert)."""
+    stmt = select(Agent).where(Agent.id == agent_id, Agent.user_id == user_id)
+    agent = (await db.execute(stmt)).scalar_one_or_none()
+    if agent is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    files = agent.files if isinstance(agent.files, list) else []
+    if filename not in files:
+        raise HTTPException(status_code=404, detail="File not found in agent config")
+
+    file_stmt = select(AgentFile).where(
+        AgentFile.agent_id == agent_id, AgentFile.filename == filename
+    )
+    row = (await db.execute(file_stmt)).scalar_one_or_none()
+    if row is None:
+        row = AgentFile(agent_id=agent_id, filename=filename, content=content)
+        db.add(row)
+    else:
+        row.content = content
+
+    await db.flush()
+    return AgentFileContent(
+        filename=row.filename,
+        content=row.content or "",
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )

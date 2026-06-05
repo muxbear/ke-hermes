@@ -48,3 +48,22 @@ class AgentListResponse(BaseModel):
     """List of agents."""
 
     agents: list[AgentInfo]
+
+
+class AgentFileContent(BaseModel):
+    """File content record for an agent config file."""
+
+    filename: str
+    content: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        """Pydantic config for ORM model compatibility."""
+        from_attributes = True
+
+
+class AgentFileUpdateRequest(BaseModel):
+    """Request body for updating file content."""
+
+    content: str

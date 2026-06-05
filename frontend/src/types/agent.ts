@@ -23,6 +23,14 @@ export interface AgentCreateRequest {
   parentId?: string
 }
 
+/** 文件内容 */
+export interface AgentFileContent {
+  filename: string
+  content: string
+  createdAt: string
+  updatedAt: string
+}
+
 /** 配置项类型 */
 export type ConfigType = 'tool' | 'skill' | 'prompt' | 'subagent' | 'file'
 

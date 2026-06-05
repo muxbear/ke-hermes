@@ -1,4 +1,5 @@
 from db.models.agent import Agent
+from db.models.agent_file import AgentFile
 from db.models.ai_model import AIModel
 from db.models.conversation import Conversation
 from db.models.login_record import LoginRecord
@@ -11,6 +12,7 @@ from db.models.user_oauth import UserOAuth
 
 __all__ = [
     "Agent",
+    "AgentFile",
     "AIModel",
     "Conversation",
     "LoginRecord",

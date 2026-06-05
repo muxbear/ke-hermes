@@ -11,11 +11,13 @@ import {
   Pause,
   ChevronRight,
 } from 'lucide-vue-next'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import type { Agent, ConfigType } from '@/types/agent'
 import { CONFIG_TYPE_MAP, STATUS_LABELS } from '@/types/agent'
+import { useAgentStore } from '@/stores/agent'
+import MarkdownEditor from '@/components/agent/MarkdownEditor.vue'
 
-defineProps<{
+const props = defineProps<{
   agent: Agent
   agents: Agent[]
 }>()
@@ -25,9 +27,53 @@ const emit = defineEmits<{
   (e: 'remove-config', type: ConfigType, value: string): void
   (e: 'toggle-status'): void
   (e: 'select-agent', id: string): void
+  (e: 'save-file-content', filename: string, content: string): void
 }>()
 
+const agentStore = useAgentStore()
 const activeTab = ref<ConfigType>('file')
+const selectedFile = ref<string | null>(null)
+const editContent = ref('')
+
+// Watch store for content changes
+watch(
+  () => agentStore.currentFileContent,
+  (val) => {
+    if (val) {
+      editContent.value = val.content
+    }
+  },
+)
+
+// Reset editor when agent changes
+watch(
+  () => props.agent.id,
+  () => {
+    selectedFile.value = null
+    editContent.value = ''
+    agentStore.clearFileContent()
+  },
+)
+
+function selectFile(filename: string) {
+  selectedFile.value = filename
+  agentStore.fetchFileContent(props.agent.id, filename)
+}
+
+function handleSave(content: string) {
+  if (selectedFile.value) {
+    emit('save-file-content', selectedFile.value, content)
+  }
+}
+
+function handleRemoveFile(filename: string) {
+  if (selectedFile.value === filename) {
+    selectedFile.value = null
+    editContent.value = ''
+    agentStore.clearFileContent()
+  }
+  emit('remove-config', 'file', filename)
+}
 
 const activeSection = computed(() =>
   configSections.find((s) => s.type === activeTab.value) ?? configSections[0],
@@ -158,8 +204,71 @@ function getStatusColor(status: string): string {
 
     <!-- Config Sections -->
     <div class="config-sections">
-      <!-- Active tab section -->
-      <div class="config-section">
+      <!-- Files tab: split layout -->
+      <template v-if="activeTab === 'file'">
+        <!-- File selector -->
+        <div class="file-selector">
+          <div class="section-header">
+            <div class="section-title-row">
+              <div class="section-icon" :style="{ background: activeSection.iconBg }">
+                <component :is="activeSection.icon" :size="16" />
+              </div>
+              <div>
+                <h3 class="section-label">{{ activeSection.label }}</h3>
+                <span class="section-count">
+                  {{ agent.files?.length ?? 0 }} 个已配置
+                </span>
+              </div>
+            </div>
+            <button
+              class="add-btn section--yellow"
+              @click="emit('add-config', 'file')"
+            >
+              <Plus :size="13" />
+              添加
+            </button>
+          </div>
+
+          <div class="tags-wrap">
+            <template v-if="agent.files && agent.files.length > 0">
+              <span
+                v-for="item in agent.files"
+                :key="item"
+                class="config-tag section--yellow"
+                :class="{ 'tag-selected': selectedFile === item }"
+                @click="selectFile(item)"
+              >
+                <FileText :size="12" class="tag-icon" />
+                {{ item }}
+                <button
+                  class="tag-delete"
+                  @click.stop="handleRemoveFile(item)"
+                >
+                  <Trash2 :size="11" />
+                </button>
+              </span>
+            </template>
+            <div v-else class="empty-section">
+              <FileText :size="20" class="empty-icon" />
+              <p>暂无文件</p>
+              <span class="empty-hint">点击上方"添加"按钮</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Markdown Editor -->
+        <div class="file-editor-wrap">
+          <MarkdownEditor
+            :content="editContent"
+            :filename="selectedFile"
+            :loading="agentStore.fileLoading"
+            @save="handleSave"
+          />
+        </div>
+      </template>
+
+      <!-- Other tabs: standard tag layout -->
+      <div v-else class="config-section">
         <div class="section-header">
           <div class="section-title-row">
             <div class="section-icon" :style="{ background: activeSection.iconBg }">
@@ -403,6 +512,28 @@ function getStatusColor(status: string): string {
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+/* ---- File selector ---- */
+.file-selector {
+  flex-shrink: 0;
+}
+
+/* ---- Tag selected state ---- */
+.config-tag.tag-selected {
+  border-color: #eab308 !important;
+  background: rgba(234, 179, 8, 0.12) !important;
+  cursor: pointer;
+}
+
+.file-selector .config-tag {
+  cursor: pointer;
+}
+
+/* ---- File editor wrap ---- */
+.file-editor-wrap {
+  flex: 1;
+  min-height: 300px;
 }
 
 .config-section {

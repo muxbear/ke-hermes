@@ -5,6 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.agents.schemas import (
     AgentConfigRequest,
     AgentCreateRequest,
+    AgentFileContent,
+    AgentFileUpdateRequest,
     AgentInfo,
     AgentListResponse,
 )
@@ -14,8 +16,10 @@ from api.agents.service import (
     create_agent,
     delete_agent,
     get_agent,
+    get_agent_file,
     list_agents,
     remove_agent_config,
+    save_agent_file,
     toggle_agent_status,
 )
 from api.deps import get_current_user_id, get_db
@@ -146,6 +150,41 @@ async def agent_remove_config(
     """移除代理的配置项。对于子代理类型，会删除子代理。"""  # noqa: D415
     try:
         result = await remove_agent_config(db, agent_id, req, user_id)
+        return ok(result)
+    except Exception as e:
+        if hasattr(e, "status_code"):
+            return error(e.status_code, e.detail)
+        raise
+
+
+@router.get("/{agent_id}/files/{filename:path}", response_model=ApiResponse[AgentFileContent])
+async def agent_get_file(
+    agent_id: str,
+    filename: str,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """获取代理文件内容。"""  # noqa: D415
+    try:
+        result = await get_agent_file(db, agent_id, filename, user_id)
+        return ok(result)
+    except Exception as e:
+        if hasattr(e, "status_code"):
+            return error(e.status_code, e.detail)
+        raise
+
+
+@router.put("/{agent_id}/files/{filename:path}", response_model=ApiResponse[AgentFileContent])
+async def agent_save_file(
+    agent_id: str,
+    filename: str,
+    req: AgentFileUpdateRequest,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """保存代理文件内容。"""  # noqa: D415
+    try:
+        result = await save_agent_file(db, agent_id, filename, req.content, user_id)
         return ok(result)
     except Exception as e:
         if hasattr(e, "status_code"):

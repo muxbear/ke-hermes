@@ -43,6 +43,7 @@ declare module 'vue' {
     LoginCard: typeof import('./src/components/auth/LoginCard.vue')['default']
     LoginTabs: typeof import('./src/components/auth/LoginTabs.vue')['default']
     MainLayout: typeof import('./src/components/MainLayout.vue')['default']
+    MarkdownEditor: typeof import('./src/components/agent/MarkdownEditor.vue')['default']
     McpCard: typeof import('./src/components/mcp/McpCard.vue')['default']
     MessageItem: typeof import('./src/components/MessageItem.vue')['default']
     MessageList: typeof import('./src/components/MessageList.vue')['default']

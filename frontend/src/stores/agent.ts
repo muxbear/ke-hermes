@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Agent, ConfigType } from '@/types/agent'
+import type { Agent, AgentFileContent, ConfigType } from '@/types/agent'
 import * as agentApi from '@/services/agentApi'
 
 export const useAgentStore = defineStore('agent', () => {
@@ -11,6 +11,11 @@ export const useAgentStore = defineStore('agent', () => {
   const error = ref<string | null>(null)
   const searchQuery = ref('')
   const expandedIds = ref<Set<string>>(new Set())
+
+  // File content state
+  const currentFileContent = ref<AgentFileContent | null>(null)
+  const fileLoading = ref(false)
+  const selectedFilename = ref<string | null>(null)
 
   /* ---------- computed ---------- */
   const selectedAgent = computed(() =>
@@ -163,6 +168,33 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
+  /* ---------- file content actions ---------- */
+  async function fetchFileContent(agentId: string, filename: string) {
+    fileLoading.value = true
+    selectedFilename.value = filename
+    try {
+      currentFileContent.value = await agentApi.fetchFileContent(agentId, filename)
+    } catch (err: unknown) {
+      currentFileContent.value = null
+      throw err instanceof Error ? err : new Error('获取文件内容失败')
+    } finally {
+      fileLoading.value = false
+    }
+  }
+
+  async function saveFileContent(agentId: string, filename: string, content: string) {
+    try {
+      currentFileContent.value = await agentApi.saveFileContent(agentId, filename, content)
+    } catch (err: unknown) {
+      throw err instanceof Error ? err : new Error('保存文件内容失败')
+    }
+  }
+
+  function clearFileContent() {
+    currentFileContent.value = null
+    selectedFilename.value = null
+  }
+
   return {
     agents,
     selectedAgentId,
@@ -186,5 +218,12 @@ export const useAgentStore = defineStore('agent', () => {
     addConfig,
     removeConfig,
     createSubAgent,
+    // file content
+    currentFileContent,
+    fileLoading,
+    selectedFilename,
+    fetchFileContent,
+    saveFileContent,
+    clearFileContent,
   }
 })
