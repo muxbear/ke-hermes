@@ -1,3 +1,13 @@
+/** 技能简要信息（嵌入在 Agent 中） */
+export interface SkillBrief {
+  id: string
+  name: string
+  description: string
+  category: string
+  icon: string
+  enabled: boolean
+}
+
 /** 代理实体 */
 export interface Agent {
   id: string
@@ -5,7 +15,7 @@ export interface Agent {
   type: 'main' | 'sub'
   status: 'active' | 'inactive' | 'error'
   tools: string[]
-  skills: string[]
+  skills: SkillBrief[]
   prompts: string[]
   files: string[]
   subAgents?: string[]
@@ -44,8 +54,8 @@ export interface AgentFileContent {
   updatedAt: string
 }
 
-/** 配置项类型 */
-export type ConfigType = 'tool' | 'skill' | 'prompt' | 'subagent' | 'file'
+/** 配置项类型 (技能不再走通用 config 流程) */
+export type ConfigType = 'tool' | 'prompt' | 'subagent' | 'file'
 
 /** 状态中文标签 */
 export const STATUS_LABELS: Record<string, string> = {
@@ -60,7 +70,6 @@ export const CONFIG_TYPE_MAP: Record<
   { label: string; color: string; bgClass: string }
 > = {
   tool: { label: '工具', color: '#3b82f6', bgClass: 'config--blue' },
-  skill: { label: '技能', color: '#8b5cf6', bgClass: 'config--purple' },
   prompt: { label: '提示词', color: '#22c55e', bgClass: 'config--green' },
   subagent: { label: '子智能体', color: '#f97316', bgClass: 'config--orange' },
   file: { label: '文件', color: '#eab308', bgClass: 'config--yellow' },

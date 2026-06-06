@@ -77,7 +77,7 @@ async def init_graph():
 
     # 创建子代理
     subagents = await create_subagents()
-    logger.info(f"从配置中加载到 {len(subagents)} 个子智能体，具体是：{subagents}")
+    logger.info(f"从配置中加载到 {len(subagents)} 个子智能体。")
     
     # 创建沙盒
     sandbox = create_sandboxsync()

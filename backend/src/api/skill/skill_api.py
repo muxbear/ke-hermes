@@ -42,7 +42,7 @@ async def upload_skills(
     每个成功安装的 skill 入库到 skills 表。
     """  # noqa: D415
     try:
-        result = await process_skills_upload(file, db, user_id)
+        result = await process_skills_upload(file, db)
         return ok(result)
     except Exception as e:
         if hasattr(e, "status_code"):
@@ -55,12 +55,13 @@ async def skill_list(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页条数"),
     category: str | None = Query(None, description="分类筛选"),
+    enabled: bool | None = Query(None, description="启用状态筛选"),
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
     """分页列出所有已入库的技能，按上传时间倒序排列。"""  # noqa: D415
     try:
-        result = await list_skills(db, page, page_size, category)
+        result = await list_skills(db, page, page_size, category, enabled)
         return ok(result)
     except Exception as e:
         if hasattr(e, "status_code"):
@@ -73,12 +74,14 @@ async def skill_search(
     name: str = Query(..., min_length=1, description="技能名称关键词"),
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页条数"),
+    category: str | None = Query(None, description="分类筛选"),
+    enabled: bool | None = Query(None, description="启用状态筛选"),
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """按技能名称模糊搜索已入库的技能，支持分页。"""  # noqa: D415
+    """按技能名称模糊搜索已入库的技能，支持分页、分类和状态筛选。"""  # noqa: D415
     try:
-        result = await search_skills(db, name, page, page_size)
+        result = await search_skills(db, name, page, page_size, category, enabled)
         return ok(result)
     except Exception as e:
         if hasattr(e, "status_code"):
@@ -94,7 +97,7 @@ async def skill_create(
 ):
     """手动创建单个技能，写入 SKILL.md 并入库。"""  # noqa: D415
     try:
-        result = await create_skill(db, req, user_id)
+        result = await create_skill(db, req)
         return ok(result)
     except Exception as e:
         if hasattr(e, "status_code"):

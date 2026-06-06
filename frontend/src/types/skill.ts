@@ -12,7 +12,6 @@ export interface Skill {
   source: string
   license: string
   validation_errors: string
-  user_id: string | null
   created_at: string
   updated_at: string
 }
@@ -34,6 +33,13 @@ export const CATEGORY_LABELS: Record<string, string> = {
   analysis: '分析',
   tools: '工具',
   custom: '自定义',
+}
+
+/** 来源中文映射 */
+export const SOURCE_LABELS: Record<string, string> = {
+  builtin: '内置',
+  local: '本地上传',
+  clawhub: 'ClawHub',
 }
 
 /** 分类筛选选项 */

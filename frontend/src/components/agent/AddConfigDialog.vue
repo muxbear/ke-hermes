@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { X, Zap, Sparkles, Clock, FileText, Users } from 'lucide-vue-next'
+import { X, Zap, Clock, FileText, Users } from 'lucide-vue-next'
 import type { ConfigType } from '@/types/agent'
 import { CONFIG_TYPE_MAP } from '@/types/agent'
 
@@ -24,7 +24,6 @@ const config = computed(() => CONFIG_TYPE_MAP[props.type])
 const iconComponent = computed(() => {
   switch (props.type) {
     case 'tool': return Zap
-    case 'skill': return Sparkles
     case 'file': return FileText
     case 'prompt': return Clock
     case 'subagent': return Users
@@ -34,7 +33,6 @@ const iconComponent = computed(() => {
 const placeholders = computed(() => {
   switch (props.type) {
     case 'tool': return { name: '例如: web_search, file_reader', desc: '描述此工具的功能和用途...' }
-    case 'skill': return { name: '例如: code_analysis, debugging', desc: '描述此技能的能力和应用场景...' }
     case 'file': return { name: '例如: config.yaml, data.json', desc: '描述此文件的用途和内容...' }
     case 'prompt': return { name: '例如: 每天执行一次, 每小时检查', desc: '输入 Cron 表达式和执行任务...' }
     case 'subagent': return { name: '例如: 数据处理子智能体', desc: '描述此子智能体的职责和功能...' }

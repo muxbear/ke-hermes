@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Agent, AgentFileContent, AgentUpdateRequest, ConfigType } from '@/types/agent'
+import type { Agent, AgentFileContent, AgentUpdateRequest, ConfigType, SkillBrief } from '@/types/agent'
 import * as agentApi from '@/services/agentApi'
 
 export const useAgentStore = defineStore('agent', () => {
@@ -171,6 +171,37 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
+  async function addSkill(skillId: string) {
+    const targetId = selectedAgentId.value
+    if (!targetId) throw new Error('未选中代理')
+
+    try {
+      const updatedSkills = await agentApi.addAgentSkill(targetId, skillId)
+      // Patch skills in-place
+      const agent = agents.value.find((a) => a.id === targetId)
+      if (agent) {
+        agent.skills = updatedSkills
+      }
+    } catch (err: unknown) {
+      throw err instanceof Error ? err : new Error('添加技能失败')
+    }
+  }
+
+  async function removeSkill(skillId: string) {
+    const targetId = selectedAgentId.value
+    if (!targetId) throw new Error('未选中代理')
+
+    try {
+      await agentApi.removeAgentSkill(targetId, skillId)
+      const agent = agents.value.find((a) => a.id === targetId)
+      if (agent) {
+        agent.skills = agent.skills.filter((s: SkillBrief) => s.id !== skillId)
+      }
+    } catch (err: unknown) {
+      throw err instanceof Error ? err : new Error('移除技能失败')
+    }
+  }
+
   async function createSubAgent(name: string, description?: string, providerId?: string, modelId?: string) {
     const main = mainAgent.value
     if (!main) throw new Error('主智能体不存在，无法创建子智能体')
@@ -252,6 +283,8 @@ export const useAgentStore = defineStore('agent', () => {
     deleteAgent,
     addConfig,
     removeConfig,
+    addSkill,
+    removeSkill,
     createSubAgent,
     updateAgent,
     updateConfig,

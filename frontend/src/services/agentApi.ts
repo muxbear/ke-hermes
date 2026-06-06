@@ -1,7 +1,7 @@
 /**
  * Agent API — 后端真实接口调用
  */
-import type { Agent, AgentCreateRequest, AgentFileContent, AgentUpdateRequest, ConfigType } from '@/types/agent'
+import type { Agent, AgentCreateRequest, AgentFileContent, AgentUpdateRequest, ConfigType, SkillBrief } from '@/types/agent'
 import request from '@/services/request'
 
 /* ------------------------------------------------------------------ */
@@ -17,7 +17,7 @@ function toAgent(raw: Record<string, unknown>): Agent {
     status: (raw.status as string) || 'inactive',
     description: (raw.description as string) || '',
     tools: (raw.tools as string[]) || [],
-    skills: (raw.skills as string[]) || [],
+    skills: (raw.skills as SkillBrief[]) || [],
     prompts: (raw.prompts as string[]) || [],
     files: (raw.files as string[]) || [],
     subAgents: (raw.sub_agents as string[]) || [],
@@ -158,4 +158,22 @@ export async function fetchFileDescriptions(
     map[item.filename] = item.description
   }
   return map
+}
+
+/* ------------------------------------------------------------------ */
+/*  智能体-技能关联 API                                                   */
+/* ------------------------------------------------------------------ */
+
+export async function fetchAgentSkills(agentId: string): Promise<SkillBrief[]> {
+  const res = await request.get(`/agents/${agentId}/skills`)
+  return (res.data.data as SkillBrief[]) || []
+}
+
+export async function addAgentSkill(agentId: string, skillId: string): Promise<SkillBrief[]> {
+  const res = await request.post(`/agents/${agentId}/skills`, { skill_id: skillId })
+  return (res.data.data as SkillBrief[]) || []
+}
+
+export async function removeAgentSkill(agentId: string, skillId: string): Promise<void> {
+  await request.delete(`/agents/${agentId}/skills/${skillId}`)
 }

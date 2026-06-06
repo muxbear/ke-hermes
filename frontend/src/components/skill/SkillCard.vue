@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { Pencil, Trash2, CircleCheck, CircleAlert } from 'lucide-vue-next'
 import type { Skill } from '@/types/skill'
-import { CATEGORY_LABELS } from '@/types/skill'
+import { CATEGORY_LABELS, SOURCE_LABELS } from '@/types/skill'
 import { getSkillIcon } from './iconMap'
 
 const props = defineProps<{ skill: Skill }>()
@@ -15,6 +15,7 @@ const emit = defineEmits<{
 
 const iconComponent = computed(() => getSkillIcon(props.skill.icon))
 const categoryLabel = computed(() => CATEGORY_LABELS[props.skill.category] || props.skill.category)
+const sourceLabel = computed(() => SOURCE_LABELS[props.skill.source] || props.skill.source || '未知')
 
 interface ValidationError {
   field: string
@@ -72,7 +73,12 @@ const validationTooltip = computed(() => {
     </p>
 
     <div class="card-footer">
-      <el-tag size="small" type="info">{{ categoryLabel }}</el-tag>
+      <div class="card-tags">
+        <el-tag size="small" type="info">{{ categoryLabel }}</el-tag>
+        <el-tag size="small" type="info" v-if="skill.source">
+          {{ sourceLabel }}
+        </el-tag>
+      </div>
       <div v-if="!skill.is_builtin" class="card-actions">
         <el-button text size="small" @click.stop="emit('edit', skill)">
           <Pencil :size="14" />
@@ -161,6 +167,12 @@ const validationTooltip = computed(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.card-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .card-actions {

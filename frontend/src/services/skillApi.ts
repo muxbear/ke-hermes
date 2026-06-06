@@ -31,6 +31,7 @@ export async function fetchSkills(params?: {
   category?: string
   page?: number
   page_size?: number
+  enabled?: boolean
 }): Promise<SkillListResponse> {
   const res = await instance.get('/skill/list', { params })
   return res.data.data as SkillListResponse
@@ -78,7 +79,7 @@ export async function uploadSkills(file: File): Promise<SkillsUploadResponse> {
 
 export async function searchSkills(
   name: string,
-  params?: { page?: number; page_size?: number },
+  params?: { page?: number; page_size?: number; category?: string; enabled?: boolean },
 ): Promise<SkillListResponse> {
   const res = await instance.get('/skill/search', { params: { name, ...params } })
   return res.data.data as SkillListResponse

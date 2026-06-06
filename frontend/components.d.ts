@@ -60,6 +60,7 @@ declare module 'vue' {
     SideMenu: typeof import('./src/components/SideMenu.vue')['default']
     SkillCard: typeof import('./src/components/skill/SkillCard.vue')['default']
     SkillDialog: typeof import('./src/components/skill/SkillDialog.vue')['default']
+    SkillSelectDialog: typeof import('./src/components/agent/SkillSelectDialog.vue')['default']
     SlidePuzzle: typeof import('./src/components/captcha/SlidePuzzle.vue')['default']
     TopBar: typeof import('./src/components/TopBar.vue')['default']
   }

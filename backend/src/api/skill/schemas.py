@@ -46,7 +46,6 @@ class SkillInfo(BaseModel):
     enabled: bool = True
     is_builtin: bool = False
     validation_errors: str = ""
-    user_id: str
     created_at: datetime
     updated_at: datetime
 
@@ -71,6 +70,7 @@ class SkillUpdateRequest(BaseModel):
     description: str | None = None
     icon: str | None = None
     category: str | None = None
+    source: str | None = None
     prompt: str | None = None
     enabled: bool | None = None
 

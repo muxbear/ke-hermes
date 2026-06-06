@@ -176,12 +176,15 @@ def validate_skill_directory(
     if "metadata" in fm:
         meta = fm["metadata"]
         if not isinstance(meta, dict) or not all(
-            isinstance(k, str) and isinstance(v, str) for k, v in meta.items()
+            isinstance(k, str) and (
+                isinstance(v, str) or (isinstance(v, (int, float)) and not isinstance(v, bool))
+            )
+            for k, v in meta.items()
         ):
             errors.append(
                 SkillValidationError(
                     field="metadata",
-                    message="metadata must be a string-to-string map",
+                    message="metadata must be a string-to-string or string-to-number map",
                 )
             )
     if "allowed-tools" in fm:
@@ -337,7 +340,7 @@ def _get_skill_name(skill_path: str) -> str:
 
 
 async def process_skills_upload(
-    file: UploadFile, db: AsyncSession, user_id: str
+    file: UploadFile, db: AsyncSession
 ) -> SkillsUploadResponse:
     """Upload, extract, validate, install, and persist skills from a compressed archive."""
     content = await file.read()
@@ -391,7 +394,6 @@ async def process_skills_upload(
                     source="local",
                     description=description,
                     license=license_,
-                    user_id=user_id,
                     validation_errors=errors_json,
                 )
             )
@@ -417,9 +419,9 @@ async def process_skills_upload(
 
 
 async def list_skills(
-    db: AsyncSession, page: int = 1, page_size: int = 20, category: str | None = None
+    db: AsyncSession, page: int = 1, page_size: int = 20, category: str | None = None, enabled: bool | None = None
 ) -> SkillListResponse:
-    """List skills with pagination and optional category filter."""
+    """List skills with pagination and optional category/enabled filters."""
     from sqlalchemy import func, select
 
     offset = max(0, (page - 1) * page_size)
@@ -428,6 +430,8 @@ async def list_skills(
     conditions = []
     if category:
         conditions.append(Skill.category == category)
+    if enabled is not None:
+        conditions.append(Skill.enabled == enabled)
 
     total_stmt = select(func.count()).select_from(Skill)
     if conditions:
@@ -448,21 +452,32 @@ async def list_skills(
 
 
 async def search_skills(
-    db: AsyncSession, name: str, page: int = 1, page_size: int = 20
+    db: AsyncSession,
+    name: str,
+    page: int = 1,
+    page_size: int = 20,
+    category: str | None = None,
+    enabled: bool | None = None,
 ) -> SkillListResponse:
-    """Fuzzy-search skills by name, with pagination."""
+    """Fuzzy-search skills by name, with pagination and optional filters."""
     from sqlalchemy import func, select
 
     offset = max(0, (page - 1) * page_size)
     page_size = max(1, min(page_size, 100))
     pattern = f"%{name}%"
 
-    total_stmt = select(func.count()).select_from(Skill).where(Skill.name.like(pattern))
+    conditions = [Skill.name.like(pattern)]
+    if category:
+        conditions.append(Skill.category == category)
+    if enabled is not None:
+        conditions.append(Skill.enabled == enabled)
+
+    total_stmt = select(func.count()).select_from(Skill).where(*conditions)
     total = (await db.execute(total_stmt)).scalar() or 0
 
     stmt = (
         select(Skill)
-        .where(Skill.name.like(pattern))
+        .where(*conditions)
         .order_by(Skill.created_at.desc())
         .offset(offset)
         .limit(page_size)
@@ -571,7 +586,7 @@ async def toggle_skill_enabled(
 
 
 async def create_skill(
-    db: AsyncSession, req: SkillCreateRequest, user_id: str
+    db: AsyncSession, req: SkillCreateRequest
 ) -> SkillInfo:
     """Create a single skill manually — writes SKILL.md and inserts DB record."""
     from sqlalchemy import select
@@ -600,9 +615,73 @@ async def create_skill(
         prompt=req.prompt or "",
         enabled=True,
         is_builtin=False,
-        user_id=user_id,
     )
     db.add(skill)
     logger.info("Created skill '%s' (manual)", req.name)
 
     return SkillInfo.model_validate(skill)
+
+
+BUILTIN_SKILLS = [
+    {
+        "name": "网络搜索",
+        "description": "实时搜索互联网信息，获取最新数据",
+        "icon": "Globe",
+        "category": "search",
+        "prompt": "你是一个网络搜索专家，能够实时搜索互联网获取最新数据和信息。",
+    },
+    {
+        "name": "代码解释器",
+        "description": "在安全沙箱中执行代码，支持数据分析",
+        "icon": "Code2",
+        "category": "code",
+        "prompt": "你是一个代码执行专家，能够在安全沙箱环境中执行代码并返回结果。",
+    },
+    {
+        "name": "图像生成",
+        "description": "根据文本描述生成高质量图像",
+        "icon": "Image",
+        "category": "creative",
+        "prompt": "你是一个图像生成专家，能够根据文本描述创作高质量的图像作品。",
+    },
+    {
+        "name": "数据分析",
+        "description": "处理结构化数据，生成统计报告和图表",
+        "icon": "BarChart3",
+        "category": "analysis",
+        "prompt": "你是一个数据分析专家，能够处理结构化数据并生成统计报告和可视化图表。",
+    },
+    {
+        "name": "文件管理",
+        "description": "读写多种格式文件，支持批量处理",
+        "icon": "FolderOpen",
+        "category": "tools",
+        "prompt": "你是一个文件管理专家，能够读写多种格式的文件并支持批量处理操作。",
+    },
+]
+
+
+async def seed_builtin_skills(db: AsyncSession) -> None:
+    """Seed builtin skills if the skills table is empty. Idempotent."""
+    from sqlalchemy import func, select
+
+    count = (await db.execute(select(func.count()).select_from(Skill))).scalar() or 0
+    if count > 0:
+        logger.info("Skills table has %d rows, skipping seed", count)
+        return
+
+    for s in BUILTIN_SKILLS:
+        skill = Skill(
+            name=s["name"],
+            description=s["description"],
+            icon=s["icon"],
+            category=s["category"],
+            prompt=s["prompt"],
+            enabled=True,
+            is_builtin=True,
+            valid=True,
+            source="builtin",
+        )
+        db.add(skill)
+
+    logger.info("Seeded %d builtin skills", len(BUILTIN_SKILLS))

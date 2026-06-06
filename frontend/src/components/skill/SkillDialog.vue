@@ -3,6 +3,7 @@ import { ref, watch, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { X, Search, Download, ChevronDown, Upload, Check, AlertTriangle } from 'lucide-vue-next'
 import type { Skill, SkillCreateRequest } from '@/types/skill'
+import { CATEGORY_LABELS } from '@/types/skill'
 import { useSkillStore } from '@/stores/skill'
 
 const props = defineProps<{
@@ -264,17 +265,34 @@ function handleUploadImport() {
 // ============================================================
 //  Tab 3: Manual Create
 // ============================================================
-const form = ref<SkillCreateRequest>({
-  name: '', description: '', icon: 'Zap', category: 'custom', prompt: '',
+const categoryOptions = computed(() =>
+  Object.entries(CATEGORY_LABELS).map(([key, label]) => ({ key, label })),
+)
+
+const sourceOptions = [
+  { key: 'local', label: '本地上传' },
+  { key: 'builtin', label: '内置' },
+  { key: 'clawhub', label: 'ClawHub' },
+]
+
+interface EditFormData {
+  name: string; description: string; icon: string; category: string; source: string; prompt: string
+}
+
+const form = ref<EditFormData>({
+  name: '', description: '', icon: 'Zap', category: 'custom', source: 'local', prompt: '',
 })
 
 watch(
   () => props.skill,
   (s) => {
     if (s) {
-      form.value = { name: s.name, description: s.description, icon: s.icon, category: s.category, prompt: s.prompt }
+      form.value = {
+        name: s.name, description: s.description, icon: s.icon,
+        category: s.category, source: s.source || 'local', prompt: s.prompt,
+      }
     } else {
-      form.value = { name: '', description: '', icon: 'Zap', category: 'custom', prompt: '' }
+      form.value = { name: '', description: '', icon: 'Zap', category: 'custom', source: 'local', prompt: '' }
     }
   },
   { immediate: true },
@@ -282,7 +300,15 @@ watch(
 
 function handleManualSubmit() {
   if (!form.value.name.trim()) { ElMessage.warning('请输入技能名称'); return }
-  emit('save', { ...form.value })
+  const data: SkillCreateRequest & { source?: string } = {
+    name: form.value.name.trim(),
+    description: form.value.description,
+    icon: form.value.icon,
+    category: form.value.category,
+    prompt: form.value.prompt,
+    source: form.value.source,
+  }
+  emit('save', data)
 }
 
 // ============================================================
@@ -558,12 +584,19 @@ function totalPages() {
                 </div>
                 <div class="field">
                   <label class="field-label">分类</label>
-                  <input
-                    v-model="form.category"
-                    type="text"
-                    class="text-input"
-                    placeholder="选择或输入分类标签"
-                  />
+                  <select v-model="form.category" class="text-input">
+                    <option v-for="opt in categoryOptions" :key="opt.key" :value="opt.key">
+                      {{ opt.label }}
+                    </option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label class="field-label">来源</label>
+                  <select v-model="form.source" class="text-input">
+                    <option v-for="opt in sourceOptions" :key="opt.key" :value="opt.key">
+                      {{ opt.label }}
+                    </option>
+                  </select>
                 </div>
                 <div class="field">
                   <label class="field-label">系统提示词</label>

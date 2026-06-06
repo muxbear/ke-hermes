@@ -25,7 +25,6 @@ class Agent(Base):
     description: Mapped[str] = mapped_column(Text, default="", comment="代理描述")
     parent_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True, comment="父代理ID (NULL表示主代理)")
     tools: Mapped[list] = mapped_column(JSON, default=list, comment="工具名称列表")
-    skills: Mapped[list] = mapped_column(JSON, default=list, comment="技能名称列表")
     prompts: Mapped[list] = mapped_column(JSON, default=list, comment="提示词/Cron Job 列表")
     files: Mapped[list] = mapped_column(JSON, default=list, comment="文件名称列表")
     provider_id: Mapped[str | None] = mapped_column(String(36), nullable=True, comment="关联的模型提供商ID")

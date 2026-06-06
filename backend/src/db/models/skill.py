@@ -24,7 +24,6 @@ class Skill(Base):
     prompt: Mapped[str] = mapped_column(Text, default="", comment="系统提示词")
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, comment="是否启用")
     is_builtin: Mapped[bool] = mapped_column(Boolean, default=False, comment="是否内置")
-    user_id: Mapped[str] = mapped_column(String(36), index=True, comment="上传用户ID")
     validation_errors: Mapped[str] = mapped_column(Text, default="", comment="校验错误详情JSON")
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), comment="上传时间")
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())

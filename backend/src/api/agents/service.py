@@ -6,6 +6,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.agents.schemas import (
+    AgentAddSkillRequest,
     AgentConfigRequest,
     AgentConfigUpdateRequest,
     AgentCreateRequest,
@@ -13,15 +14,17 @@ from api.agents.schemas import (
     AgentInfo,
     AgentListResponse,
     AgentUpdateRequest,
+    SkillBrief,
 )
 from db.models.agent import Agent
 from db.models.agent_file import AgentFile
+from db.models.agent_skill import AgentSkill
+from db.models.skill import Skill
 
 logger = logging.getLogger(__name__)
 
 CONFIG_TYPE_TO_COLUMN: dict[str, str] = {
     "tool": "tools",
-    "skill": "skills",
     "prompt": "prompts",
     "file": "files",
 }
@@ -31,7 +34,6 @@ DEFAULT_AGENT_FILES = [
     "USER.md", "HEARTBEAT.md", "MEMORY.md",
 ]
 DEFAULT_AGENT_TOOLS = ["web_search", "file_reader", "code_executor"]
-DEFAULT_AGENT_SKILLS = ["code_analysis", "debugging", "optimization"]
 
 
 async def _get_sub_agent_ids(db: AsyncSession, agent_id: str) -> list[str]:
@@ -41,7 +43,28 @@ async def _get_sub_agent_ids(db: AsyncSession, agent_id: str) -> list[str]:
     return list(rows)
 
 
-def _agent_to_info(agent: Agent, sub_agent_ids: list[str] | None = None) -> AgentInfo:
+async def _get_agent_skill_briefs(db: AsyncSession, agent_id: str) -> list[SkillBrief]:
+    """Query skills linked to an agent via the agent_skills junction table."""
+    stmt = (
+        select(Skill)
+        .join(AgentSkill, AgentSkill.skill_id == Skill.id)
+        .where(AgentSkill.agent_id == agent_id)
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+    return [
+        SkillBrief(
+            id=s.id,
+            name=s.name,
+            description=s.description,
+            category=s.category,
+            icon=s.icon,
+            enabled=s.enabled,
+        )
+        for s in rows
+    ]
+
+
+def _agent_to_info(agent: Agent, sub_agent_ids: list[str] | None = None, skills: list[SkillBrief] | None = None) -> AgentInfo:
     """Convert ORM Agent to AgentInfo response schema."""
     return AgentInfo(
         id=agent.id,
@@ -50,7 +73,7 @@ def _agent_to_info(agent: Agent, sub_agent_ids: list[str] | None = None) -> Agen
         status=agent.status,
         description=agent.description,
         tools=agent.tools if isinstance(agent.tools, list) else [],
-        skills=agent.skills if isinstance(agent.skills, list) else [],
+        skills=skills if skills is not None else [],
         prompts=agent.prompts if isinstance(agent.prompts, list) else [],
         files=agent.files if isinstance(agent.files, list) else [],
         sub_agents=sub_agent_ids if sub_agent_ids is not None else [],
@@ -81,7 +104,6 @@ async def list_agents(db: AsyncSession) -> AgentListResponse:
             status="active",
             description="负责整体任务协调和分发",
             tools=list(DEFAULT_AGENT_TOOLS),
-            skills=list(DEFAULT_AGENT_SKILLS),
             files=list(DEFAULT_AGENT_FILES),
             undeletable=True,
         )
@@ -95,7 +117,8 @@ async def list_agents(db: AsyncSession) -> AgentListResponse:
     agents_info: list[AgentInfo] = []
     for agent in rows:
         sub_ids = await _get_sub_agent_ids(db, agent.id)
-        agents_info.append(_agent_to_info(agent, sub_ids))
+        skills = await _get_agent_skill_briefs(db, agent.id)
+        agents_info.append(_agent_to_info(agent, sub_ids, skills))
 
     return AgentListResponse(agents=agents_info)
 
@@ -108,7 +131,8 @@ async def get_agent(db: AsyncSession, agent_id: str) -> AgentInfo:
         raise HTTPException(status_code=404, detail="Agent not found")
 
     sub_ids = await _get_sub_agent_ids(db, agent_id)
-    return _agent_to_info(row, sub_ids)
+    skills = await _get_agent_skill_briefs(db, agent_id)
+    return _agent_to_info(row, sub_ids, skills)
 
 
 async def create_agent(db: AsyncSession, req: AgentCreateRequest) -> AgentInfo:
@@ -188,7 +212,8 @@ async def toggle_agent_status(db: AsyncSession, agent_id: str) -> AgentInfo:
         agent.status = "active"
 
     sub_ids = await _get_sub_agent_ids(db, agent_id)
-    return _agent_to_info(agent, sub_ids)
+    skills = await _get_agent_skill_briefs(db, agent_id)
+    return _agent_to_info(agent, sub_ids, skills)
 
 
 async def clone_agent(db: AsyncSession, agent_id: str) -> AgentInfo:
@@ -218,7 +243,6 @@ async def clone_agent(db: AsyncSession, agent_id: str) -> AgentInfo:
         description=source.description,
         parent_id=source.parent_id,
         tools=list(source.tools) if isinstance(source.tools, list) else [],
-        skills=list(source.skills) if isinstance(source.skills, list) else [],
         prompts=list(source.prompts) if isinstance(source.prompts, list) else [],
         files=list(source.files) if isinstance(source.files, list) else [],
         provider_id=source.provider_id,
@@ -227,6 +251,12 @@ async def clone_agent(db: AsyncSession, agent_id: str) -> AgentInfo:
     )
     db.add(cloned)
     await db.flush()
+
+    # Clone agent_skills associations
+    skill_stmt = select(AgentSkill).where(AgentSkill.agent_id == agent_id)
+    skill_links = (await db.execute(skill_stmt)).scalars().all()
+    for link in skill_links:
+        db.add(AgentSkill(agent_id=cloned.id, skill_id=link.skill_id))
 
     # Clone file contents
     src_files = source.files if isinstance(source.files, list) else []
@@ -242,8 +272,9 @@ async def clone_agent(db: AsyncSession, agent_id: str) -> AgentInfo:
                 ))
 
     sub_ids = await _get_sub_agent_ids(db, cloned.id)
+    skills = await _get_agent_skill_briefs(db, cloned.id)
     logger.info("Cloned agent '%s' -> '%s'", source.name, cloned.name)
-    return _agent_to_info(cloned, sub_ids)
+    return _agent_to_info(cloned, sub_ids, skills)
 
 
 async def update_agent(db: AsyncSession, agent_id: str, req: AgentUpdateRequest) -> AgentInfo:
@@ -267,14 +298,15 @@ async def update_agent(db: AsyncSession, agent_id: str, req: AgentUpdateRequest)
 
     await db.flush()
     sub_ids = await _get_sub_agent_ids(db, agent_id)
+    skills = await _get_agent_skill_briefs(db, agent_id)
     logger.info("Updated agent '%s'", agent.name)
-    return _agent_to_info(agent, sub_ids)
+    return _agent_to_info(agent, sub_ids, skills)
 
 
 async def add_agent_config(
     db: AsyncSession, agent_id: str, req: AgentConfigRequest
 ) -> AgentInfo:
-    """Add a config item (tool/skill/prompt/file/subagent) to an agent."""
+    """Add a config item (tool/prompt/file/subagent) to an agent."""
     stmt = select(Agent).where(Agent.id == agent_id)
     agent = (await db.execute(stmt)).scalar_one_or_none()
     if agent is None:
@@ -318,7 +350,8 @@ async def add_agent_config(
 
     await db.flush()
     sub_ids = await _get_sub_agent_ids(db, agent_id)
-    return _agent_to_info(agent, sub_ids)
+    skills = await _get_agent_skill_briefs(db, agent_id)
+    return _agent_to_info(agent, sub_ids, skills)
 
 
 async def remove_agent_config(
@@ -350,7 +383,8 @@ async def remove_agent_config(
 
     await db.flush()
     sub_ids = await _get_sub_agent_ids(db, agent_id)
-    return _agent_to_info(agent, sub_ids)
+    skills = await _get_agent_skill_briefs(db, agent_id)
+    return _agent_to_info(agent, sub_ids, skills)
 
 
 async def update_agent_config(
@@ -399,7 +433,8 @@ async def update_agent_config(
 
     await db.flush()
     sub_ids = await _get_sub_agent_ids(db, agent_id)
-    return _agent_to_info(agent, sub_ids)
+    skills = await _get_agent_skill_briefs(db, agent_id)
+    return _agent_to_info(agent, sub_ids, skills)
 
 
 async def get_agent_file(
@@ -478,3 +513,64 @@ async def list_agent_file_descriptions(
     file_stmt = select(AgentFile).where(AgentFile.agent_id == agent_id)
     rows = (await db.execute(file_stmt)).scalars().all()
     return [{"filename": row.filename, "description": row.description or ""} for row in rows]
+
+
+# ── Agent-Skill relationship ──────────────────────────────────────────────
+
+
+async def get_agent_skills(
+    db: AsyncSession, agent_id: str
+) -> list[SkillBrief]:
+    """Get all skills linked to an agent."""
+    stmt = select(Agent).where(Agent.id == agent_id)
+    agent = (await db.execute(stmt)).scalar_one_or_none()
+    if agent is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    return await _get_agent_skill_briefs(db, agent_id)
+
+
+async def add_skill_to_agent(
+    db: AsyncSession, agent_id: str, req: AgentAddSkillRequest
+) -> list[SkillBrief]:
+    """Add a skill to an agent via the junction table."""
+    # Verify agent exists
+    stmt = select(Agent).where(Agent.id == agent_id)
+    agent = (await db.execute(stmt)).scalar_one_or_none()
+    if agent is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    # Verify skill exists
+    skill_stmt = select(Skill).where(Skill.id == req.skill_id)
+    skill = (await db.execute(skill_stmt)).scalar_one_or_none()
+    if skill is None:
+        raise HTTPException(status_code=404, detail="Skill not found")
+
+    # Check for duplicate
+    dup_stmt = select(AgentSkill).where(
+        AgentSkill.agent_id == agent_id, AgentSkill.skill_id == req.skill_id
+    )
+    dup = (await db.execute(dup_stmt)).scalar_one_or_none()
+    if dup is not None:
+        raise HTTPException(status_code=409, detail="Skill already added to this agent")
+
+    db.add(AgentSkill(agent_id=agent_id, skill_id=req.skill_id))
+    await db.flush()
+    logger.info("Added skill '%s' to agent '%s'", skill.name, agent.name)
+
+    return await _get_agent_skill_briefs(db, agent_id)
+
+
+async def remove_skill_from_agent(
+    db: AsyncSession, agent_id: str, skill_id: str
+) -> None:
+    """Remove a skill from an agent via the junction table."""
+    stmt = select(AgentSkill).where(
+        AgentSkill.agent_id == agent_id, AgentSkill.skill_id == skill_id
+    )
+    link = (await db.execute(stmt)).scalar_one_or_none()
+    if link is None:
+        raise HTTPException(status_code=404, detail="Skill not found on this agent")
+
+    await db.delete(link)
+    await db.flush()
+    logger.info("Removed skill '%s' from agent '%s'", skill_id, agent_id)

@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.agents.schemas import (
+    AgentAddSkillRequest,
     AgentConfigRequest,
     AgentConfigUpdateRequest,
     AgentCreateRequest,
@@ -11,17 +12,21 @@ from api.agents.schemas import (
     AgentInfo,
     AgentListResponse,
     AgentUpdateRequest,
+    SkillBrief,
 )
 from api.agents.service import (
     add_agent_config,
+    add_skill_to_agent,
     clone_agent,
     create_agent,
     delete_agent,
     get_agent,
     get_agent_file,
+    get_agent_skills,
     list_agent_file_descriptions,
     list_agents,
     remove_agent_config,
+    remove_skill_from_agent,
     save_agent_file,
     toggle_agent_status,
     update_agent,
@@ -228,6 +233,53 @@ async def agent_save_file(
     try:
         result = await save_agent_file(db, agent_id, filename, req.content)
         return ok(result)
+    except Exception as e:
+        if hasattr(e, "status_code"):
+            return error(e.status_code, e.detail)
+        raise
+
+
+@router.get("/{agent_id}/skills", response_model=ApiResponse[list[SkillBrief]])
+async def agent_skills_list(
+    agent_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """获取智能体的所有已关联技能。"""  # noqa: D415
+    try:
+        result = await get_agent_skills(db, agent_id)
+        return ok(result)
+    except Exception as e:
+        if hasattr(e, "status_code"):
+            return error(e.status_code, e.detail)
+        raise
+
+
+@router.post("/{agent_id}/skills", response_model=ApiResponse[list[SkillBrief]])
+async def agent_add_skill(
+    agent_id: str,
+    req: AgentAddSkillRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """为智能体添加一个技能关联。"""  # noqa: D415
+    try:
+        result = await add_skill_to_agent(db, agent_id, req)
+        return ok(result)
+    except Exception as e:
+        if hasattr(e, "status_code"):
+            return error(e.status_code, e.detail)
+        raise
+
+
+@router.delete("/{agent_id}/skills/{skill_id}", response_model=ApiResponse[None])
+async def agent_remove_skill(
+    agent_id: str,
+    skill_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """移除智能体的一个技能关联。"""  # noqa: D415
+    try:
+        await remove_skill_from_agent(db, agent_id, skill_id)
+        return ok(None, "Skill removed from agent")
     except Exception as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)

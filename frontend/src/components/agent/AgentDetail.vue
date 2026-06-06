@@ -14,7 +14,7 @@ import {
 } from 'lucide-vue-next'
 import { ref, computed, watch } from 'vue'
 import type { Agent, ConfigType } from '@/types/agent'
-import { CONFIG_TYPE_MAP, STATUS_LABELS } from '@/types/agent'
+import { STATUS_LABELS } from '@/types/agent'
 import { useAgentStore } from '@/stores/agent'
 import MarkdownEditor from '@/components/agent/MarkdownEditor.vue'
 import FileEditDialog from '@/components/agent/FileEditDialog.vue'
@@ -28,13 +28,15 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'add-config', type: ConfigType): void
   (e: 'remove-config', type: ConfigType, value: string): void
+  (e: 'add-skill'): void
+  (e: 'remove-skill', skillId: string): void
   (e: 'toggle-status'): void
   (e: 'select-agent', id: string): void
   (e: 'save-file-content', filename: string, content: string): void
 }>()
 
 const agentStore = useAgentStore()
-const activeTab = ref<ConfigType>('file')
+const activeTab = ref<ConfigType | 'skill'>('file')
 const selectedFile = ref<string | null>(null)
 const editContent = ref('')
 
@@ -122,7 +124,7 @@ const activeSection = computed(() =>
 
 /** 配置区域定义 */
 interface ConfigSection {
-  type: ConfigType
+  type: ConfigType | 'skill'
   label: string
   icon: typeof Zap
   colorClass: string
@@ -338,14 +340,45 @@ function getStatusColor(status: string): string {
           <button
             class="add-btn"
             :class="activeSection.colorClass"
-            @click="emit('add-config', activeSection.type)"
+            @click="activeTab === 'skill' ? emit('add-skill') : emit('add-config', activeSection.type as ConfigType)"
           >
             <Plus :size="13" />
             添加
           </button>
         </div>
 
-        <div class="tags-wrap">
+        <!-- Skills tab: render SkillBrief objects with tooltip -->
+        <div v-if="activeTab === 'skill'" class="tags-wrap">
+          <template v-if="agent.skills && agent.skills.length > 0">
+            <el-tooltip
+              v-for="skill in agent.skills"
+              :key="skill.id"
+              :content="skill.description || '暂无描述'"
+              placement="top"
+              :show-after="400"
+              :hide-after="0"
+            >
+              <span class="config-tag section--purple">
+                <Sparkles :size="12" class="tag-icon" />
+                {{ skill.name }}
+                <button
+                  class="tag-delete"
+                  @click.stop="emit('remove-skill', skill.id)"
+                >
+                  <Trash2 :size="11" />
+                </button>
+              </span>
+            </el-tooltip>
+          </template>
+          <div v-else class="empty-section">
+            <Sparkles :size="20" class="empty-icon" />
+            <p>暂无技能</p>
+            <span class="empty-hint">点击上方"添加"按钮从技能库中选择</span>
+          </div>
+        </div>
+
+        <!-- Generic config tags for non-skill tabs -->
+        <div v-else class="tags-wrap">
           <template v-if="agent[activeSection.key] && agent[activeSection.key].length > 0">
             <span
               v-for="item in agent[activeSection.key]"
@@ -357,7 +390,7 @@ function getStatusColor(status: string): string {
               {{ item }}
               <button
                 class="tag-delete"
-                @click="emit('remove-config', activeSection.type, item)"
+                @click="emit('remove-config', activeSection.type as ConfigType, item)"
               >
                 <Trash2 :size="11" />
               </button>
@@ -365,7 +398,7 @@ function getStatusColor(status: string): string {
           </template>
           <div v-else class="empty-section">
             <component :is="activeSection.icon" :size="20" class="empty-icon" />
-            <p>暂无{{ CONFIG_TYPE_MAP[activeSection.type].label }}</p>
+            <p>暂无{{ activeSection.type === 'tool' ? '工具' : activeSection.type === 'prompt' ? 'Cron Job' : activeSection.label }}</p>
             <span class="empty-hint">点击上方"添加"按钮</span>
           </div>
         </div>

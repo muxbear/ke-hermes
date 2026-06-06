@@ -24,11 +24,41 @@ class AgentUpdateRequest(BaseModel):
 
 
 class AgentConfigRequest(BaseModel):
-    """Request body for adding or removing a config item."""
+    """Request body for adding or removing a config item (tool / prompt / file / subagent)."""
 
-    type: str  # tool | skill | prompt | file | subagent
+    type: str  # tool | prompt | file | subagent (skill is handled separately)
     value: str
     description: str = ""
+
+
+class AgentConfigUpdateRequest(BaseModel):
+    """Request body for updating a config item (rename / change description)."""
+
+    type: str  # tool | prompt | file
+    value: str  # current name (用于定位要更新的项)
+    new_value: str = ""  # 新文件名（空则不重命名）
+    description: str = ""
+
+
+class SkillBrief(BaseModel):
+    """Brief skill info embedded in agent responses."""
+
+    id: str
+    name: str
+    description: str
+    category: str
+    icon: str
+    enabled: bool
+
+    class Config:
+        """Pydantic config for ORM model compatibility."""
+        from_attributes = True
+
+
+class AgentAddSkillRequest(BaseModel):
+    """Request body for adding a skill to an agent."""
+
+    skill_id: str = Field(..., min_length=1, description="Skill ID to add")
 
 
 class AgentInfo(BaseModel):
@@ -40,7 +70,7 @@ class AgentInfo(BaseModel):
     status: str
     description: str
     tools: list[str]
-    skills: list[str]
+    skills: list[SkillBrief]
     prompts: list[str]
     files: list[str]
     sub_agents: list[str] = []
@@ -82,12 +112,3 @@ class AgentFileUpdateRequest(BaseModel):
     """Request body for updating file content."""
 
     content: str
-
-
-class AgentConfigUpdateRequest(BaseModel):
-    """Request body for updating a config item (rename / change description)."""
-
-    type: str  # tool | skill | prompt | file
-    value: str  # current name (用于定位要更新的项)
-    new_value: str = ""  # 新文件名（空则不重命名）
-    description: str = ""

@@ -8,6 +8,7 @@ import AgentListItem from '@/components/agent/AgentListItem.vue'
 import AgentDetail from '@/components/agent/AgentDetail.vue'
 import AgentGraph from '@/components/agent/AgentGraph.vue'
 import AddConfigDialog from '@/components/agent/AddConfigDialog.vue'
+import SkillSelectDialog from '@/components/agent/SkillSelectDialog.vue'
 import AgentFormDialog from '@/components/agent/AgentFormDialog.vue'
 
 const agentStore = useAgentStore()
@@ -15,6 +16,7 @@ const agentStore = useAgentStore()
 /* ---- Dialog state ---- */
 const dialogVisible = ref(false)
 const dialogType = ref<ConfigType>('tool')
+const skillDialogVisible = ref(false)
 const showRelationGraph = ref(false)
 
 // Agent form dialog (create/edit)
@@ -30,8 +32,27 @@ function openDialog(type: ConfigType) {
 async function handleAddConfig(type: ConfigType, value: string, description?: string) {
   try {
     await agentStore.addConfig(type, value, description || '')
-    ElMessage.success(`${type === 'tool' ? '工具' : type === 'skill' ? '技能' : type === 'file' ? '文件' : 'Cron Job'}已添加`)
+    ElMessage.success(`${type === 'tool' ? '工具' : type === 'file' ? '文件' : 'Cron Job'}已添加`)
     dialogVisible.value = false
+  } catch (err: unknown) {
+    ElMessage.error(err instanceof Error ? err.message : '操作失败')
+  }
+}
+
+async function handleAddSkill(skillId: string) {
+  try {
+    await agentStore.addSkill(skillId)
+    ElMessage.success('技能已添加')
+    skillDialogVisible.value = false
+  } catch (err: unknown) {
+    ElMessage.error(err instanceof Error ? err.message : '操作失败')
+  }
+}
+
+async function handleRemoveSkill(skillId: string) {
+  try {
+    await agentStore.removeSkill(skillId)
+    ElMessage.success('技能已移除')
   } catch (err: unknown) {
     ElMessage.error(err instanceof Error ? err.message : '操作失败')
   }
@@ -238,6 +259,8 @@ onMounted(() => {
               :agents="agentStore.agents"
               @add-config="openDialog"
               @remove-config="handleRemoveConfig"
+              @add-skill="skillDialogVisible = true"
+              @remove-skill="handleRemoveSkill"
               @save-file-content="handleSaveFileContent"
               @toggle-status="handleToggleStatus(agentStore.selectedAgent!.id)"
               @select-agent="(id) => agentStore.selectAgent(id)"
@@ -259,6 +282,16 @@ onMounted(() => {
       :agent-type="agentStore.selectedAgent.type"
       @close="dialogVisible = false"
       @add="handleAddConfig"
+    />
+
+    <!-- Skill Select Dialog -->
+    <SkillSelectDialog
+      v-if="agentStore.selectedAgent"
+      :visible="skillDialogVisible"
+      :agent-name="agentStore.selectedAgent.name"
+      :existing-skill-ids="agentStore.selectedAgent.skills.map(s => s.id)"
+      @close="skillDialogVisible = false"
+      @add="handleAddSkill"
     />
 
     <!-- Agent Form Dialog (Create / Edit) -->
