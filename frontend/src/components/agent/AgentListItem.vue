@@ -13,6 +13,7 @@ import {
   Sparkles,
   GitBranch,
   Edit,
+  Edit3,
   UserPlus,
 } from 'lucide-vue-next'
 import type { Agent } from '@/types/agent'
@@ -37,6 +38,7 @@ const emit = defineEmits<{
   (e: 'clone', agent: Agent): void
   (e: 'delete', id: string): void
   (e: 'new-sub-agent'): void
+  (e: 'edit', agent: Agent): void
 }>()
 
 const isSelected = computed(() => props.selectedId === props.agent.id)
@@ -127,6 +129,7 @@ function getStatusLabel(status: string): string {
       <!-- 操作菜单 -->
       <el-dropdown trigger="click" @click.stop @command="(cmd: string) => {
         if (cmd === 'newSubAgent') emit('new-sub-agent')
+        else if (cmd === 'edit') emit('edit', agent)
         else if (cmd === 'toggle') emit('toggle-status', agent.id)
         else if (cmd === 'clone') emit('clone', agent)
         else if (cmd === 'delete') emit('delete', agent.id)
@@ -138,7 +141,11 @@ function getStatusLabel(status: string): string {
           <el-dropdown-menu>
             <el-dropdown-item command="newSubAgent">
               <UserPlus :size="14" />
-              <span style="margin-left: 8px">新建子智能体</span>
+              <span style="margin-left: 8px">新建</span>
+            </el-dropdown-item>
+            <el-dropdown-item command="edit">
+              <Edit3 :size="14" />
+              <span style="margin-left: 8px">编辑</span>
             </el-dropdown-item>
             <el-dropdown-item divided command="toggle">
               <Pause v-if="agent.status === 'active'" :size="14" />
@@ -182,6 +189,7 @@ function getStatusLabel(status: string): string {
         @clone="(a) => emit('clone', a)"
         @delete="(id) => emit('delete', id)"
         @new-sub-agent="() => emit('new-sub-agent')"
+        @edit="(a) => emit('edit', a)"
       />
     </div>
   </div>

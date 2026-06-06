@@ -10,6 +10,7 @@ from api.agents.schemas import (
     AgentFileUpdateRequest,
     AgentInfo,
     AgentListResponse,
+    AgentUpdateRequest,
 )
 from api.agents.service import (
     add_agent_config,
@@ -23,6 +24,7 @@ from api.agents.service import (
     remove_agent_config,
     save_agent_file,
     toggle_agent_status,
+    update_agent,
     update_agent_config,
 )
 from api.deps import get_db
@@ -113,6 +115,22 @@ async def agent_clone(
     """克隆代理，复制所有配置，状态置为 inactive。"""  # noqa: D415
     try:
         result = await clone_agent(db, agent_id)
+        return ok(result)
+    except Exception as e:
+        if hasattr(e, "status_code"):
+            return error(e.status_code, e.detail)
+        raise
+
+
+@router.put("/{agent_id}", response_model=ApiResponse[AgentInfo])
+async def agent_update(
+    agent_id: str,
+    req: AgentUpdateRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """更新代理的名称、描述和模型配置。"""  # noqa: D415
+    try:
+        result = await update_agent(db, agent_id, req)
         return ok(result)
     except Exception as e:
         if hasattr(e, "status_code"):

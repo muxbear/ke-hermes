@@ -2,7 +2,7 @@
 import logging
 
 from fastapi import HTTPException
-from sqlalchemy import func, select, delete
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.agents.schemas import (
@@ -12,6 +12,7 @@ from api.agents.schemas import (
     AgentFileContent,
     AgentInfo,
     AgentListResponse,
+    AgentUpdateRequest,
 )
 from db.models.agent import Agent
 from db.models.agent_file import AgentFile
@@ -54,6 +55,8 @@ def _agent_to_info(agent: Agent, sub_agent_ids: list[str] | None = None) -> Agen
         files=agent.files if isinstance(agent.files, list) else [],
         sub_agents=sub_agent_ids if sub_agent_ids is not None else [],
         parent_id=agent.parent_id,
+        provider_id=agent.provider_id,
+        model_id=agent.model_id,
         last_active=None,
         call_count=0,
         undeletable=agent.undeletable,
@@ -120,6 +123,8 @@ async def create_agent(db: AsyncSession, req: AgentCreateRequest) -> AgentInfo:
     agent = Agent(
         name=req.name,
         description=req.description or "",
+        provider_id=req.provider_id,
+        model_id=req.model_id,
     )
 
     if req.parent_id:
@@ -216,6 +221,8 @@ async def clone_agent(db: AsyncSession, agent_id: str) -> AgentInfo:
         skills=list(source.skills) if isinstance(source.skills, list) else [],
         prompts=list(source.prompts) if isinstance(source.prompts, list) else [],
         files=list(source.files) if isinstance(source.files, list) else [],
+        provider_id=source.provider_id,
+        model_id=source.model_id,
         undeletable=False,
     )
     db.add(cloned)
@@ -237,6 +244,31 @@ async def clone_agent(db: AsyncSession, agent_id: str) -> AgentInfo:
     sub_ids = await _get_sub_agent_ids(db, cloned.id)
     logger.info("Cloned agent '%s' -> '%s'", source.name, cloned.name)
     return _agent_to_info(cloned, sub_ids)
+
+
+async def update_agent(db: AsyncSession, agent_id: str, req: AgentUpdateRequest) -> AgentInfo:
+    """Update an existing agent's name, description, and model assignment."""
+    stmt = select(Agent).where(Agent.id == agent_id)
+    agent = (await db.execute(stmt)).scalar_one_or_none()
+    if agent is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    # Check name uniqueness (exclude self)
+    dup = (await db.execute(
+        select(Agent).where(Agent.name == req.name, Agent.id != agent_id)
+    )).scalar_one_or_none()
+    if dup is not None:
+        raise HTTPException(status_code=409, detail=f"Agent name '{req.name}' already exists")
+
+    agent.name = req.name
+    agent.description = req.description
+    agent.provider_id = req.provider_id
+    agent.model_id = req.model_id
+
+    await db.flush()
+    sub_ids = await _get_sub_agent_ids(db, agent_id)
+    logger.info("Updated agent '%s'", agent.name)
+    return _agent_to_info(agent, sub_ids)
 
 
 async def add_agent_config(

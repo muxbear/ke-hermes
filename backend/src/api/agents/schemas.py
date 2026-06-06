@@ -10,6 +10,17 @@ class AgentCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=128)
     description: str = ""
     parent_id: str | None = None
+    provider_id: str | None = None
+    model_id: str | None = None
+
+
+class AgentUpdateRequest(BaseModel):
+    """Request body for updating an existing agent."""
+
+    name: str = Field(min_length=1, max_length=128)
+    description: str = ""
+    provider_id: str | None = None
+    model_id: str | None = None
 
 
 class AgentConfigRequest(BaseModel):
@@ -34,6 +45,8 @@ class AgentInfo(BaseModel):
     files: list[str]
     sub_agents: list[str] = []
     parent_id: str | None = None
+    provider_id: str | None = None
+    model_id: str | None = None
     last_active: str | None = None
     call_count: int = 0
     undeletable: bool = False

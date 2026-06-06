@@ -11,6 +11,7 @@ declare module 'vue' {
     AddConfigDialog: typeof import('./src/components/agent/AddConfigDialog.vue')['default']
     AgentDetail: typeof import('./src/components/agent/AgentDetail.vue')['default']
     AgentEdge: typeof import('./src/components/agent/AgentEdge.vue')['default']
+    AgentFormDialog: typeof import('./src/components/agent/AgentFormDialog.vue')['default']
     AgentGraph: typeof import('./src/components/agent/AgentGraph.vue')['default']
     AgentListItem: typeof import('./src/components/agent/AgentListItem.vue')['default']
     AgentNode: typeof import('./src/components/agent/AgentNode.vue')['default']

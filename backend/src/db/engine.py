@@ -36,6 +36,7 @@ async def init_db():
     async with async_engine.begin() as conn:
         await _migrate_agents_drop_user_id(conn)
         await conn.run_sync(Base.metadata.create_all)
+        await _migrate_agents_add_provider_model(conn)
     logger.info("Database tables created")
 
 
@@ -60,3 +61,24 @@ async def _migrate_agents_drop_user_id(conn) -> None:
         # SQLite: recreate table (drop FK table first to avoid constraint errors)
         await conn.execute(text("DROP TABLE IF EXISTS agent_files"))
         await conn.execute(text("DROP TABLE IF EXISTS agents"))
+
+
+async def _migrate_agents_add_provider_model(conn) -> None:
+    """Add provider_id and model_id columns to agents table if they don't exist."""
+    from sqlalchemy import inspect, text
+
+    tables = await conn.run_sync(lambda sync_conn: inspect(sync_conn).get_table_names())
+    if "agents" not in tables:
+        return
+
+    columns = await conn.run_sync(
+        lambda sync_conn: [c["name"] for c in inspect(sync_conn).get_columns("agents")]
+    )
+
+    if "provider_id" not in columns:
+        logger.info("Migrating: adding provider_id column to agents table")
+        await conn.execute(text("ALTER TABLE agents ADD COLUMN provider_id VARCHAR(36)"))
+
+    if "model_id" not in columns:
+        logger.info("Migrating: adding model_id column to agents table")
+        await conn.execute(text("ALTER TABLE agents ADD COLUMN model_id VARCHAR(36)"))

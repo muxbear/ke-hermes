@@ -8,6 +8,7 @@ import AgentListItem from '@/components/agent/AgentListItem.vue'
 import AgentDetail from '@/components/agent/AgentDetail.vue'
 import AgentGraph from '@/components/agent/AgentGraph.vue'
 import AddConfigDialog from '@/components/agent/AddConfigDialog.vue'
+import AgentFormDialog from '@/components/agent/AgentFormDialog.vue'
 
 const agentStore = useAgentStore()
 
@@ -16,6 +17,11 @@ const dialogVisible = ref(false)
 const dialogType = ref<ConfigType>('tool')
 const showRelationGraph = ref(false)
 
+// Agent form dialog (create/edit)
+const agentFormVisible = ref(false)
+const agentFormMode = ref<'create' | 'edit'>('create')
+const editingAgent = ref<Agent | null>(null)
+
 function openDialog(type: ConfigType) {
   dialogType.value = type
   dialogVisible.value = true
@@ -23,13 +29,8 @@ function openDialog(type: ConfigType) {
 
 async function handleAddConfig(type: ConfigType, value: string, description?: string) {
   try {
-    if (type === 'subagent') {
-      await agentStore.createSubAgent(value)
-      ElMessage.success('子智能体创建成功')
-    } else {
-      await agentStore.addConfig(type, value, description || '')
-      ElMessage.success(`${type === 'tool' ? '工具' : type === 'skill' ? '技能' : type === 'file' ? '文件' : 'Cron Job'}已添加`)
-    }
+    await agentStore.addConfig(type, value, description || '')
+    ElMessage.success(`${type === 'tool' ? '工具' : type === 'skill' ? '技能' : type === 'file' ? '文件' : 'Cron Job'}已添加`)
     dialogVisible.value = false
   } catch (err: unknown) {
     ElMessage.error(err instanceof Error ? err.message : '操作失败')
@@ -106,7 +107,37 @@ function handleNewSubAgent() {
     const main = agentStore.mainAgent
     if (main) agentStore.selectAgent(main.id)
   }
-  openDialog('subagent')
+  editingAgent.value = null
+  agentFormMode.value = 'create'
+  agentFormVisible.value = true
+}
+
+function handleEditAgent(agent: Agent) {
+  editingAgent.value = agent
+  agentFormMode.value = 'edit'
+  agentFormVisible.value = true
+}
+
+async function handleAgentFormSubmit(data: { name: string; description: string; providerId: string; modelId: string }) {
+  try {
+    if (agentFormMode.value === 'create') {
+      await agentStore.createSubAgent(data.name, data.description, data.providerId || undefined, data.modelId || undefined)
+      ElMessage.success('子智能体创建成功')
+    } else {
+      const agentId = editingAgent.value?.id
+      if (!agentId) return
+      await agentStore.updateAgent(agentId, {
+        name: data.name,
+        description: data.description,
+        providerId: data.providerId || undefined,
+        modelId: data.modelId || undefined,
+      })
+      ElMessage.success('智能体已更新')
+    }
+    agentFormVisible.value = false
+  } catch (err: unknown) {
+    ElMessage.error(err instanceof Error ? err.message : '操作失败')
+  }
 }
 
 onMounted(() => {
@@ -176,6 +207,7 @@ onMounted(() => {
               @clone="handleClone"
               @delete="handleDelete"
               @new-sub-agent="handleNewSubAgent"
+              @edit="handleEditAgent"
             />
           </template>
 
@@ -227,6 +259,17 @@ onMounted(() => {
       :agent-type="agentStore.selectedAgent.type"
       @close="dialogVisible = false"
       @add="handleAddConfig"
+    />
+
+    <!-- Agent Form Dialog (Create / Edit) -->
+    <AgentFormDialog
+      :visible="agentFormVisible"
+      :mode="agentFormMode"
+      :agent="editingAgent"
+      :agent-name="agentStore.selectedAgent?.name ?? ''"
+      :agent-type="agentStore.selectedAgent?.type ?? 'main'"
+      @close="agentFormVisible = false"
+      @submit="handleAgentFormSubmit"
     />
   </div>
 </template>

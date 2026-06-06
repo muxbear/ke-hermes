@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Agent, AgentFileContent, ConfigType } from '@/types/agent'
+import type { Agent, AgentFileContent, AgentUpdateRequest, ConfigType } from '@/types/agent'
 import * as agentApi from '@/services/agentApi'
 
 export const useAgentStore = defineStore('agent', () => {
@@ -171,17 +171,27 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
-  async function createSubAgent(name: string, description?: string) {
+  async function createSubAgent(name: string, description?: string, providerId?: string, modelId?: string) {
     const main = mainAgent.value
     if (!main) throw new Error('主智能体不存在，无法创建子智能体')
     try {
-      const newAgent = await agentApi.createAgent({ name, description, parentId: main.id })
+      const newAgent = await agentApi.createAgent({ name, description, parentId: main.id, providerId, modelId })
       agents.value = await agentApi.fetchAgents()
       // 自动展开主智能体并选中新创建的子智能体
       expandedIds.value = new Set([...expandedIds.value, main.id])
       selectedAgentId.value = newAgent.id
     } catch (err: unknown) {
       throw err instanceof Error ? err : new Error('创建子智能体失败')
+    }
+  }
+
+  async function updateAgent(id: string, data: AgentUpdateRequest) {
+    try {
+      const updated = await agentApi.updateAgent(id, data)
+      const idx = agents.value.findIndex((a) => a.id === id)
+      if (idx !== -1) agents.value[idx] = updated
+    } catch (err: unknown) {
+      throw err instanceof Error ? err : new Error('更新智能体失败')
     }
   }
 
@@ -243,6 +253,7 @@ export const useAgentStore = defineStore('agent', () => {
     addConfig,
     removeConfig,
     createSubAgent,
+    updateAgent,
     updateConfig,
     // file content
     currentFileContent,

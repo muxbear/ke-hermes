@@ -10,6 +10,8 @@ export interface Agent {
   files: string[]
   subAgents?: string[]
   parentId?: string
+  providerId?: string
+  modelId?: string
   description?: string
   lastActive?: string
   callCount?: number
@@ -21,6 +23,16 @@ export interface AgentCreateRequest {
   name: string
   description?: string
   parentId?: string
+  providerId?: string
+  modelId?: string
+}
+
+/** 更新代理请求 */
+export interface AgentUpdateRequest {
+  name: string
+  description?: string
+  providerId?: string
+  modelId?: string
 }
 
 /** 文件内容 */

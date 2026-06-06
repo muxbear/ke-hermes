@@ -1,7 +1,7 @@
 /**
  * Agent API — 后端真实接口调用
  */
-import type { Agent, AgentCreateRequest, AgentFileContent, ConfigType } from '@/types/agent'
+import type { Agent, AgentCreateRequest, AgentFileContent, AgentUpdateRequest, ConfigType } from '@/types/agent'
 import request from '@/services/request'
 
 /* ------------------------------------------------------------------ */
@@ -22,6 +22,8 @@ function toAgent(raw: Record<string, unknown>): Agent {
     files: (raw.files as string[]) || [],
     subAgents: (raw.sub_agents as string[]) || [],
     parentId: (raw.parent_id as string) ?? undefined,
+    providerId: (raw.provider_id as string) ?? undefined,
+    modelId: (raw.model_id as string) ?? undefined,
     lastActive: (raw.last_active as string) ?? undefined,
     callCount: (raw.call_count as number) ?? 0,
     undeletable: (raw.undeletable as boolean) ?? false,
@@ -43,6 +45,18 @@ export async function createAgent(data: AgentCreateRequest): Promise<Agent> {
     name: data.name,
     description: data.description || '',
     parent_id: data.parentId || undefined,
+    provider_id: data.providerId || undefined,
+    model_id: data.modelId || undefined,
+  })
+  return toAgent(res.data.data)
+}
+
+export async function updateAgent(id: string, data: AgentUpdateRequest): Promise<Agent> {
+  const res = await request.put(`/agents/${id}`, {
+    name: data.name,
+    description: data.description || '',
+    provider_id: data.providerId || undefined,
+    model_id: data.modelId || undefined,
   })
   return toAgent(res.data.data)
 }

@@ -1,8 +1,8 @@
 """Agent ORM model for storing agent metadata."""
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, String, Text, func
+from sqlalchemy import Boolean, DateTime, String, Text
 from sqlalchemy.dialects.sqlite import JSON
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -10,7 +10,7 @@ from db.base import Base
 
 
 def _utcnow() -> datetime:
-    return datetime.now(timezone.utc).replace(tzinfo=None)
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class Agent(Base):
@@ -28,6 +28,8 @@ class Agent(Base):
     skills: Mapped[list] = mapped_column(JSON, default=list, comment="技能名称列表")
     prompts: Mapped[list] = mapped_column(JSON, default=list, comment="提示词/Cron Job 列表")
     files: Mapped[list] = mapped_column(JSON, default=list, comment="文件名称列表")
+    provider_id: Mapped[str | None] = mapped_column(String(36), nullable=True, comment="关联的模型提供商ID")
+    model_id: Mapped[str | None] = mapped_column(String(36), nullable=True, comment="关联的AI模型ID")
     undeletable: Mapped[bool] = mapped_column(Boolean, default=False, comment="是否不可删除")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, comment="创建时间")
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, onupdate=_utcnow, comment="更新时间")
