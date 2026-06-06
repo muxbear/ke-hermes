@@ -13,6 +13,7 @@ import {
   BarChart3,
   Bot,
   Zap,
+  Wrench,
   Network,
   CloudMoon,
   FileText,
@@ -112,6 +113,7 @@ const menuGroups: MenuGroup[] = [
     items: [
       { icon: Bot, text: '智能体', route: '/agents', pinyin: 'zhinengti' },
       { icon: Zap, text: '技能', route: '/skills', pinyin: 'jineng' },
+      { icon: Wrench, text: '工具', route: '/tools', pinyin: 'gongju' },
       { icon: Network, text: '节点', pinyin: 'jiedian' },
     ],
   },

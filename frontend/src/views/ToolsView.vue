@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, Wrench } from 'lucide-vue-next'
 import { useToolStore } from '@/stores/tool'
@@ -154,13 +154,32 @@ async function handleDelete(id: string) {
 function openDetail(tool: Tool) { detail.value = tool }
 function closeDetail() { detail.value = null }
 
+// -- Scroll pagination --
+const pageRef = ref<HTMLElement | null>(null)
+
+function handleScroll() {
+  const el = pageRef.value
+  if (!el || toolStore.loadingMore || !toolStore.hasMore) return
+  const { scrollTop, scrollHeight, clientHeight } = el
+  if (scrollTop + clientHeight >= scrollHeight - 120) {
+    toolStore.loadMore()
+  }
+}
+
 onMounted(() => {
   toolStore.fetchTools()
+  const el = pageRef.value
+  if (el) el.addEventListener('scroll', handleScroll, { passive: true })
+})
+
+onUnmounted(() => {
+  const el = pageRef.value
+  if (el) el.removeEventListener('scroll', handleScroll)
 })
 </script>
 
 <template>
-  <div class="tools-page">
+  <div ref="pageRef" class="tools-page">
     <!-- ── Header ── -->
     <div class="page-header">
       <div class="page-header__info">
@@ -289,6 +308,20 @@ onMounted(() => {
       </div>
     </div>
 
+    <!-- Load more -->
+    <div v-if="!toolStore.loading && filtered.length > 0" class="load-more">
+      <div v-if="toolStore.loadingMore" class="load-more__loading">
+        <el-skeleton :rows="1" animated />
+        <span class="load-more__text">加载更多工具…</span>
+      </div>
+      <div v-else-if="toolStore.hasMore" class="load-more__hint">
+        向下滚动加载更多
+      </div>
+      <div v-else class="load-more__end">
+        — 已展示全部 {{ toolStore.total }} 个工具 —
+      </div>
+    </div>
+
     <!-- ── Dialogs ── -->
     <ToolDialog
       :visible="editing !== null"
@@ -312,6 +345,7 @@ onMounted(() => {
   gap: 20px;
   padding: 24px 32px;
   height: 100%;
+  overflow-y: auto;
   background: var(--surface-primary);
 }
 
@@ -548,5 +582,37 @@ onMounted(() => {
   background: var(--surface-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-xl);
+}
+
+/* Load more */
+.load-more {
+  display: flex;
+  justify-content: center;
+  padding: 16px 0 8px;
+}
+
+.load-more__loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 360px;
+}
+
+.load-more__text {
+  font-size: var(--font-size-sm);
+  color: var(--foreground-muted);
+  white-space: nowrap;
+}
+
+.load-more__hint {
+  font-size: var(--font-size-xs);
+  color: var(--foreground-muted);
+}
+
+.load-more__end {
+  font-size: var(--font-size-sm);
+  color: var(--foreground-muted);
+  opacity: 0.7;
 }
 </style>

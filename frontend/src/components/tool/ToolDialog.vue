@@ -26,6 +26,12 @@ const form = reactive({
   tagsInput: '',
 })
 
+// -- Package upload --
+type ParseState = 'idle' | 'parsing' | 'done' | 'error'
+const parseState = ref<ParseState>('idle')
+const pkg = ref<{ file: File; size: string } | null>(null)
+const pkgFile = ref<File | null>(null)
+
 watch(
   () => props.tool,
   (t) => {
@@ -53,12 +59,6 @@ watch(
   },
   { immediate: true },
 )
-
-// -- Package upload --
-type ParseState = 'idle' | 'parsing' | 'done' | 'error'
-const parseState = ref<ParseState>('idle')
-const pkg = ref<{ file: File; size: string } | null>(null)
-const pkgFile = ref<File | null>(null)
 const dragging = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 

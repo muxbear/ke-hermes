@@ -26,6 +26,7 @@ const breadcrumb = computed(() => {
     '/overview': { group: '控制', item: '概览' },
     '/models': { group: '控制', item: '模型' },
     '/scheduled-tasks': { group: '控制', item: '定时任务' },
+    '/tools': { group: '智能体', item: '工具' },
     '/mcp': { group: 'MCP', item: 'MCP 广场' },
   }
   const path = route.path

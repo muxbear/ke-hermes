@@ -28,6 +28,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: 'Skills' },
       },
       {
+        path: 'tools',
+        name: 'tools',
+        component: () => import('@/views/ToolsView.vue'),
+        meta: { title: 'Tools' },
+      },
+      {
         path: 'agents',
         name: 'agents',
         component: () => import('@/views/AgentsView.vue'),

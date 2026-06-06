@@ -90,6 +90,17 @@
   --color-overlay: rgba(0, 0, 0, 0.6);
   --color-modal-bg: rgba(15, 23, 46, 0.98);
 
+  /* === 工具分类色 === */
+  --color-tool-blue: #3b82f6;
+  --color-tool-cyan: #06b6d4;
+  --color-tool-green: #22c55e;
+  --color-tool-amber: #f59e0b;
+  --color-tool-purple: #a855f7;
+  --color-tool-pink: #ec4899;
+  --color-tool-indigo: #6366f1;
+  --color-tool-gray: #94a3b8;
+  --color-tool-emerald: #10b981;
+
   /* === 第三方平台色 === */
   --color-oauth-wechat: #07c160;
   --color-oauth-alipay: #1777f9;
