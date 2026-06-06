@@ -8,6 +8,7 @@ import AgentListItem from '@/components/agent/AgentListItem.vue'
 import AgentDetail from '@/components/agent/AgentDetail.vue'
 import AgentGraph from '@/components/agent/AgentGraph.vue'
 import AddConfigDialog from '@/components/agent/AddConfigDialog.vue'
+import ToolSelectDialog from '@/components/agent/ToolSelectDialog.vue'
 import SkillSelectDialog from '@/components/agent/SkillSelectDialog.vue'
 import AgentFormDialog from '@/components/agent/AgentFormDialog.vue'
 
@@ -16,6 +17,7 @@ const agentStore = useAgentStore()
 /* ---- Dialog state ---- */
 const dialogVisible = ref(false)
 const dialogType = ref<ConfigType>('tool')
+const toolSelectVisible = ref(false)
 const skillDialogVisible = ref(false)
 const showRelationGraph = ref(false)
 
@@ -25,6 +27,10 @@ const agentFormMode = ref<'create' | 'edit'>('create')
 const editingAgent = ref<Agent | null>(null)
 
 function openDialog(type: ConfigType) {
+  if (type === 'tool') {
+    toolSelectVisible.value = true
+    return
+  }
   dialogType.value = type
   dialogVisible.value = true
 }
@@ -32,8 +38,18 @@ function openDialog(type: ConfigType) {
 async function handleAddConfig(type: ConfigType, value: string, description?: string) {
   try {
     await agentStore.addConfig(type, value, description || '')
-    ElMessage.success(`${type === 'tool' ? '工具' : type === 'file' ? '文件' : 'Cron Job'}已添加`)
+    ElMessage.success(`${type === 'file' ? '文件' : 'Cron Job'}已添加`)
     dialogVisible.value = false
+  } catch (err: unknown) {
+    ElMessage.error(err instanceof Error ? err.message : '操作失败')
+  }
+}
+
+async function handleAddTool(toolName: string, description: string) {
+  try {
+    await agentStore.addConfig('tool', toolName, description)
+    ElMessage.success('工具已添加')
+    toolSelectVisible.value = false
   } catch (err: unknown) {
     ElMessage.error(err instanceof Error ? err.message : '操作失败')
   }
@@ -273,15 +289,25 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- Add Config Dialog -->
+    <!-- Add Config Dialog (non-tool types) -->
     <AddConfigDialog
-      v-if="agentStore.selectedAgent"
+      v-if="agentStore.selectedAgent && dialogType !== 'tool'"
       :visible="dialogVisible"
       :type="dialogType"
       :agent-name="agentStore.selectedAgent.name"
       :agent-type="agentStore.selectedAgent.type"
       @close="dialogVisible = false"
       @add="handleAddConfig"
+    />
+
+    <!-- Tool Select Dialog -->
+    <ToolSelectDialog
+      v-if="agentStore.selectedAgent"
+      :visible="toolSelectVisible"
+      :agent-name="agentStore.selectedAgent.name"
+      :existing-tool-names="agentStore.selectedAgent.tools"
+      @close="toolSelectVisible = false"
+      @add="handleAddTool"
     />
 
     <!-- Skill Select Dialog -->

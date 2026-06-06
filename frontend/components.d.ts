@@ -64,6 +64,7 @@ declare module 'vue' {
     ToolCard: typeof import('./src/components/tool/ToolCard.vue')['default']
     ToolDetailDrawer: typeof import('./src/components/tool/ToolDetailDrawer.vue')['default']
     ToolDialog: typeof import('./src/components/tool/ToolDialog.vue')['default']
+    ToolSelectDialog: typeof import('./src/components/agent/ToolSelectDialog.vue')['default']
     TopBar: typeof import('./src/components/TopBar.vue')['default']
   }
   export interface ComponentCustomProperties {

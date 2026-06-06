@@ -82,6 +82,7 @@ async def list_tools(
         conditions.append(
             (Tool.display_name.ilike(pattern))
             | (Tool.name.ilike(pattern))
+            | (Tool.description.ilike(pattern))
             | (Tool.tags.cast(Text).ilike(pattern))
         )
 
