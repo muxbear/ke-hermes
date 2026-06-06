@@ -1,6 +1,7 @@
 from db.models.agent import Agent
 from db.models.agent_file import AgentFile
 from db.models.agent_skill import AgentSkill
+from db.models.agent_tool import AgentTool
 from db.models.ai_model import AIModel
 from db.models.conversation import Conversation
 from db.models.login_record import LoginRecord
@@ -8,6 +9,7 @@ from db.models.mcp_installation import McpInstallation
 from db.models.mcp_tool import McpTool
 from db.models.provider import Provider
 from db.models.skill import Skill
+from db.models.tool import Tool
 from db.models.user import User
 from db.models.user_oauth import UserOAuth
 
@@ -15,6 +17,7 @@ __all__ = [
     "Agent",
     "AgentFile",
     "AgentSkill",
+    "AgentTool",
     "AIModel",
     "Conversation",
     "LoginRecord",
@@ -22,6 +25,7 @@ __all__ = [
     "McpTool",
     "Provider",
     "Skill",
+    "Tool",
     "User",
     "UserOAuth",
 ]

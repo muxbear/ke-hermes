@@ -11,6 +11,7 @@ from api.oauth import router as oauth_router
 from api.providers import router as providers_router
 from api.skill import router as skill_router
 from api.sms import router as sms_router
+from api.tools import router as tools_router
 
 router = APIRouter()
 router.include_router(agent_router)
@@ -23,6 +24,7 @@ router.include_router(oauth_router)
 router.include_router(conversation_router)
 router.include_router(providers_router)
 router.include_router(skill_router)
+router.include_router(tools_router)
 router.include_router(mcp_router)
 
 __all__ = ["router"]

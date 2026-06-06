@@ -33,11 +33,13 @@ async def lifespan(app: FastAPI):
     # Seed MCP tools and builtin skills on first run
     from api.mcp.service import seed_mcp_tools
     from api.skill.service import seed_builtin_skills
+    from api.tools.service import seed_builtin_tools
     from db.engine import async_session
 
     async with async_session() as session:
         await seed_mcp_tools(session)
         await seed_builtin_skills(session)
+        await seed_builtin_tools(session)
         await session.commit()
 
     await init_graph()

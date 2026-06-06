@@ -37,8 +37,8 @@ export interface Tool {
   usedByAgents: string[]
   tags: string[]
   params?: ToolParam[]
-  created_at: string
-  updated_at: string
+  createdAt: string
+  updatedAt: string
 }
 
 /** 创建/更新工具请求 */
