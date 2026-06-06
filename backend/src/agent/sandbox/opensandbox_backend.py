@@ -220,7 +220,7 @@ class OpenSandBoxBackend(BaseSandbox):
                     )
 
         success_count = sum(1 for r in responses if r.error is None)
-        logger.info(f"文件下载完成，成功下载 {len(success_count)} 个文件")
+        logger.info(f"文件下载完成，成功下载 {success_count} 个文件")
         return responses
         
     def upload_files(self, files: list[tuple[str, bytes]]) -> list[FileUploadResponse]:        

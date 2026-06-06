@@ -48,7 +48,8 @@ def create_sandboxsync(config=None, sandbox_id=None, image=None):
             defaultAction="deny",
             egress=[
                 NetworkRule(action="allow", target="pypi.org"),
-                NetworkRule(action="allow", target="*.github.com")
+                NetworkRule(action="allow", target="*.github.com"),
+                NetworkRule(action="allow", target="*.baidu.com"),
             ]
         )
     )

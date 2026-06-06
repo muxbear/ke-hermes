@@ -68,7 +68,7 @@ async def chat_stream(
     db: AsyncSession = Depends(get_db)):
     is_new = not req.thread_id
     thread_id = req.thread_id or str(uuid7())
-    config = {"configurable": {"thread_id": thread_id}}
+    config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 50}
     context = Context(server_info="ke_hermes_server", user_id=user_id)
 
     async def event_generator():

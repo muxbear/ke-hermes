@@ -1,7 +1,10 @@
+import logging
+
 from datetime import timedelta
 
 from agent.sandbox.opensandbox_backend import OpenSandBoxBackend
 from agent.sandbox.opensandbox_operate import create_sandboxsync
+from agent.subagents.subagents_operate import create_subagents
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
@@ -17,12 +20,13 @@ from langgraph.store.memory import InMemoryStore
 from agent.context.context import Context
 from agent.config import settings
 from agent.models.llm import llm
-from agent.subagents import research_subagent
 
 from deepagents import create_deep_agent
-from deepagents.backends import CompositeBackend, StateBackend, StoreBackend
+from deepagents.backends import CompositeBackend, StoreBackend
 
 import os
+
+logger = logging.getLogger(__name__)
 
 _graph = None
 _conn_pool = None
@@ -71,8 +75,10 @@ async def init_graph():
               f"Unknown CHECKPOINT_BACKEND: '{backend}'. Expected 'sqlite' or 'postgres'."
         )
 
-    subagents = [research_subagent]
-
+    # 创建子代理
+    subagents = await create_subagents()
+    logger.info(f"从配置中加载到 {len(subagents)} 个子智能体，具体是：{subagents}")
+    
     # 创建沙盒
     sandbox = create_sandboxsync()
     # 创建沙盒后端
@@ -85,6 +91,7 @@ async def init_graph():
         store=_store,
         context_schema=Context,
         memory=["/memories/AGENT.md"],
+        skills=["/skills/"],
         backend=CompositeBackend(
             default=sandbox_backend,
             routes={
@@ -96,7 +103,6 @@ async def init_graph():
             }
         ),
         subagents=subagents,
-        # skills=["/skills/"],
         system_prompt="你是 ke-hermes 通用智能体，请根据用户的需求委派对应的子智能体进行处理。",
     )
 

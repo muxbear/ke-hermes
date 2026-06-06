@@ -9,6 +9,7 @@ Python 智能体后端，基于 FastAPI + LangGraph。
 - **LLM**: DeepSeek (deepseek-v4-pro)
 - **Embeddings**: DashScope (text-embedding-v4)
 - **数据库**: SQLAlchemy async + aiosqlite (开发) / 可替换为 PostgreSQL
+- **沙盒**: OpenSandbox 代码执行环境（Shell 命令 + 文件上下传）
 - **认证**: JWT (HS256) + bcrypt + RSA-2048 密码加密传输
 - **缓存**: Redis (可选，自动降级到内存 MemoryStore)
 - **包管理**: uv (pyproject.toml)
@@ -17,29 +18,39 @@ Python 智能体后端，基于 FastAPI + LangGraph。
 
 ```
 backend/src/
-├── server.py          # FastAPI 入口，lifespan 中初始化 DB 和 Store
-├── api/               # 路由层
+├── server.py          # FastAPI 入口，lifespan 中初始化 DB、MCP 种子数据和 Store
+├── api/               # 路由层（11 个子模块）
 │   ├── __init__.py    # 聚合所有子路由
-│   ├── deps.py        # 依赖注入 (get_db, get_store, get_client_ip)
-│   ├── agent/         # 对话/智能体接口
+│   ├── deps.py        # 依赖注入 (get_db, get_store, get_client_ip, get_current_user_id)
+│   ├── agent/         # 对话/智能体接口 (Chat API)
+│   ├── agents/        # 智能体管理 (CRUD + 配置 + 文件)
 │   ├── auth/          # 登录/注册/Token 刷新
-│   ├── captcha/       # 滑块验证码
+│   ├── captcha/       # 滑块验证码 + 图形验证码
+│   ├── conversation/  # 对话历史 CRUD
+│   ├── email/         # 邮箱验证码
+│   ├── mcp/           # MCP 广场 (工具列表/安装/卸载)
 │   ├── oauth/         # 第三方登录 (GitHub/Google/微信)
+│   ├── providers/     # 模型提供商 + 模型管理
+│   ├── skill/         # 技能管理 (上传/校验/CRUD)
 │   └── sms/           # 短信验证码
 ├── core/              # 核心模块
 │   ├── security.py    # JWT 签发/解码、bcrypt 加解密、RSA 密钥对
 │   ├── store.py       # KeyValueStore 抽象 (Redis + MemoryStore 降级)
 │   └── response.py    # 统一响应格式 ApiResponse
 ├── agent/             # LangGraph agent
-│   ├── graph.py       # 图定义
+│   ├── graph.py       # 图定义（OpenSandboxBackend + CompositeBackend）
 │   ├── config/        # 配置类 (Settings, 从 .env 读取)
+│   ├── context/       # Context 数据类 (server_info + user_id)
 │   ├── tools/         # agent 工具
-│   ├── models/        # 数据模型
+│   ├── models/        # LLM/Embeddings 模型实例
+│   ├── subagents/     # 子智能体定义 (research-agent)
+│   ├── sandbox/       # OpenSandbox 沙盒后端 (代码执行 + 文件操作)
 │   └── utils/         # agent 工具函数
-└── db/                # 数据库
+└── db/                # 数据库（11 个 ORM 模型）
     ├── engine.py      # 异步引擎 + get_db + init_db
     ├── base.py        # DeclarativeBase
-    └── models/        # ORM 模型
+    ├── models/        # ORM 模型
+    └── seeds/         # MCP 工具种子数据
 ```
 
 ## 环境变量 (`.env`)

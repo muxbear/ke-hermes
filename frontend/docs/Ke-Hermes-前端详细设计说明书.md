@@ -1,4 +1,4 @@
-# Ke-Hermes 详细设计说明书 — v1.4.0
+# Ke-Hermes 详细设计说明书 — v1.5.0
 
 | 版本    | 日期         | 作者  | 变更说明                                         |
 | ----- | ---------- | --- | -------------------------------------------- |
@@ -9,6 +9,7 @@
 | 1.2.2 | 2026-05-22 | -   | 文档对照实际代码更新：chatStore 增加 threadId 状态管理、sendStreamRequest/sendChatRequest 支持 thread_id 参数、SSE 解析增加 onThreadId 回调、clearMessages 重置 threadId、ChatMessage 增加 thread_id 流转 |
 | 1.3.0 | 2026-05-26 | -   | 文档对照实际代码更新：新增 MainLayout 根布局组件重构路由结构；新增 MCP 广场模块（列表/详情/安装/卸载）；新增 Skills 技能管理模块（CRUD/仓库导入/本地上传）；新增 conversationApi 服务对接后端对话历史 API；RightPanel 接入真实对话历史数据；SideMenu 增加可折叠菜单分组 + 路由导航；uiStore 重构 HistoryItem/activeThreadId；chatStore 增加 loadConversation |
 | 1.4.0 | 2026-05-28 | -   | 新增代理管理模块（Part D）：智能体列表树、多标签配置面板（文件/工具/技能/Cron Jobs）、Vue Flow 主子智能体关系图（拖动/缩放/锁定/最大化）、dagre 自动布局、自定义节点边组件、Agent Store/API/Types 完整设计；TopBar 新增面包屑导航；术语统一（主智能体/子智能体/Cron Jobs）；新增 vue-flow/dagre/vueuse-motion 依赖 |
+| 1.5.0 | 2026-06-05 | -   | 文档对照实际代码更新：新增概览仪表盘（OverviewView + ECharts 图表，Part E）；新增模型管理模块（ModelsView/ModelStore/ModelApi/Model Types，Provider + Model CRUD）；新增定时任务模块（ScheduledTasksView/ScheduledTaskStore/Types，Mock 实现）；Agent API 从 Mock 切换到真实后端接口（含文件操作）；Agent Store 新增文件编辑状态（FileEditDialog + MarkdownEditor）；Skill Store 重构为分页查询 + 上传 + 批量删除 + 搜索；SideMenu 新增搜索功能 + 菜单项更新（概览/模型/定时任务）；路由新增 3 个页面；Stores 从 7 个扩展到 9 个；API Services 从 7 个扩展到 9 个；Types 从 7 个扩展到 10 个；视图从 8 个扩展到 12 个；新增 ECharts 依赖 |
 
 
 ---
@@ -51,17 +52,23 @@
 27. [代理 API 服务层](#27-代理-api-服务层)
 28. [代理类型定义](#28-代理类型定义)
 
+**Part E — 模型/概览/定时任务模块（v1.5.0 新增）**
+29. [概览仪表盘模块](#29-概览仪表盘模块)
+30. [模型管理模块](#30-模型管理模块)
+31. [定时任务模块](#31-定时任务模块)
+
 ---
 
 ## 1. 概述
 
 ### 1.1 文档目的
 
-本文档为 Ke-Hermes 前端（桌面版）的详细设计说明书 v1.4.0，基于实际代码库编写。文档覆盖四大核心模块：
+本文档为 Ke-Hermes 前端（桌面版）的详细设计说明书 v1.5.0，基于实际代码库编写。文档覆盖五大核心模块：
 - **Part A — 基础架构与登录模块**：TypeScript 技术栈、暗色主题、国际化、测试套件
 - **Part B — 聊天模块**：AppShell 三栏布局、SSE 流式对话（含 thread_id 上下文管理）、Markdown 渲染、状态管理、对话历史对接
-- **Part C — MCP 广场与技能模块**：MCP 工具广场（浏览/详情/安装/卸载）、Skills 技能管理（CRUD/仓库导入/本地上传/手动创建）
-- **Part D — 代理管理模块（v1.4.0 新增）**：智能体列表树、多标签配置面板（文件/工具/技能/Cron Jobs）、Vue Flow 主子智能体关系图（拖动/缩放/锁定/最大化）、dagre 自动布局
+- **Part C — MCP 广场与技能模块**：MCP 工具广场（浏览/详情/安装/卸载）、Skills 技能管理（分页/上传/批量删除/搜索）
+- **Part D — 代理管理模块**：智能体列表树、多标签配置面板（文件/工具/技能/Cron Jobs）、Vue Flow 主子智能体关系图、真实后端 API 对接（含文件编辑）
+- **Part E — 概览/模型/定时任务模块（v1.5.0 新增）**：概览仪表盘（ECharts 图表）、模型管理（Provider/Model CRUD + 7 种模型类型）、定时任务（Cron 任务 + 运行日志）
 
 文档供前端开发人员编码实现、代码审查和后期维护使用。
 
@@ -93,13 +100,15 @@
 | 图小地图     | @vue-flow/minimap      | ^1.5   | (v1.4.0)|
 | 图布局      | dagre                  | ^0.8   | (v1.4.0)|
 | 动画引擎     | @vueuse/motion         | ^2.2   | (v1.4.0)|
+| 图表引擎     | echarts + vue-echarts  | ^6     | (v1.5.0)|
 
 ### 1.3 适用模块
 
 - **Part A**：PC Web 端登录/注册页面、OAuth 回调处理、路由守卫、Token 刷新、权限校验
 - **Part B**：智能体对话界面（三栏布局）、流式 SSE 对话、Markdown 渲染、对话历史管理
 - **Part C**：MCP 工具广场、Skills 技能管理（仓库导入/本身上传/手动创建）
-- **Part D**：智能体列表管理、配置面板（文件/工具/技能/Cron Jobs）、主子智能体关系图、智能体 CRUD
+- **Part D**：智能体列表管理、配置面板（文件/工具/技能/Cron Jobs）、主子智能体关系图、智能体 CRUD（对接真实后端 API）、文件编辑（MarkdownEditor）
+- **Part E**：概览仪表盘（系统指标、资源监控、图表可视化）、模型管理（Provider + Model CRUD、7 种模型类型、筛选搜索）、定时任务（Cron 任务管理 + 运行日志记录）
 
 ### 1.4 相关文档
 
@@ -110,7 +119,7 @@
 
 ## 2. 项目架构
 
-### 2.1 目录结构（v1.3.0）
+### 2.1 目录结构（v1.5.0）
 
 ```
 frontend/
@@ -151,9 +160,11 @@ frontend/
     │   ├── captcha.ts                 # 验证码/倒计时状态
     │   ├── chat.ts                    # 聊天消息 + SSE 流式 + loadConversation
     │   ├── ui.ts                      # UI 状态（侧栏/面板/模型）+ 对话历史（后端对接）
-    │   ├── agent.ts                   # 智能体状态（v1.4.0 新增）
+    │   ├── agent.ts                   # 智能体状态（v1.4.0 新增，v1.5.0 对接真实 API）
     │   ├── mcp.ts                     # MCP 工具状态（v1.3.0 新增）
-    │   └── skill.ts                   # Skills 技能状态（v1.3.0 新增）
+    │   ├── model.ts                   # 模型/提供商状态（v1.5.0 新增）
+    │   ├── scheduledTask.ts           # 定时任务状态（v1.5.0 新增）
+    │   └── skill.ts                   # Skills 技能状态（v1.3.0 新增，v1.5.0 增强分页/上传）
     │
     ├── types/
     │   ├── api.ts                     # ApiResponse<T>, SendSmsRequest
@@ -162,6 +173,8 @@ frontend/
     │   ├── components.ts              # FeatureItem, OAuthProvider, CaptchaResult
     │   ├── agent.ts                   # Agent, ConfigType, STATUS_LABELS, CONFIG_TYPE_MAP（v1.4.0 新增）
     │   ├── mcp.ts                     # McpTool, McpConfigField, InstallMcpRequest（v1.3.0 新增）
+    │   ├── model.ts                   # Provider, AIModel, ModelType, ModelParam（v1.5.0 新增）
+    │   ├── scheduledTask.ts           # CronTask, RunRecord, TaskStatus, RunStatus（v1.5.0 新增）
     │   ├── skill.ts                   # Skill, SkillCreateRequest, CATEGORY_LABELS（v1.3.0 新增）
     │   └── router.d.ts                # RouteMeta 扩展
     │
@@ -170,10 +183,12 @@ frontend/
     │   ├── authApi.ts                 # 认证接口（8 个）
     │   ├── captchaApi.ts              # 验证码 + 短信接口（5 个）
     │   ├── oauthApi.ts                # OAuth 接口（2 个）
-    │   ├── agentApi.ts                # 智能体 Mock API（8 个）（v1.4.0 新增）
+    │   ├── agentApi.ts                # 智能体 API（12 个，真实后端对接）（v1.4.0 新增，v1.5.0 切换真实 API）
     │   ├── conversationApi.ts         # 对话历史 CRUD（4 个）（v1.3.0 新增）
     │   ├── mcpApi.ts                  # MCP 接口（4 个）（v1.3.0 新增）
-    │   └── skillApi.ts                # Skills 接口（6 个）（v1.3.0 新增）
+    │   ├── modelApi.ts                # 模型/提供商接口（9 个）（v1.5.0 新增）
+    │   ├── scheduledTaskApi.ts        # 定时任务接口（Mock）（v1.5.0 新增）
+    │   └── skillApi.ts                # Skills 接口（9 个，含上传/批量/搜索）（v1.3.0 新增，v1.5.0 增强）
     │
     ├── composables/
     │   ├── useAuth.ts                 # 登录逻辑封装 + 重定向 + 密码加密降级
@@ -223,7 +238,9 @@ frontend/
     │   │   ├── AgentGraph.vue         # 主子智能体关系图组件（v1.4.0 新增）
     │   │   ├── AgentNode.vue          # 自定义 Vue Flow 节点（v1.4.0 新增）
     │   │   ├── AgentEdge.vue          # 自定义 Vue Flow 边（v1.4.0 新增）
-    │   │   └── AddConfigDialog.vue    # 添加配置弹窗（v1.4.0 新增）
+    │   │   ├── AddConfigDialog.vue    # 添加配置弹窗（v1.4.0 新增）
+    │   │   ├── FileEditDialog.vue     # 文件内容编辑弹窗（v1.5.0 新增）
+    │   │   └── MarkdownEditor.vue     # Markdown 编辑器（v1.5.0 新增）
     │   └── skill/
     │       ├── SkillCard.vue           # Skills 技能卡片（v1.3.0 新增）
     │       ├── SkillDialog.vue         # Skills 创建/编辑弹窗（3 标签页）（v1.3.0 新增）
@@ -255,15 +272,32 @@ frontend/
 ### 2.2 模块分层
 
 ```
-Views (HomeView, LoginView, SkillsView, McpSquareView, ...)
-  └── Components (MainLayout, AppShell, SkillCard, McpCard, ...)
-       └── Composables (useAuth, useCaptcha, useCountdown, ...)
-            ├── Stores (auth, captcha, chat, ui, mcp, skill)
-            └── Services (request, authApi, captchaApi, oauthApi, conversationApi, mcpApi, skillApi)
-                 └── Types (auth, api, captcha, components, mcp, skill)
+Views (HomeView, OverviewView, AgentsView, ModelsView, SkillsView, McpSquareView, ...)
+  └── Components (MainLayout, AppShell, SkillCard, McpCard, AgentNode, FileEditDialog, ...)
+       └── Composables (useAuth, useCaptcha, useCountdown, useAgentGraph, ...)
+            ├── Stores (auth, captcha, chat, ui, agent, mcp, model, scheduledTask, skill)
+            └── Services (request, authApi, captchaApi, oauthApi, agentApi, conversationApi, mcpApi, modelApi, scheduledTaskApi, skillApi)
+                 └── Types (auth, api, captcha, components, agent, mcp, model, scheduledTask, skill)
 ```
 
-### 2.3 v1.2.2 → v1.3.0 实施偏差
+### 2.3 v1.3.0 → v1.5.0 实施偏差
+
+| 设计项 | v1.3.0/v1.4 计划 | v1.5.0 实施 | 原因 |
+|--------|-----------------|------------|------|
+| Agent API | Mock 实现（agentApi.ts，8 个方法） | 对接后端真实 API（12 个方法，含文件操作），snake_case→camelCase 转换 | 后端 Agents API 已实现 |
+| Agent 文件管理 | 仅配置项列表 | 完整文件编辑：FileEditDialog + MarkdownEditor + 文件描述列表 | 后端 AgentFile API 已实现 |
+| Skill Store | 全量加载（fetchSkills） | 分页查询（fetchSkillsPaginated）+ 搜索（searchSkills）+ 上传（uploadSkillPackage）+ 批量删除（batchRemoveSkills） | 后端 Skills 分页/搜索/上传接口已就绪 |
+| 概览仪表盘 | 无 | 完整实现：ECharts 图表 + 统计卡片 + 系统指标 + 用户排名 + 模型提供商 + 操作日志 | 需求新增 |
+| 模型管理 | 无 | 完整实现：Provider CRUD + Model CRUD（7 种类型）+ 筛选搜索 + 使用统计 + 状态切换 | 后端 Providers API 已实现 |
+| 定时任务 | 无 | Mock 实现：Cron 任务 CRUD + 运行日志 + 预设 Cron 表达式 + 状态筛选 | 后端 ScheduledTask API 待实现 |
+| 路由 | 5 个需认证页面 | 8 个需认证页面：+ overview + models + scheduled-tasks | 新增功能模块 |
+| 菜单导航 | 聊天/控制/代理/设置/后台 5 组 | 增强搜索功能，菜单项新增概览/模型/定时任务 | 新增页面入口 |
+| Stores 总数 | 7 | 9（+model +scheduledTask） | 新增模块 |
+| API Services | 7 | 9（+modelApi +scheduledTaskApi） | 新增模块 |
+| Types | 7 | 10（+model +scheduledTask + 扩展 agent） | 新增类型定义 |
+| 视图数量 | 8 | 12（+OverviewView +ModelsView +ScheduledTasksView，+ 拆分 EmailRegisterView） | 新增页面 |
+
+### 2.4 v1.2.2 → v1.3.0 实施偏差
 
 | 设计项 | v1.2.2 计划 | v1.3.0 实施 | 原因 |
 |--------|------------|------------|------|
@@ -282,6 +316,10 @@ Views (HomeView, LoginView, SkillsView, McpSquareView, ...)
 
 | 路径               | 名称              | 组件 (懒加载)                       | Meta                         |
 | ----------------- | --------------- | ------------------------------ | ---------------------------- |
+| `/`               | home            | MainLayout → `@/views/HomeView.vue` (child) | requiresAuth: true           |
+| `/overview`       | overview        | MainLayout → `@/views/OverviewView.vue` (child) | requiresAuth: true, title: '概览' | (v1.5.0)|
+| `/models`         | models          | MainLayout → `@/views/ModelsView.vue` (child) | requiresAuth: true, title: '模型' | (v1.5.0)|
+| `/scheduled-tasks`| scheduled-tasks | MainLayout → `@/views/ScheduledTasksView.vue` (child) | requiresAuth: true, title: '定时任务' | (v1.5.0)|
 | `/`               | home            | MainLayout → `@/views/HomeView.vue` (child) | requiresAuth: true           |
 | `/skills`         | skills          | MainLayout → `@/views/SkillsView.vue` (child) | requiresAuth: true, title: 'Skills' |
 | `/agents`         | agents          | MainLayout → `@/views/AgentsView.vue` (child) | requiresAuth: true, title: '代理' | (v1.4.0)|
@@ -412,13 +450,81 @@ AuthLayout.vue
 | installTool(id) | 安装工具（调用 API + 更新本地状态） |
 | uninstallTool(id) | 卸载工具（调用 API + 更新本地状态） |
 
-### 5.4 Skill Store (src/stores/skill.ts)（v1.3.0 新增）
+### 5.4 Model Store (src/stores/model.ts)（v1.5.0 新增）
+
+| State | 类型 | 说明 |
+|-------|------|------|
+| providers | `Ref<Provider[]>` | 所有提供商（含嵌套模型） |
+| selectedProviderId | `Ref<string \| null>` | 当前选中的提供商 ID |
+| loading | `Ref<boolean>` | 加载中 |
+| error | `Ref<string \| null>` | 错误消息 |
+| providerSearch | `Ref<string>` | 提供商搜索关键词 |
+| modelSearch | `Ref<string>` | 模型搜索关键词 |
+| modelTypeFilter | `Ref<ModelType \| 'all'>` | 模型类型筛选 |
+| rightTab | `Ref<'models' \| 'usage'>` | 右侧面板标签页 |
+
+| Getter | 说明 |
+|--------|------|
+| selectedProvider | 当前选中的提供商（默认第一个） |
+| filteredProviders | 按名称搜索过滤的提供商列表 |
+| filteredModels | 当前提供商的模型列表（按 search + typeFilter 过滤） |
+| totalModels | 所有提供商模型总数 |
+| typeCounts | 全局模型类型统计: `{ [ModelType]: count }` |
+| providerTypeCounts | 当前提供商模型类型统计 |
+| providerStats | 当前提供商统计: `{ total, totalCalls, inUse, deprecated }` |
+
+| Action | 说明 |
+|--------|------|
+| fetchAll | 调用 modelApi.fetchProviders() 加载所有数据 |
+| selectProvider(id) | 切换选中提供商，重置搜索/筛选 |
+| saveProvider(data) | 创建或更新提供商（根据 id 是否存在判断） |
+| deleteProvider(id) | 删除提供商 |
+| saveModel(data) | 创建或更新模型 |
+| deleteModel(providerId, modelId) | 删除模型 |
+| cloneModel(providerId, modelId) | 克隆模型 |
+| toggleModelStatus(providerId, modelId) | 切换模型状态 |
+
+### 5.5 ScheduledTask Store (src/stores/scheduledTask.ts)（v1.5.0 新增）
+
+| State | 类型 | 说明 |
+|-------|------|------|
+| tasks | `Ref<CronTask[]>` | 定时任务列表 |
+| runs | `Ref<RunRecord[]>` | 运行记录列表 |
+| loading | `Ref<boolean>` | 加载中 |
+| error | `Ref<string \| null>` | 错误消息 |
+| taskSearch | `Ref<string>` | 任务搜索关键词 |
+| taskFilter | `Ref<TaskStatus \| 'all'>` | 任务状态筛选 |
+| runFilter | `Ref<RunStatus \| 'all'>` | 运行记录状态筛选 |
+| expandedTaskId | `Ref<string \| null>` | 展开的任务 ID |
+
+| Getter | 说明 |
+|--------|------|
+| activeTasks | 运行中的任务列表 |
+| nextTask | 下一个将要执行的任务 |
+| filteredTasks | 按搜索 + 状态筛选后的任务列表 |
+| filteredRuns | 按任务 + 状态筛选后的运行记录 |
+| taskStats | 任务统计: `{ total, active, paused, error }` |
+| runStats | 运行统计: `{ total, success, failed, running, skipped, successRate }` |
+
+| Action | 说明 |
+|--------|------|
+| fetchAll | 加载任务列表 + 运行记录（Mock） |
+| createTask(data) | 创建新任务（Mock） |
+| toggleTaskStatus(id) | 切换任务 active/paused（Mock） |
+| cloneTask(id) | 克隆任务（Mock） |
+| deleteTask(id) | 删除任务（Mock） |
+| toggleExpand(id) | 展开/折叠任务详情 |
+
+### 5.6 Skill Store (src/stores/skill.ts)（v1.3.0 新增，v1.5.0 增强）
 
 | State | 类型 | 说明 |
 |-------|------|------|
 | skills | `Skill[]` | 技能列表 |
+| total | `number` | 技能总数 |
 | loading | `boolean` | 加载中 |
 | error | `string \| null` | 错误消息 |
+| page | `number` | 当前页码（v1.5.0 新增） |
+| pageSize | `number` | 每页条数（v1.5.0 新增） |
 
 | Getter | 说明 |
 |--------|------|
@@ -430,11 +536,15 @@ AuthLayout.vue
 
 | Action | 说明 |
 |--------|------|
-| fetchSkills(category?) | 获取技能列表 |
+| fetchSkills(category?) | 获取技能列表（全量，兼容旧版） |
+| fetchSkillsPaginated(category?, page?, pageSize?) | **v1.5.0 新增**：分页查询技能列表 |
+| searchSkills(name, page?, pageSize?) | **v1.5.0 新增**：按名称模糊搜索 |
 | addSkill(data) | 创建技能 |
 | editSkill(id, data) | 更新技能 |
 | removeSkill(id) | 删除技能 |
+| batchRemoveSkills(ids) | **v1.5.0 新增**：批量删除技能 |
 | toggleSkillEnabled(id, enabled) | 切换启用/禁用（乐观更新 + 失败回滚） |
+| uploadSkillPackage(file) | **v1.5.0 新增**：上传技能压缩包（multipart/form-data） |
 
 ### 5.5 chatStore & uiStore
 
@@ -453,6 +563,8 @@ AuthLayout.vue
 | `types/captcha.ts` | `SlidePuzzleData`, `SlideVerifyRequest`, `SlideVerifyResponse`, `ImageCaptchaData` |
 | `types/components.ts` | `LoginTabItem`, `FeatureItem`, `OAuthProvider`, `CaptchaResult`, `PendingAction` |
 | `types/mcp.ts` | `McpTool`, `McpConfigField`, `InstallMcpRequest`, `MCP_CATEGORY_LABELS`, `MCP_CATEGORY_FILTERS` |
+| `types/model.ts` | `Provider`, `AIModel`, `ModelParam`, `ModelType`, `ModelStatus`, `ProviderStatus`, `MODEL_TYPE_META` (v1.5.0 新增) |
+| `types/scheduledTask.ts` | `CronTask`, `RunRecord`, `TaskStatus`, `RunStatus`, `TargetType`, `CreateTaskRequest`, `CRON_PRESETS` (v1.5.0 新增) |
 | `types/skill.ts` | `Skill`, `SkillCreateRequest`, `CATEGORY_LABELS`, `CATEGORY_FILTERS` |
 | `types/router.d.ts` | 扩展 `RouteMeta: { title?, requiresAuth?, guest? }` |
 
@@ -475,7 +587,7 @@ AuthLayout.vue
 
 **SSE 流式请求:** `sendStreamRequest()` 函数使用 fetch + ReadableStream 解析 SSE。请求头通过 `chatAuthHeaders()` 注入 JWT Token。
 
-### 7.2 API 模块（v1.3.0 扩展）
+### 7.2 API 模块（v1.5.0 扩展）
 
 | 模块 | 接口方法 |
 |------|---------|
@@ -483,8 +595,11 @@ AuthLayout.vue
 | captchaApi | getSlidePuzzle, verifySlide, sendSms, getImageCaptcha, verifyImageCaptcha |
 | oauthApi | getAuthUrl, handleCallback |
 | conversationApi | fetchConversations, fetchConversationMessages, renameConversation, deleteConversation |
+| agentApi | fetchAgents, createAgent, deleteAgent, toggleAgentStatus, cloneAgent, addConfig, updateConfig, removeConfig, getFileContent, saveFileContent, getFileDescriptions |
 | mcpApi | fetchMcpTools, fetchMcpToolById, installMcpTool, uninstallMcpTool |
-| skillApi | fetchSkills, createSkill, fetchSkill, updateSkill, deleteSkill, toggleSkill |
+| modelApi | fetchProviders, createProvider, updateProvider, deleteProvider, createModel, updateModel, deleteModel, cloneModel, toggleModelStatus |
+| scheduledTaskApi | fetchTasks, fetchRuns, createTask, toggleTaskStatus, deleteTask, cloneTask（Mock 实现）|
+| skillApi | fetchSkills, fetchSkillsPaginated, searchSkills, createSkill, fetchSkill, updateSkill, deleteSkill, batchRemoveSkills, toggleSkill, uploadSkillPackage |
 
 ---
 
@@ -559,14 +674,26 @@ npm run test:coverage  # 覆盖率报告
 
 ## 12. 实施记录
 
-### 12.1 v1.3.0 文件变更统计
+### 12.1 v1.5.0 文件变更统计
+
+| 类型 | 数量 | 说明 |
+|------|------|------|
+| 新增视图 | 3 | OverviewView, ModelsView, ScheduledTasksView |
+| 新增 Stores | 2 | model.ts, scheduledTask.ts |
+| 新增 API Services | 2 | modelApi.ts, scheduledTaskApi.ts |
+| 新增 Types | 2 | model.ts, scheduledTask.ts |
+| 新增组件 | 2 | FileEditDialog.vue, MarkdownEditor.vue |
+| 重构文件 | 8 | agentApi.ts（Mock→真实API）, agent store（+文件状态）, skill store（+分页/上传/批量）, SideMenu.vue（+搜索）, router/index.ts（+3 路由）, TopBar.vue（+面包屑）, agent types（+文件类型）, skillApi.ts（+方法） |
+| 新增依赖 | 1 | echarts + vue-echarts |
+
+### 12.2 v1.3.0 文件变更统计
 
 | 类型 | 数量 | 说明 |
 |------|------|------|
 | 新增文件 | 15 | MainLayout, McpCard, SkillCard, SkillDialog, iconMap, conversationApi, mcpApi, skillApi, mcp store, skill store, mcp types, skill types, SkillsView, McpSquareView, McpDetailView |
 | 重构文件 | 6 | router/index.ts, stores/ui.ts, stores/chat.ts, services/request.ts, SideMenu.vue, RightPanel.vue |
 
-### 12.2 npm 脚本
+### 12.3 npm 脚本
 
 | 命令 | 用途 |
 |------|------|
@@ -648,20 +775,27 @@ MainLayout.vue (flex row, 100vh)
 | 功能 | 聊天页三栏布局（ChatMain + RightPanel） |
 | 状态依赖 | uiStore（sidebar/panel 折叠态） |
 
-### 15.3 SideMenu（v1.3.0 重构）
+### 15.3 SideMenu（v1.5.0 更新）
 
 | 属性 | 说明 |
 |------|------|
 | 文件 | `src/components/SideMenu.vue` |
-| 功能 | 可折叠左侧导航菜单，支持菜单分组折叠/展开、路由导航、路由高亮 |
+| 功能 | 可折叠左侧导航菜单，支持菜单分组折叠/展开、路由导航、路由高亮、**菜单搜索**（v1.5.0 新增） |
 
-**菜单分组（v1.3.0）：**
+**v1.5.0 新增搜索功能：**
+- 顶部搜索输入框（Search 图标），聚焦时展开搜索面板
+- 搜索所有菜单项（按名称 + 拼音匹配），实时过滤显示结果
+- 搜索结果按分组归类显示，点击结果项直接导航并清除搜索
+- 未匹配时显示"未找到相关菜单"空状态
+- 点击外部（`onClickOutside`）关闭搜索面板
+
+**菜单分组（v1.5.0）：**
 
 | 分组 | 项目 |
 |------|------|
-| 聊天 | 对话 (→ /) |
-| 控制 | 概览, 实例, 会话, 使用情况, 定时任务 |
-| 代理 | 代理 (→ /agents), 技能 Hub (→ /skills), 节点 |
+| 聊天 | 对话 (→ /), 概览 (→ /overview) |
+| 控制 | 概览, 实例, 会话, 使用情况, 定时任务 (→ /scheduled-tasks) |
+| 代理 | 代理 (→ /agents), 技能 Hub (→ /skills), 节点, 模型 (→ /models) |
 | 设置 | 配置, 文档 |
 | 后台 | 后台 |
 
@@ -679,7 +813,7 @@ MainLayout.vue (flex row, 100vh)
 | 点击历史 | `chatStore.loadConversation(threadId)` → 加载消息并渲染 |
 | 删除历史 | `uiStore.deleteHistory(threadId)` → 后端删除 + 本地更新 |
 
-### 15.5 TopBar（v1.4.0 更新）
+### 15.5 TopBar（v1.5.0 更新）
 
 | 属性 | 说明 |
 |------|------|
@@ -696,8 +830,11 @@ MainLayout.vue (flex row, 100vh)
 | 路由 | 面包屑 |
 |------|--------|
 | `/` | 聊天 > 对话 |
+| `/overview` | 聊天 > 概览 |
 | `/agents` | 代理 > 代理 |
+| `/models` | 代理 > 模型 |
 | `/skills` | 代理 > 技能 Hub |
+| `/scheduled-tasks` | 控制 > 定时任务 |
 | `/mcp` | MCP > MCP 广场 |
 
 ### 15.6 MessageList / MessageItem / InputBar / ChatHeader
@@ -835,11 +972,13 @@ export async function deleteConversation(threadId: string): Promise<void>
 
 | 项目 | 优先级 | 说明 |
 |------|--------|------|
+| 定时任务后端对接 | P1 | ScheduledTasksView 当前全 Mock 实现，需后端 API |
 | 搜索功能 | P3 | TopBar 搜索框无实际搜索逻辑 |
 | 通知功能 | P3 | TopBar 铃铛按钮无交互 |
 | 用户菜单完善 | P3 | 可补充个人设置等入口 |
 | 注册表单提交 | P2 | RegisterForm 和 EmailRegisterForm 的 submit 为 TODO 占位 |
 | MCP 创建功能 | P3 | "创建 MCP"按钮 TODO 占位 |
+| 概览仪表盘后端对接 | P3 | OverviewView 数据全部 Mock，需后端统计 API |
 
 ---
 
@@ -998,8 +1137,6 @@ interface SkillCreateRequest {
 支持 12 种 Lucide 图标：Globe, Code2, Image, BarChart3, FolderOpen, Zap, Search, FileText, Database, Palette, Music, Wrench。通过 `getSkillIcon(name)` 函数查找，未匹配时默认返回 Zap。
 
 ---
-
-> 本文档 v1.4.0 基于实际代码实现全面更新。v1.4.0 重点新增了代理管理模块：智能体列表树、文件/工具/技能/Cron Jobs 四标签配置面板、基于 Vue Flow 的主子智能体关系图（拖动/缩放/锁定/最大化）、dagre 自动树布局、自定义节点/边组件；TopBar 新增面包屑导航；术语统一（主智能体/子智能体/Cron Jobs）。后续版本应完善搜索功能、通知系统和用户菜单。
 
 ---
 
@@ -1268,7 +1405,7 @@ g.setGraph({ rankdir: 'TB', ranksep: 140, nodesep: 120, marginx: 80, marginy: 80
 
 ## 26. 代理状态管理
 
-### 26.1 agentStore (src/stores/agent.ts)
+### 26.1 agentStore (src/stores/agent.ts)（v1.5.0 更新）
 
 | State | 类型 | 说明 |
 |-------|------|------|
@@ -1278,6 +1415,10 @@ g.setGraph({ rankdir: 'TB', ranksep: 140, nodesep: 120, marginx: 80, marginy: 80
 | error | `Ref<string \| null>` | 错误消息 |
 | searchQuery | `Ref<string>` | 搜索关键词 |
 | expandedIds | `Ref<Set<string>>` | 已展开的智能体 ID 集合 |
+| currentFileContent | `Ref<AgentFileContent \| null>` | **v1.5.0 新增**：当前编辑的文件内容 |
+| fileLoading | `Ref<boolean>` | **v1.5.0 新增**：文件加载中 |
+| selectedFilename | `Ref<string \| null>` | **v1.5.0 新增**：当前选中的文件名 |
+| fileDescriptions | `Ref<Record<string, string>>` | **v1.5.0 新增**：文件名 → 描述映射 |
 
 | Getter | 说明 |
 |--------|------|
@@ -1289,7 +1430,7 @@ g.setGraph({ rankdir: 'TB', ranksep: 140, nodesep: 120, marginx: 80, marginy: 80
 
 | Action | 说明 |
 |--------|------|
-| fetchAgents | 调用 agentApi.fetchAgents() 加载列表，默认选中主智能体 |
+| fetchAgents | **v1.5.0 变更**：调用后端真实 API `/agents` 加载列表，默认选中主智能体 |
 | selectAgent(id) | 设置 selectedAgentId |
 | toggleExpand(id) | 在 expandedIds 中添加/移除 |
 | expandAll / collapseAll | 全展开 / 全折叠 |
@@ -1297,42 +1438,52 @@ g.setGraph({ rankdir: 'TB', ranksep: 140, nodesep: 120, marginx: 80, marginy: 80
 | cloneAgent(id) | 调用 agentApi.cloneAgent() 克隆 |
 | deleteAgent(id) | 调用 agentApi.deleteAgent() 删除 |
 | addConfig(type, value) | 调用 agentApi.addConfig() 添加配置 |
+| updateConfig(type, value, newValue, desc) | **v1.5.0 新增**：调用 agentApi.updateConfig() 更新文件配置 |
 | removeConfig(type, value) | 调用 agentApi.removeConfig() 移除配置 |
-| createSubAgent(name) | 调用 agentApi.createAgent() 创建子智能体，自动展开主智能体并选中新节点 |
+| createSubAgent(name) | 调用 agentApi.createAgent() 创建子智能体 |
+| fetchFileContent(agentId, filename) | **v1.5.0 新增**：调用 agentApi.getFileContent() 加载文件内容 |
+| saveFileContent(agentId, filename, content) | **v1.5.0 新增**：调用 agentApi.saveFileContent() 保存文件内容 |
+| fetchFileDescriptions(agentId) | **v1.5.0 新增**：调用 agentApi.getFileDescriptions() 加载文件描述列表 |
 
 ---
 
-## 27. 代理 API 服务层
+## 27. 代理 API 服务层（v1.5.0 重构）
 
-### 27.1 agentApi — Mock 实现
+### 27.1 agentApi — 真实后端 API 对接
 
 | 属性 | 说明 |
 |------|------|
 | 文件 | `src/services/agentApi.ts` |
-| 说明 | Mock 实现，后端 Agent CRUD API 就绪后仅需替换本文件内部实现 |
+| 说明 | **v1.5.0 重大变更**：从 Mock 实现切换为后端真实 API 调用；所有请求通过 `request.ts` Axios 实例发送 |
 
-**Mock 数据（v1.4.0）：**
+**字段转换（snake_case ↔ camelCase）：**
 
-| ID | 名称 | 类型 | 状态 | 说明 |
-|----|------|------|------|------|
-| main-agent | 主智能体 | main | active | 负责整体任务协调和分发 |
-| sub-1 | 通用子智能体 | sub | active | `undeletable: true`，具备与主智能体相同的全部工具 |
-| sub-2 | 研究子智能体 | sub | inactive | 专门用于使用网络搜索进行深入研究并综合分析结果 |
+`toAgent()` 函数负责将后端 snake_case 字段转换为前端 camelCase：
+- `sub_agents` → `subAgents`
+- `parent_id` → `parentId`
+- `last_active` → `lastActive`
+- `call_count` → `callCount`
+- `undeletable` → `undeletable`
 
-**默认文件（所有智能体共享 7 个 .md）：**
-`AGENTS.md`, `SOUL.md`, `TOOLS.md`, `IDENTITY.md`, `USER.md`, `HEARTBEAT.md`, `MEMORY.md`
+**API 方法（共 12 个，均对接后端真实接口）：**
 
-**API 方法：**
+| 方法 | HTTP | 端点 | 说明 |
+|------|------|------|------|
+| fetchAgents() | GET | `/agents` | 获取智能体列表（`res.data.data.agents` 路径提取） |
+| createAgent(data) | POST | `/agents` | 创建智能体（name, description, parent_id） |
+| deleteAgent(id) | DELETE | `/agents/{id}` | 删除智能体（主智能体级联删除子智能体） |
+| toggleAgentStatus(id) | PATCH | `/agents/{id}/status` | 切换 active ↔ inactive |
+| cloneAgent(id) | POST | `/agents/{id}/clone` | 克隆智能体（含文件内容） |
+| addConfig(agentId, type, value, desc?) | POST | `/agents/{id}/config` | 添加配置项（tool/skill/prompt/file/subagent） |
+| updateConfig(agentId, type, value, newValue?, desc?) | PUT | `/agents/{id}/config` | 更新配置（文件重命名/修改描述） |
+| removeConfig(agentId, type, value) | DELETE | `/agents/{id}/config` | 移除配置项（子智能体类型会删除子智能体） |
+| getFileContent(agentId, filename) | GET | `/agents/{id}/files/{filename}` | 获取文件内容（首访自动创建空记录） |
+| saveFileContent(agentId, filename, content) | PUT | `/agents/{id}/files/{filename}` | 保存文件内容（upsert） |
+| getFileDescriptions(agentId) | GET | `/agents/{id}/file-descriptions` | 获取文件描述列表 |
 
-| 方法 | 说明 |
-|------|------|
-| fetchAgents() | 返回所有智能体（deepClone） |
-| createAgent(data) | 创建新子智能体（id: `sub-{timestamp}`），加入主智能体 subAgents |
-| deleteAgent(id) | 删除智能体（`undeletable` 保护：抛出错误），从主智能体移除 |
-| toggleAgentStatus(id) | 切换 active ↔ inactive 状态 |
-| cloneAgent(id) | 克隆智能体（name + "(副本)"，id + "-clone-{timestamp}"） |
-| addConfig(agentId, type, value) | 添加配置项（支持 tool/skill/file/prompt/subagent） |
-| removeConfig(agentId, type, value) | 移除配置项 |
+**v1.5.0 新增组件：**
+- `FileEditDialog.vue`：文件内容编辑弹窗（调用 `getFileContent` / `saveFileContent`）
+- `MarkdownEditor.vue`：Markdown 编辑器（支持语法高亮 + 预览）
 
 ---
 
@@ -1376,3 +1527,238 @@ export const CONFIG_TYPE_MAP: Record<ConfigType, { label; color; bgClass }> = {
   file:     { label: '文件',   color: '#eab308', bgClass: 'config--yellow' },
 }
 ```
+
+## 29. 概览仪表盘模块
+
+### 29.1 概述
+
+概览仪表盘（`OverviewView.vue`，路由 `/overview`）提供系统运营状态的集中可视化展示，使用 **ECharts 6** 进行图表渲染。
+
+### 29.2 页面结构
+
+```
+OverviewView.vue
+├── 页面标题 + 时间周期切换按钮（日/月/年）
+├── 统计卡片行（4 个卡片）
+│   ├── 总用户数（Users 图标，紫蓝渐变）
+│   ├── 活跃智能体（Bot 图标，青绿渐变）
+│   ├── 今日调用（Activity 图标，橙黄渐变）
+│   └── 成功率（Shield 图标，翠绿渐变）
+│   （每个卡片含趋势箭头 + 百分比 + 副标题）
+├── 图表区（2 列网格）
+│   ├── 调用趋势图（ECharts 折线图 + 面积渐变）
+│   ├── 智能体使用分布（ECharts 南丁格尔玫瑰饼图）
+│   ├── Token 消耗统计（ECharts 柱状图 + 趋势线）
+│   └── 响应时间分布（ECharts 热力/柱状图）
+├── 系统资源区
+│   ├── CPU 使用率（进度条）
+│   ├── 内存使用率（进度条）
+│   ├── 磁盘 I/O（进度条）
+│   └── 网络带宽（进度条）
+├── 功能区（2 列）
+│   ├── 顶级用户排名表（用户名/角色/调用数/Tokens/在线状态，含排名徽章）
+│   └── 模型提供商卡片（名称/模型数/用量进度条/热门模型）
+├── 系统指标行（API 延迟 / 队列长度 / 错误率 / 正常运行时间）
+└── 操作日志区（时间线 + 事件类型图标 + 时间戳）
+```
+
+### 29.3 技术实现
+
+| 组件 | 技术 | 说明 |
+|------|------|------|
+| 图表渲染 | ECharts 6 + vue-echarts | `shallowRef` 持有实例，响应式 `option` 更新 |
+| 响应式 | `watch` + `resize` | 监听 `period` 切换 + 窗口尺寸变化重新渲染 |
+| 数据 | Mock（静态定义） | 6 组数据集：统计/趋势/使用分布/Token/响应时间/延迟 |
+| 周期切换 | `ref<Period>('day')` | day / month / year 三按钮切换，更新所有图表数据 |
+| 时钟 | `setInterval` | 每秒更新一次 `currentTime` 显示 |
+
+### 29.4 ECharts 实例管理
+
+```typescript
+// 使用 shallowRef 避免深度响应式导致的性能问题
+const trendChart = shallowRef<echarts.ECharts>()
+const usageChart = shallowRef<echarts.ECharts>()
+
+// 每个图表的 initOption 使用 computed 动态计算
+// watch 监听数据变化自动调用 setOption(opt, { notMerge: true })
+// onUnmounted 中 dispose 清理
+```
+
+---
+
+## 30. 模型管理模块
+
+### 30.1 概述
+
+模型管理页面（`ModelsView.vue`，路由 `/models`）提供 AI 模型和提供商的集中管理功能。
+
+### 30.2 页面结构
+
+```
+ModelsView.vue（双面板布局）
+├── panel-left（提供商列表，280px）
+│   ├── header：搜索框 + "添加"按钮
+│   └── provider-list
+│       └── ProviderItem × N（logo + 名称 + 状态点 + 模型计数）
+├── panel-right（模型详情）
+│   ├── header：提供商信息 + 状态徽章 + 操作按钮（编辑/删除）
+│   ├── 标签切换：models | usage（使用统计）
+│   ├── 筛选栏：搜索框 + 类型筛选（全部/LLM/Vision/Audio/Video/Embedding/Image-Gen/Speech）
+│   └── model-grid
+│       └── ModelCard × N
+│           ├── 头部：模型图标（emoji）+ display_name + 状态徽章
+│           ├── 信息行：类型标签 / 上下文窗口 / 调用次数 / 发布日期
+│           ├── 参数列表（可折叠）: { key: label = value }
+│           ├── usedByAgents 标签
+│           └── 操作：编辑 / 克隆 / 切换状态 / 删除
+└── 弹窗：
+    ├── ProviderDialog（名称/图标/API Base/API Key/描述/官网）
+    ├── ModelDialog（display_name/name/type/status/context_window/description/params 编辑器）
+    └── DeleteConfirm（级联删除警告）
+
+
+### 30.3 模型数据模型
+
+```typescript
+type ModelType = 'llm' | 'vision' | 'audio' | 'video' | 'embedding' | 'image-gen' | 'speech'
+type ModelStatus = 'active' | 'beta' | 'deprecated' | 'inactive'
+type ProviderStatus = 'connected' | 'error' | 'unconfigured'
+
+interface ModelParam { key: string; label: string; value: number | string; min?: number; max?: number; step?: number; type: 'number' | 'text' | 'select'; options?: string[] }
+
+interface AIModel {
+  id: string; name: string; displayName: string
+  type: ModelType; status: ModelStatus
+  contextWindow?: number; usedByAgents: string[]
+  callCount: number; params: ModelParam[]
+  description: string; releaseDate?: string
+}
+
+interface Provider {
+  id: string; name: string; logo: string
+  status: ProviderStatus; apiBase: string; apiKey: string
+  models: AIModel[]; description: string; website: string
+}
+```
+
+### 30.4 模型类型元数据
+
+| type | 标签 | emoji | 颜色 |
+|------|------|-------|------|
+| llm | 大语言模型 | 💬 | indigo |
+| vision | 视觉模型 | 👁️ | purple |
+| audio | 音频模型 | 🎵 | green |
+| video | 视频模型 | 🎬 | pink |
+| embedding | 向量模型 | 🔢 | cyan |
+| image-gen | 图像生成 | 🎨 | amber |
+| speech | 语音合成 | 🗣️ | teal |
+
+### 30.5 modelApi 服务
+
+| 方法 | HTTP | 端点 | 说明 |
+|------|------|------|------|
+| fetchProviders() | GET | `/providers` | 获取所有提供商（含嵌套模型） |
+| createProvider(data) | POST | `/providers` | 创建提供商 |
+| updateProvider(id, data) | PUT | `/providers/{id}` | 更新提供商 |
+| deleteProvider(id) | DELETE | `/providers/{id}` | 删除提供商（级联删除模型） |
+| createModel(providerId, data) | POST | `/providers/{id}/models` | 创建模型 |
+| updateModel(providerId, modelId, data) | PUT | `/providers/{id}/models/{modelId}` | 更新模型 |
+| deleteModel(providerId, modelId) | DELETE | `/providers/{id}/models/{modelId}` | 删除模型 |
+| cloneModel(providerId, modelId) | POST | `/providers/{id}/models/{modelId}/clone` | 克隆模型 |
+| toggleModelStatus(providerId, modelId) | PATCH | `/providers/{id}/models/{modelId}/status` | 切换状态 |
+
+字段转换函数 `toProvider()` / `toModel()` 负责 snake_case → camelCase 映射。
+
+
+---
+
+---
+
+## 31. 定时任务模块
+
+### 31.1 概述
+
+定时任务管理页面（`ScheduledTasksView.vue`，路由 `/scheduled-tasks`）提供 Cron 定时任务的集中管理。当前为 **Mock 实现**，后端 API 就绪后切换到真实接口。
+
+### 31.2 页面结构
+
+```
+ScheduledTasksView.vue
+├── header：标题 + 统计卡片行（总数/运行中/已暂停/异常 + 趋势箭头）
+├── 工具栏：搜索框 + 状态筛选 + "创建任务"按钮
+├── task-list
+│   └── TaskItem × N（可展开）
+│       ├── 基本信息：名称 + 描述 + 状态徽章 + 标签
+│       ├── Cron 信息：表达式 + 标签 + 下次执行时间
+│       ├── 执行统计：成功率 + 总次数 + 平均耗时 + 上次运行时间
+│       └── 操作：启动/暂停 / 克隆 / 删除
+│       └── [展开] 运行日志面板
+│           ├── 运行筛选（全部/成功/失败/运行中/跳过）
+│           └── RunRecord × N
+│               ├── 状态图标 + 触发方式（定时/手动）
+│               ├── 开始时间 + 耗时
+│               └── 输出摘要
+└── 创建/编辑弹窗
+    ├── 名称 + 描述
+    ├── Cron 表达式（可选择预设：每分钟/每5分钟/每小时/每天/每周一/每月1日 等 8 个）
+    ├── 目标类型下拉（代理 Agent / 技能 Skill / 工具 Tool / 提示词 Prompt）
+    ├── 目标选择 + 标签
+    └── 提交按钮
+```
+
+### 31.3 定时任务数据模型
+
+```typescript
+type TaskStatus = 'active' | 'paused' | 'error'
+type RunStatus = 'success' | 'failed' | 'running' | 'skipped'
+type TargetType = 'agent' | 'skill' | 'tool' | 'prompt'
+
+interface CronTask {
+  id: string; name: string; description: string
+  cron: string; cronLabel: string
+  status: TaskStatus
+  target: string; targetType: TargetType
+  lastRun: string | null; nextRun: string
+  successRate: number; totalRuns: number
+  avgDuration: string; tags: string[]
+}
+
+interface RunRecord {
+  id: string; taskId: string; taskName: string
+  status: RunStatus
+  startTime: string; duration: string
+  output: string
+  trigger: 'scheduled' | 'manual'
+}
+```
+
+### 31.4 Cron 预设表达式
+
+| 标签 | 表达式 |
+|------|--------|
+| 每分钟 | `* * * * *` |
+| 每 5 分钟 | `*/5 * * * *` |
+| 每 15 分钟 | `*/15 * * * *` |
+| 每小时 | `0 * * * *` |
+| 每天 00:00 | `0 0 * * *` |
+| 每天 02:00 | `0 2 * * *` |
+| 每周一 03:00 | `0 3 * * 1` |
+| 每月 1 日 | `0 0 1 * *` |
+
+### 31.5 scheduledTaskApi（Mock 实现）
+
+所有方法操作内存中的 mockTasks 和 mockRuns 数组，无网络请求：
+- `fetchTasks()` / `fetchRuns()` — 返回 mock 数据
+- `createTask(data)` — 创建任务（id: `st-{timestamp}`，默认 status: active）
+- `toggleTaskStatus(id)` — 切换 active/paused/error
+- `deleteTask(id)` — 删除任务
+- `cloneTask(id)` — 克隆任务（name + "(副本)"，id + "-clone"）
+
+### 31.6 待后端对接
+
+定时任务模块当前为全 Mock 实现。后端需提供 ScheduledTask CRUD API 后，操作与 agentApi/modelApi 模式一致：添加字段转换函数 → 替换 service 函数实现 → 删除 Memory 数组。
+
+
+---
+
+> 本文档 v1.5.0 基于实际代码实现全面更新。v1.5.0 重点新增了概览仪表盘（ECharts 图表 + 系统指标）、模型管理模块（Provider/Model CRUD + 7 种模型类型）、定时任务模块（Cron 任务 + 运行记录）；Agent API 从 Mock 切换到真实后端接口（含文件编辑）；Skill Store 增强分页/搜索/上传/批量删除；SideMenu 新增搜索功能；路由新增 3 个页面（/overview, /models, /scheduled-tasks）；Stores 从 7 个扩展到 9 个；API Services 从 7 个扩展到 9 个；Types 从 7 个扩展到 10 个；视图从 8 个扩展到 12 个。

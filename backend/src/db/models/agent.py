@@ -24,7 +24,6 @@ class Agent(Base):
     status: Mapped[str] = mapped_column(String(16), default="inactive", comment="代理状态: active, inactive, error")
     description: Mapped[str] = mapped_column(Text, default="", comment="代理描述")
     parent_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True, comment="父代理ID (NULL表示主代理)")
-    user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True, comment="所属用户ID")
     tools: Mapped[list] = mapped_column(JSON, default=list, comment="工具名称列表")
     skills: Mapped[list] = mapped_column(JSON, default=list, comment="技能名称列表")
     prompts: Mapped[list] = mapped_column(JSON, default=list, comment="提示词/Cron Job 列表")
