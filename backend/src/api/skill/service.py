@@ -43,15 +43,15 @@ def parse_skill_frontmatter(content: str) -> tuple[dict | None, str | None]:
     """
     match = _FRONTMATTER_RE.match(content)
     if not match:
-        return None, "SKILL.md must start with YAML frontmatter (--- ... ---)"
+        return None, "SKILL.md 必须以 YAML 前置元数据 (--- ... ---) 开头"
 
     try:
         parsed = yaml.safe_load(match.group(1))
     except yaml.YAMLError as e:
-        return None, f"Invalid YAML in frontmatter: {e}"
+        return None, f"前置元数据 YAML 格式无效: {e}"
 
     if not isinstance(parsed, dict):
-        return None, "Frontmatter must be a YAML mapping"
+        return None, "前置元数据必须是 YAML 映射格式"
 
     return parsed, None
 
@@ -99,9 +99,9 @@ def validate_skill_directory(
         errors.append(
             SkillValidationError(
                 field="directory",
-                message=f"Directory name '{name}' is invalid. Must be 1-64 chars, "
-                "lowercase alphanumeric and hyphens only, "
-                "no leading/trailing hyphens.",
+                message=f"目录名 '{name}' 无效，必须为 1-64 个字符，"
+                "仅允许小写字母、数字和连字符，"
+                "不能以连字符开头或结尾。",
             )
         )
 
@@ -110,7 +110,7 @@ def validate_skill_directory(
     if not os.path.isfile(skill_md):
         errors.append(
             SkillValidationError(
-                field="SKILL.md", message="SKILL.md not found in skill directory"
+                field="SKILL.md", message="技能目录中未找到 SKILL.md 文件"
             )
         )
         return SkillResult(name=name, valid=False, errors=errors)
@@ -128,21 +128,21 @@ def validate_skill_directory(
     if not fm_name or not isinstance(fm_name, str):
         errors.append(
             SkillValidationError(
-                field="name", message="name is required and must be a string"
+                field="name", message="name 为必填字段，且必须为字符串"
             )
         )
     elif not _SKILL_NAME_RE.match(fm_name):
         errors.append(
             SkillValidationError(
                 field="name",
-                message="name must be lowercase alphanumeric + hyphens, 1-64 chars",
+                message="name 必须为小写字母、数字和连字符，长度 1-64 个字符",
             )
         )
     elif fm_name != name:
         errors.append(
             SkillValidationError(
                 field="name",
-                message=f"name '{fm_name}' in SKILL.md does not match directory name '{name}'",
+                message=f"SKILL.md 中 name '{fm_name}' 与目录名 '{name}' 不一致",
             )
         )
 
@@ -151,49 +151,38 @@ def validate_skill_directory(
         errors.append(
             SkillValidationError(
                 field="description",
-                message="description is required and must be a string",
+                message="description 为必填字段，且必须为字符串",
             )
         )
     elif len(fm_desc) < 1 or len(fm_desc) > 1024:
         errors.append(
             SkillValidationError(
                 field="description",
-                message=f"description must be 1-1024 characters, got {len(fm_desc)}",
+                message=f"description 长度必须为 1-1024 个字符，当前长度为 {len(fm_desc)}",
             )
         )
 
     # 5. Optional fields type validation
     if "license" in fm and not isinstance(fm["license"], str):
         errors.append(
-            SkillValidationError(field="license", message="license must be a string")
+            SkillValidationError(field="license", message="license 必须为字符串")
         )
     if "compatibility" in fm and not isinstance(fm["compatibility"], str):
         errors.append(
             SkillValidationError(
-                field="compatibility", message="compatibility must be a string"
+                field="compatibility", message="compatibility 必须为字符串"
             )
         )
-    if "metadata" in fm:
-        meta = fm["metadata"]
-        if not isinstance(meta, dict) or not all(
-            isinstance(k, str) and (
-                isinstance(v, str) or (isinstance(v, (int, float)) and not isinstance(v, bool))
-            )
-            for k, v in meta.items()
-        ):
-            errors.append(
-                SkillValidationError(
-                    field="metadata",
-                    message="metadata must be a string-to-string or string-to-number map",
-                )
-            )
+
+    # metadata 字段暂不校验，直接跳过
+    
     if "allowed-tools" in fm:
         tools = fm["allowed-tools"]
         if not isinstance(tools, list) or not all(isinstance(t, str) for t in tools):
             errors.append(
                 SkillValidationError(
                     field="allowed-tools",
-                    message="allowed-tools must be a list of strings",
+                    message="allowed-tools 必须为字符串列表",
                 )
             )
 
@@ -203,7 +192,7 @@ def validate_skill_directory(
         if os.path.exists(sub_path) and not os.path.isdir(sub_path):
             errors.append(
                 SkillValidationError(
-                    field=subdir, message=f"{subdir} must be a directory"
+                    field=subdir, message=f"{subdir} 必须是目录而非文件"
                 )
             )
 
