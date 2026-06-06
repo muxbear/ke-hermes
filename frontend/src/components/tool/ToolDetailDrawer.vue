@@ -1,16 +1,21 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { X } from 'lucide-vue-next'
+import { X, Pencil, Trash2 } from 'lucide-vue-next'
 import type { Tool } from '@/types/tool'
 import { CATEGORY_META, STATUS_META } from '@/types/tool'
 import { getToolIcon } from './iconMap'
 
 const props = defineProps<{ tool: Tool }>()
-const emit = defineEmits<{ (e: 'close'): void }>()
+const emit = defineEmits<{
+  (e: 'close'): void
+  (e: 'edit', tool: Tool): void
+  (e: 'delete', id: string): void
+}>()
 
 const cm = computed(() => CATEGORY_META[props.tool.category])
 const sm = computed(() => STATUS_META[props.tool.status])
 const CatIcon = computed(() => getToolIcon(cm.value.icon))
+const isBuiltin = computed(() => props.tool.source === 'builtin')
 </script>
 
 <template>
@@ -28,9 +33,19 @@ const CatIcon = computed(() => getToolIcon(cm.value.icon))
               <p class="drawer-sub">{{ tool.name }}</p>
             </div>
           </div>
-          <button class="drawer-close" @click="emit('close')">
-            <X :size="16" />
-          </button>
+          <div class="drawer-header__right">
+            <template v-if="!isBuiltin">
+              <button class="drawer-action" title="编辑" @click="emit('edit', tool)">
+                <Pencil :size="15" />
+              </button>
+              <button class="drawer-action drawer-action--danger" title="删除" @click="emit('delete', tool.id)">
+                <Trash2 :size="15" />
+              </button>
+            </template>
+            <button class="drawer-close" @click="emit('close')">
+              <X :size="16" />
+            </button>
+          </div>
         </div>
 
         <!-- Body -->
@@ -152,6 +167,37 @@ const CatIcon = computed(() => getToolIcon(cm.value.icon))
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 11px;
   color: var(--foreground-muted);
+}
+
+.drawer-header__right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.drawer-action {
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--foreground-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.drawer-action:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-primary);
+}
+
+.drawer-action--danger:hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
 }
 
 .drawer-close {

@@ -334,6 +334,8 @@ onUnmounted(() => {
       v-if="detail"
       :tool="detail"
       @close="closeDetail"
+      @edit="(t: Tool) => { closeDetail(); openEdit(t) }"
+      @delete="(id: string) => { closeDetail(); handleDelete(id) }"
     />
   </div>
 </template>

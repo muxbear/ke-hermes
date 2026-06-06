@@ -145,13 +145,24 @@ async def create_tool(db: AsyncSession, req: ToolCreateRequest) -> ToolInfo:
 async def update_tool(
     db: AsyncSession, tool_id: str, req: ToolUpdateRequest
 ) -> ToolInfo:
-    """Update tool metadata. Only non-None fields are updated."""
+    """Update tool metadata. Only non-None fields are updated. Builtin tools cannot be modified."""
     stmt = select(Tool).where(Tool.id == tool_id)
     row = (await db.execute(stmt)).scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail="工具不存在")
+    if row.source == "builtin":
+        raise HTTPException(status_code=403, detail="内置工具不可修改")
 
     update_data = req.model_dump(exclude_none=True)
+
+    # Check for duplicate name when changing the name field
+    if "name" in update_data and update_data["name"] != row.name:
+        existing = (await db.execute(
+            select(Tool).where(Tool.name == update_data["name"])
+        )).scalar_one_or_none()
+        if existing is not None:
+            raise HTTPException(status_code=409, detail=f"工具标识 '{update_data['name']}' 已存在")
+
     for key, value in update_data.items():
         if key == "params" and value is not None:
             value = [p if isinstance(p, dict) else p.model_dump() for p in value]
@@ -163,7 +174,7 @@ async def update_tool(
 
 
 async def delete_tool(db: AsyncSession, tool_id: str) -> dict:
-    """Delete a tool. Only third-party tools can be deleted."""
+    """Delete a tool. Only third-party tools can be deleted. Cleans up agent-tool links first."""
     stmt = select(Tool).where(Tool.id == tool_id)
     row = (await db.execute(stmt)).scalar_one_or_none()
     if row is None:
@@ -171,8 +182,15 @@ async def delete_tool(db: AsyncSession, tool_id: str) -> dict:
     if row.source == "builtin":
         raise HTTPException(status_code=403, detail="内置工具不可删除")
 
+    # Explicitly delete agent-tool links first (belt-and-suspenders with FK CASCADE)
+    link_stmt = select(AgentTool).where(AgentTool.tool_id == tool_id)
+    links = (await db.execute(link_stmt)).scalars().all()
+    for link in links:
+        await db.delete(link)
+
     await db.delete(row)
-    logger.info("Deleted tool '%s' (id=%s)", row.name, tool_id)
+    await db.flush()
+    logger.info("Deleted tool '%s' (id=%s) with %d agent links", row.name, tool_id, len(links))
     return {"deleted": True, "id": tool_id}
 
 

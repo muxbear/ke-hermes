@@ -6,8 +6,7 @@ from agent.config import settings
 
 _tavily_client = TavilyClient(api_key=settings.TAVILY_API_KEY)
 
-
-def internet_search(
+def tavily_search(
     query: str,
     max_results: int = 5,
     topic: Literal["general", "news", "finance"] = "general",

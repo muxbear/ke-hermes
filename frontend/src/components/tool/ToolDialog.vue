@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, reactive } from 'vue'
-import { X, Upload, RefreshCw, FileArchive, CheckCheck, XCircle, UploadCloud } from 'lucide-vue-next'
-import type { Tool, ToolCreateRequest, ToolCategory, ToolStatus } from '@/types/tool'
+import { X, Upload, RefreshCw, FileArchive, CheckCheck, XCircle, UploadCloud, Plus, Trash2 } from 'lucide-vue-next'
+import type { Tool, ToolCreateRequest, ToolCategory, ToolStatus, ToolParam } from '@/types/tool'
 import { CATEGORY_META } from '@/types/tool'
 
 const props = defineProps<{
@@ -25,6 +25,36 @@ const form = reactive({
   version: '1.0.0',
   tagsInput: '',
 })
+
+// -- Params editing --
+const paramList = reactive<ToolParam[]>([])
+const newParam = reactive<ToolParam>({ key: '', label: '', type: 'string', required: false })
+const paramTypeOptions = ['string', 'number', 'boolean', 'object']
+
+function addParam() {
+  if (!newParam.key.trim() || !newParam.label.trim()) return
+  paramList.push({ ...newParam })
+  newParam.key = ''
+  newParam.label = ''
+  newParam.type = 'string'
+  newParam.required = false
+}
+
+function removeParam(idx: number) {
+  paramList.splice(idx, 1)
+}
+
+watch(
+  () => props.tool,
+  (t) => {
+    // Sync paramList from tool on edit
+    paramList.length = 0
+    if (t?.params && t.params.length > 0) {
+      paramList.push(...t.params.map((p) => ({ ...p })))
+    }
+  },
+  { immediate: true },
+)
 
 // -- Package upload --
 type ParseState = 'idle' | 'parsing' | 'done' | 'error'
@@ -132,6 +162,7 @@ function handleSave() {
     status: form.status,
     version: form.version,
     tags: form.tagsInput.split(',').map((t) => t.trim()).filter(Boolean),
+    params: paramList.length > 0 ? [...paramList] : undefined,
   })
 }
 
@@ -233,6 +264,41 @@ const categoryOptions = computed(() =>
                   rows="2"
                   placeholder="工具功能简介…"
                 />
+              </div>
+
+              <!-- Params editor -->
+              <div class="field">
+                <label class="field-label">参数定义</label>
+                <div v-if="paramList.length > 0" class="param-editor">
+                  <div v-for="(p, idx) in paramList" :key="idx" class="param-editor__row">
+                    <input v-model="p.key" type="text" class="param-input param-input--key" placeholder="参数名" />
+                    <input v-model="p.label" type="text" class="param-input param-input--label" placeholder="显示名" />
+                    <select v-model="p.type" class="param-input param-input--type">
+                      <option v-for="opt in paramTypeOptions" :key="opt" :value="opt">{{ opt }}</option>
+                    </select>
+                    <label class="param-check">
+                      <input v-model="p.required" type="checkbox" />
+                      <span>必填</span>
+                    </label>
+                    <button class="param-remove" @click="removeParam(idx)">
+                      <Trash2 :size="13" />
+                    </button>
+                  </div>
+                </div>
+                <div class="param-editor__add">
+                  <input v-model="newParam.key" type="text" class="param-input param-input--key" placeholder="参数名" @keyup.enter="addParam" />
+                  <input v-model="newParam.label" type="text" class="param-input param-input--label" placeholder="显示名" @keyup.enter="addParam" />
+                  <select v-model="newParam.type" class="param-input param-input--type">
+                    <option v-for="opt in paramTypeOptions" :key="opt" :value="opt">{{ opt }}</option>
+                  </select>
+                  <label class="param-check">
+                    <input v-model="newParam.required" type="checkbox" />
+                    <span>必填</span>
+                  </label>
+                  <button class="param-add-btn" :disabled="!newParam.key.trim() || !newParam.label.trim()" @click="addParam">
+                    <Plus :size="14" />
+                  </button>
+                </div>
               </div>
 
               <!-- Package upload (new only) -->
@@ -684,6 +750,123 @@ select.text-input {
 }
 
 .btn-ghost:hover { background: rgba(135, 148, 173, 0.14); color: var(--color-text-primary); }
+
+/* Params editor */
+.param-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.param-editor__row,
+.param-editor__add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.param-editor__row {
+  padding: 6px 8px;
+  background: rgba(15, 23, 46, 0.4);
+  border-radius: 8px;
+  border: 1px solid var(--color-border-input);
+}
+
+.param-input {
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-border-input);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--color-text-primary);
+  font-family: var(--font-family-base);
+  outline: none;
+  padding: 5px 8px;
+  transition: border-color var(--transition-fast);
+}
+
+.param-input:focus { border-color: var(--accent-primary); }
+
+.param-input--key {
+  width: 80px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  color: #818cf8;
+}
+
+.param-input--label {
+  width: 80px;
+  flex: 1;
+}
+
+.param-input--type {
+  width: 78px;
+  cursor: pointer;
+  appearance: auto;
+  padding: 4px 4px;
+}
+
+.param-check {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--foreground-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.param-check input {
+  accent-color: var(--accent-primary);
+  cursor: pointer;
+  margin: 0;
+}
+
+.param-remove {
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--foreground-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+.param-remove:hover {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+
+.param-add-btn {
+  width: 30px;
+  height: 30px;
+  border: 1px dashed var(--color-border-input);
+  border-radius: 6px;
+  background: none;
+  color: var(--foreground-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+.param-add-btn:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: rgba(59, 130, 246, 0.04);
+}
+
+.param-add-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
 
 /* Animations */
 .spin { animation: spin 0.8s linear infinite; }
