@@ -26,7 +26,6 @@ declare module 'vue' {
     ElAlert: typeof import('element-plus/es')['ElAlert']
     ElButton: typeof import('element-plus/es')['ElButton']
     ElCheckbox: typeof import('element-plus/es')['ElCheckbox']
-    ElDialog: typeof import('element-plus/es')['ElDialog']
     ElDropdown: typeof import('element-plus/es')['ElDropdown']
     ElDropdownItem: typeof import('element-plus/es')['ElDropdownItem']
     ElDropdownMenu: typeof import('element-plus/es')['ElDropdownMenu']
@@ -62,6 +61,9 @@ declare module 'vue' {
     SkillDialog: typeof import('./src/components/skill/SkillDialog.vue')['default']
     SkillSelectDialog: typeof import('./src/components/agent/SkillSelectDialog.vue')['default']
     SlidePuzzle: typeof import('./src/components/captcha/SlidePuzzle.vue')['default']
+    ToolCard: typeof import('./src/components/tool/ToolCard.vue')['default']
+    ToolDetailDrawer: typeof import('./src/components/tool/ToolDetailDrawer.vue')['default']
+    ToolDialog: typeof import('./src/components/tool/ToolDialog.vue')['default']
     TopBar: typeof import('./src/components/TopBar.vue')['default']
   }
   export interface ComponentCustomProperties {
