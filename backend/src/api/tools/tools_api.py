@@ -4,7 +4,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_current_user_id, get_db
 from api.tools.schemas import (
-    AgentToolLinkRequest,
     ToolCreateRequest,
     ToolInfo,
     ToolListResponse,
@@ -16,10 +15,8 @@ from api.tools.service import (
     delete_tool,
     get_tool,
     get_tools_by_agent,
-    link_tool_to_agent,
     list_tools,
     toggle_tool_enabled,
-    unlink_tool_from_agent,
     update_tool,
 )
 from core.response import ApiResponse, error, ok
@@ -143,38 +140,3 @@ async def tool_delete(
         raise
 
 
-# ── Agent-tool relationship endpoints ──────────────────────────────────────
-
-
-@router.post("/by-agent/{agent_id}/link", response_model=ApiResponse[dict])
-async def agent_tool_link(
-    agent_id: str,
-    req: AgentToolLinkRequest,
-    user_id: str = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
-):
-    """为智能体关联工具。"""  # noqa: D415
-    try:
-        result = await link_tool_to_agent(db, agent_id, req)
-        return ok(result)
-    except Exception as e:
-        if hasattr(e, "status_code"):
-            return error(e.status_code, e.detail)
-        raise
-
-
-@router.delete("/by-agent/{agent_id}/unlink/{tool_id}", response_model=ApiResponse[dict])
-async def agent_tool_unlink(
-    agent_id: str,
-    tool_id: str,
-    user_id: str = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
-):
-    """解除智能体与工具的关联。"""  # noqa: D415
-    try:
-        result = await unlink_tool_from_agent(db, agent_id, tool_id)
-        return ok(result)
-    except Exception as e:
-        if hasattr(e, "status_code"):
-            return error(e.status_code, e.detail)
-        raise

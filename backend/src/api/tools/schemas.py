@@ -81,7 +81,3 @@ class ToolToggleRequest(BaseModel):
     enabled: bool
 
 
-class AgentToolLinkRequest(BaseModel):
-    """Request body for linking a tool to an agent."""
-
-    tool_id: str

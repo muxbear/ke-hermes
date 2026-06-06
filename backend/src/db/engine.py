@@ -37,6 +37,7 @@ async def init_db():
         await _migrate_agents_drop_user_id(conn)
         await _migrate_agents_drop_skills(conn)
         await _migrate_skills_drop_user_id(conn)
+        await _migrate_agents_drop_tools_column(conn)
         await conn.run_sync(Base.metadata.create_all)
         await _migrate_agents_add_provider_model(conn)
     logger.info("Database tables created")
@@ -131,3 +132,27 @@ async def _migrate_agents_add_provider_model(conn) -> None:
     if "model_id" not in columns:
         logger.info("Migrating: adding model_id column to agents table")
         await conn.execute(text("ALTER TABLE agents ADD COLUMN model_id VARCHAR(36)"))
+
+
+async def _migrate_agents_drop_tools_column(conn) -> None:
+    """Remove the tools JSON column from agents table if it exists."""
+    from sqlalchemy import inspect, text
+
+    tables = await conn.run_sync(lambda sync_conn: inspect(sync_conn).get_table_names())
+    if "agents" not in tables:
+        return
+
+    columns = await conn.run_sync(
+        lambda sync_conn: [c["name"] for c in inspect(sync_conn).get_columns("agents")]
+    )
+    if "tools" not in columns:
+        return
+
+    logger.info("Migrating: removing tools column from agents table")
+    if settings.DATABASE_BACKEND == "postgres":
+        await conn.execute(text("ALTER TABLE agents DROP COLUMN IF EXISTS tools"))
+    else:
+        # SQLite: drop dependent tables and recreate agents
+        await conn.execute(text("DROP TABLE IF EXISTS agent_tools"))
+        await conn.execute(text("DROP TABLE IF EXISTS agent_files"))
+        await conn.execute(text("DROP TABLE IF EXISTS agents"))

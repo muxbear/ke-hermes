@@ -107,21 +107,21 @@ async def test_add_and_remove_config(client):
     # Add tool
     resp = await client.post(
         f"/api/agents/{agent_id}/config",
-        json={"type": "tool", "value": "test_tool_integration"},
+        json={"type": "tool", "value": "web_search"},
         headers=_auth_headers(),
     )
     assert resp.status_code == 200
-    assert "test_tool_integration" in resp.json()["data"]["tools"]
+    assert "web_search" in resp.json()["data"]["tools"]
 
     # Remove tool — httpx DELETE doesn't accept `json`, use `content`
     resp = await client.request(
         "DELETE",
         f"/api/agents/{agent_id}/config",
-        content=json.dumps({"type": "tool", "value": "test_tool_integration"}),
+        content=json.dumps({"type": "tool", "value": "web_search"}),
         headers={**_auth_headers(), "Content-Type": "application/json"},
     )
     assert resp.status_code == 200
-    assert "test_tool_integration" not in resp.json()["data"]["tools"]
+    assert "web_search" not in resp.json()["data"]["tools"]
 
 
 async def test_delete_undeletable_fails(client):

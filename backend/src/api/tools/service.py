@@ -6,7 +6,6 @@ from sqlalchemy import Text, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.tools.schemas import (
-    AgentToolLinkRequest,
     ToolCreateRequest,
     ToolInfo,
     ToolListResponse,
@@ -226,52 +225,6 @@ async def get_tools_by_agent(
         agent_ids = await _get_agent_ids_for_tool(db, row.id)
         items.append(_tool_to_info(row, agent_ids))
     return items
-
-
-async def link_tool_to_agent(
-    db: AsyncSession, agent_id: str, req: AgentToolLinkRequest
-) -> dict:
-    """Link a tool to an agent."""
-    # Verify both exist
-    from db.models.agent import Agent
-    agent = (await db.execute(select(Agent).where(Agent.id == agent_id))).scalar_one_or_none()
-    if agent is None:
-        raise HTTPException(status_code=404, detail="智能体不存在")
-
-    tool = (await db.execute(select(Tool).where(Tool.id == req.tool_id))).scalar_one_or_none()
-    if tool is None:
-        raise HTTPException(status_code=404, detail="工具不存在")
-
-    existing = (
-        await db.execute(
-            select(AgentTool).where(
-                AgentTool.agent_id == agent_id, AgentTool.tool_id == req.tool_id
-            )
-        )
-    ).scalar_one_or_none()
-    if existing is not None:
-        return {"linked": True, "agent_id": agent_id, "tool_id": req.tool_id}
-
-    db.add(AgentTool(agent_id=agent_id, tool_id=req.tool_id))
-    await db.flush()
-    logger.info("Linked tool '%s' to agent '%s'", req.tool_id, agent_id)
-    return {"linked": True, "agent_id": agent_id, "tool_id": req.tool_id}
-
-
-async def unlink_tool_from_agent(
-    db: AsyncSession, agent_id: str, tool_id: str
-) -> dict:
-    """Remove a tool-agent link."""
-    stmt = select(AgentTool).where(
-        AgentTool.agent_id == agent_id, AgentTool.tool_id == tool_id
-    )
-    link = (await db.execute(stmt)).scalar_one_or_none()
-    if link is None:
-        raise HTTPException(status_code=404, detail="关联不存在")
-
-    await db.delete(link)
-    logger.info("Unlinked tool '%s' from agent '%s'", tool_id, agent_id)
-    return {"unlinked": True, "agent_id": agent_id, "tool_id": tool_id}
 
 
 # ── Builtin tool seed data ────────────────────────────────────────────────

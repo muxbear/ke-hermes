@@ -19,12 +19,13 @@ from api.agents.schemas import (
 from db.models.agent import Agent
 from db.models.agent_file import AgentFile
 from db.models.agent_skill import AgentSkill
+from db.models.agent_tool import AgentTool
 from db.models.skill import Skill
+from db.models.tool import Tool
 
 logger = logging.getLogger(__name__)
 
 CONFIG_TYPE_TO_COLUMN: dict[str, str] = {
-    "tool": "tools",
     "prompt": "prompts",
     "file": "files",
 }
@@ -64,7 +65,24 @@ async def _get_agent_skill_briefs(db: AsyncSession, agent_id: str) -> list[Skill
     ]
 
 
-def _agent_to_info(agent: Agent, sub_agent_ids: list[str] | None = None, skills: list[SkillBrief] | None = None) -> AgentInfo:
+async def _get_agent_tool_names(db: AsyncSession, agent_id: str) -> list[str]:
+    """Query tool names linked to an agent via the agent_tools junction table."""
+    stmt = (
+        select(Tool.name)
+        .join(AgentTool, AgentTool.tool_id == Tool.id)
+        .where(AgentTool.agent_id == agent_id)
+        .order_by(Tool.name)
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+    return list(rows)
+
+
+def _agent_to_info(
+    agent: Agent,
+    sub_agent_ids: list[str] | None = None,
+    skills: list[SkillBrief] | None = None,
+    tool_names: list[str] | None = None,
+) -> AgentInfo:
     """Convert ORM Agent to AgentInfo response schema."""
     return AgentInfo(
         id=agent.id,
@@ -72,7 +90,7 @@ def _agent_to_info(agent: Agent, sub_agent_ids: list[str] | None = None, skills:
         type=agent.type,
         status=agent.status,
         description=agent.description,
-        tools=agent.tools if isinstance(agent.tools, list) else [],
+        tools=tool_names if tool_names is not None else [],
         skills=skills if skills is not None else [],
         prompts=agent.prompts if isinstance(agent.prompts, list) else [],
         files=agent.files if isinstance(agent.files, list) else [],
@@ -103,12 +121,22 @@ async def list_agents(db: AsyncSession) -> AgentListResponse:
             type="main",
             status="active",
             description="负责整体任务协调和分发",
-            tools=list(DEFAULT_AGENT_TOOLS),
             files=list(DEFAULT_AGENT_FILES),
             undeletable=True,
         )
         db.add(agent)
         await db.flush()
+
+        # Create tool links for default agent
+        for tool_name in DEFAULT_AGENT_TOOLS:
+            tool = (await db.execute(
+                select(Tool).where(Tool.name == tool_name)
+            )).scalar_one_or_none()
+            if tool is not None:
+                db.add(AgentTool(agent_id=agent.id, tool_id=tool.id))
+            else:
+                logger.warning("Default tool '%s' not found, skipping", tool_name)
+
         logger.info("Auto-created default main agent")
 
     stmt = select(Agent).order_by(Agent.type, Agent.created_at)
@@ -118,7 +146,8 @@ async def list_agents(db: AsyncSession) -> AgentListResponse:
     for agent in rows:
         sub_ids = await _get_sub_agent_ids(db, agent.id)
         skills = await _get_agent_skill_briefs(db, agent.id)
-        agents_info.append(_agent_to_info(agent, sub_ids, skills))
+        tool_names = await _get_agent_tool_names(db, agent.id)
+        agents_info.append(_agent_to_info(agent, sub_ids, skills, tool_names))
 
     return AgentListResponse(agents=agents_info)
 
@@ -132,7 +161,8 @@ async def get_agent(db: AsyncSession, agent_id: str) -> AgentInfo:
 
     sub_ids = await _get_sub_agent_ids(db, agent_id)
     skills = await _get_agent_skill_briefs(db, agent_id)
-    return _agent_to_info(row, sub_ids, skills)
+    tool_names = await _get_agent_tool_names(db, agent_id)
+    return _agent_to_info(row, sub_ids, skills, tool_names)
 
 
 async def create_agent(db: AsyncSession, req: AgentCreateRequest) -> AgentInfo:
@@ -213,7 +243,8 @@ async def toggle_agent_status(db: AsyncSession, agent_id: str) -> AgentInfo:
 
     sub_ids = await _get_sub_agent_ids(db, agent_id)
     skills = await _get_agent_skill_briefs(db, agent_id)
-    return _agent_to_info(agent, sub_ids, skills)
+    tool_names = await _get_agent_tool_names(db, agent_id)
+    return _agent_to_info(agent, sub_ids, skills, tool_names)
 
 
 async def clone_agent(db: AsyncSession, agent_id: str) -> AgentInfo:
@@ -242,7 +273,6 @@ async def clone_agent(db: AsyncSession, agent_id: str) -> AgentInfo:
         status="inactive",
         description=source.description,
         parent_id=source.parent_id,
-        tools=list(source.tools) if isinstance(source.tools, list) else [],
         prompts=list(source.prompts) if isinstance(source.prompts, list) else [],
         files=list(source.files) if isinstance(source.files, list) else [],
         provider_id=source.provider_id,
@@ -251,6 +281,12 @@ async def clone_agent(db: AsyncSession, agent_id: str) -> AgentInfo:
     )
     db.add(cloned)
     await db.flush()
+
+    # Clone agent_tools associations
+    tool_link_stmt = select(AgentTool).where(AgentTool.agent_id == agent_id)
+    tool_links = (await db.execute(tool_link_stmt)).scalars().all()
+    for link in tool_links:
+        db.add(AgentTool(agent_id=cloned.id, tool_id=link.tool_id))
 
     # Clone agent_skills associations
     skill_stmt = select(AgentSkill).where(AgentSkill.agent_id == agent_id)
@@ -273,8 +309,9 @@ async def clone_agent(db: AsyncSession, agent_id: str) -> AgentInfo:
 
     sub_ids = await _get_sub_agent_ids(db, cloned.id)
     skills = await _get_agent_skill_briefs(db, cloned.id)
+    tool_names = await _get_agent_tool_names(db, cloned.id)
     logger.info("Cloned agent '%s' -> '%s'", source.name, cloned.name)
-    return _agent_to_info(cloned, sub_ids, skills)
+    return _agent_to_info(cloned, sub_ids, skills, tool_names)
 
 
 async def update_agent(db: AsyncSession, agent_id: str, req: AgentUpdateRequest) -> AgentInfo:
@@ -299,8 +336,9 @@ async def update_agent(db: AsyncSession, agent_id: str, req: AgentUpdateRequest)
     await db.flush()
     sub_ids = await _get_sub_agent_ids(db, agent_id)
     skills = await _get_agent_skill_briefs(db, agent_id)
+    tool_names = await _get_agent_tool_names(db, agent_id)
     logger.info("Updated agent '%s'", agent.name)
-    return _agent_to_info(agent, sub_ids, skills)
+    return _agent_to_info(agent, sub_ids, skills, tool_names)
 
 
 async def add_agent_config(
@@ -312,7 +350,20 @@ async def add_agent_config(
     if agent is None:
         raise HTTPException(status_code=404, detail="Agent not found")
 
-    if req.type == "subagent":
+    if req.type == "tool":
+        tool = (await db.execute(
+            select(Tool).where(Tool.name == req.value)
+        )).scalar_one_or_none()
+        if tool is None:
+            raise HTTPException(status_code=404, detail=f"工具 '{req.value}' 不存在")
+        existing = (await db.execute(
+            select(AgentTool).where(
+                AgentTool.agent_id == agent_id, AgentTool.tool_id == tool.id
+            )
+        )).scalar_one_or_none()
+        if existing is None:
+            db.add(AgentTool(agent_id=agent_id, tool_id=tool.id))
+    elif req.type == "subagent":
         # Sub-agents can only be added to main agents
         if agent.type != "main":
             raise HTTPException(status_code=400, detail="Only main agents can add sub-agents")
@@ -351,7 +402,8 @@ async def add_agent_config(
     await db.flush()
     sub_ids = await _get_sub_agent_ids(db, agent_id)
     skills = await _get_agent_skill_briefs(db, agent_id)
-    return _agent_to_info(agent, sub_ids, skills)
+    tool_names = await _get_agent_tool_names(db, agent_id)
+    return _agent_to_info(agent, sub_ids, skills, tool_names)
 
 
 async def remove_agent_config(
@@ -363,7 +415,20 @@ async def remove_agent_config(
     if agent is None:
         raise HTTPException(status_code=404, detail="Agent not found")
 
-    if req.type == "subagent":
+    if req.type == "tool":
+        tool = (await db.execute(
+            select(Tool).where(Tool.name == req.value)
+        )).scalar_one_or_none()
+        if tool is None:
+            raise HTTPException(status_code=404, detail=f"工具 '{req.value}' 不存在")
+        link = (await db.execute(
+            select(AgentTool).where(
+                AgentTool.agent_id == agent_id, AgentTool.tool_id == tool.id
+            )
+        )).scalar_one_or_none()
+        if link is not None:
+            await db.delete(link)
+    elif req.type == "subagent":
         await delete_agent(db, req.value)
         await db.refresh(agent)
     else:
@@ -384,7 +449,8 @@ async def remove_agent_config(
     await db.flush()
     sub_ids = await _get_sub_agent_ids(db, agent_id)
     skills = await _get_agent_skill_briefs(db, agent_id)
-    return _agent_to_info(agent, sub_ids, skills)
+    tool_names = await _get_agent_tool_names(db, agent_id)
+    return _agent_to_info(agent, sub_ids, skills, tool_names)
 
 
 async def update_agent_config(
@@ -434,7 +500,8 @@ async def update_agent_config(
     await db.flush()
     sub_ids = await _get_sub_agent_ids(db, agent_id)
     skills = await _get_agent_skill_briefs(db, agent_id)
-    return _agent_to_info(agent, sub_ids, skills)
+    tool_names = await _get_agent_tool_names(db, agent_id)
+    return _agent_to_info(agent, sub_ids, skills, tool_names)
 
 
 async def get_agent_file(
