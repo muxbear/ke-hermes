@@ -4,39 +4,6 @@ import { Sparkles, ChevronDown } from 'lucide-vue-next'
 import { useUiStore } from '@/stores/ui'
 
 const uiStore = useUiStore()
-
-const models = ['DeepSeek V4', 'Claude Opus 4.7', 'GPT-4o', 'Gemini 2.5 Pro']
-const dropdownOpen = ref(false)
-
-function selectModel(model: string) {
-  uiStore.selectedModel = model
-  dropdownOpen.value = false
-}
-
-function toggleDropdown() {
-  dropdownOpen.value = !dropdownOpen.value
-}
-
-function handleClickOutside(e: MouseEvent) {
-  const target = e.target as HTMLElement
-  if (!target.closest('.model-selector')) {
-    dropdownOpen.value = false
-  }
-}
-
-// Only listen when dropdown is open
-import { watch, onMounted, onUnmounted } from 'vue'
-watch(dropdownOpen, (open) => {
-  if (open) {
-    document.addEventListener('click', handleClickOutside)
-  } else {
-    document.removeEventListener('click', handleClickOutside)
-  }
-})
-
-onUnmounted(() => {
-  document.removeEventListener('click', handleClickOutside)
-})
 </script>
 
 <template>
@@ -48,23 +15,6 @@ onUnmounted(() => {
       <span class="header-title">Hermes 智能体</span>
     </div>
     <div class="header-right">
-      <div class="model-selector" @click.stop="toggleDropdown">
-        <span class="model-name">{{ uiStore.selectedModel }}</span>
-        <ChevronDown :size="14" :class="{ rotated: dropdownOpen }" />
-        <Transition name="dropdown">
-          <div v-if="dropdownOpen" class="model-dropdown">
-            <div
-              v-for="model in models"
-              :key="model"
-              class="model-option"
-              :class="{ active: uiStore.selectedModel === model }"
-              @click="selectModel(model)"
-            >
-              {{ model }}
-            </div>
-          </div>
-        </Transition>
-      </div>
     </div>
   </div>
 </template>

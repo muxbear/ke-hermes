@@ -112,8 +112,8 @@ const menuGroups: MenuGroup[] = [
     label: '智能体',
     items: [
       { icon: Bot, text: '智能体', route: '/agents', pinyin: 'zhinengti' },
-      { icon: Zap, text: '技能', route: '/skills', pinyin: 'jineng' },
       { icon: Wrench, text: '工具', route: '/tools', pinyin: 'gongju' },
+      { icon: Zap, text: '技能', route: '/skills', pinyin: 'jineng' },
       { icon: Network, text: '节点', pinyin: 'jiedian' },
     ],
   },
