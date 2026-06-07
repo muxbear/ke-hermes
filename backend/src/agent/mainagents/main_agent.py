@@ -1,6 +1,7 @@
 """主智能体工厂 — 根据数据库配置创建主智能体。"""
 
 import logging
+import os
 
 from sqlalchemy import select
 
@@ -148,10 +149,11 @@ async def create_main_agent(checkpointer=None, store=None):
     # 6. 创建沙箱后端
     sandbox = create_sandboxsync()
     sandbox_backend = OpenSandBoxBackend(sandbox=sandbox)
+    skills_root = os.path.join(settings.WORKSPACE, "skills")
     backend = CompositeBackend(
         default=sandbox_backend,
         routes={
-            # "/skills/": FilesystemBackend(root_dir=settings.SKILLS_ROOT),
+            "/skills/": FilesystemBackend(root_dir=skills_root, virtual_mode=True),
             "/memories/": StoreBackend(
                 namespace=lambda ctx: (ctx.runtime.context.user_id,),
             ),
@@ -172,7 +174,7 @@ async def create_main_agent(checkpointer=None, store=None):
         checkpointer=checkpointer,
         store=store,
         context_schema=Context,
-        # skills=["/skills/"],
+        skills=[f"/skills/{agent_info.id}/"],
         memory=memory,
         backend=backend,
         subagents=subagents,

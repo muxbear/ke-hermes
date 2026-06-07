@@ -32,7 +32,12 @@ MAX_UPLOAD_SIZE_MB = 100
 _SKILL_NAME_RE = re.compile(r"^[a-z0-9]([a-z0-9-]{0,62}[a-z0-9])?$")
 _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
 
-SKILLS_DIR = os.path.join(settings.WORKSPACE, "skills")
+SKILLS_DIR = os.path.join(settings.WORKSPACE, "skills_upload")
+
+
+def get_skill_upload_path(skill_name: str) -> str:
+    """Return the filesystem path for a skill in the upload catalog."""
+    return os.path.join(SKILLS_DIR, skill_name)
 
 
 def parse_skill_frontmatter(content: str) -> tuple[dict | None, str | None]:
@@ -498,6 +503,17 @@ async def _delete_one_skill(db: AsyncSession, skill_id: str) -> SkillDeleteResul
     if os.path.isdir(skill_dir):
         shutil.rmtree(skill_dir, ignore_errors=True)
         logger.info("Deleted skill '%s' (id=%s)", name, skill_id)
+
+    # Clean up copies from all agents' skills directories
+    agent_skills_root = os.path.join(settings.WORKSPACE, "skills")
+    if os.path.isdir(agent_skills_root):
+        for agent_dir in os.listdir(agent_skills_root):
+            agent_skill_path = os.path.join(agent_skills_root, agent_dir, name)
+            if os.path.isdir(agent_skill_path):
+                shutil.rmtree(agent_skill_path, ignore_errors=True)
+                logger.info(
+                    "Cleaned up agent skill '%s/%s'", agent_dir, name
+                )
 
     return SkillDeleteResult(id=skill_id, name=name, deleted=True)
 

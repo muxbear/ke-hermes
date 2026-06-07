@@ -1,5 +1,7 @@
 """Agent management business logic: CRUD, status toggle, clone, and config management."""
 import logging
+import os
+import shutil
 
 from fastapi import HTTPException
 from sqlalchemy import delete, func, select
@@ -24,6 +26,9 @@ from db.models.agent_tool import AgentTool
 from db.models.cron_job import CronJob
 from db.models.skill import Skill
 from db.models.tool import Tool
+
+from agent.config import settings
+from api.skill.service import get_skill_upload_path
 
 logger = logging.getLogger(__name__)
 
@@ -223,9 +228,11 @@ async def delete_agent(db: AsyncSession, agent_id: str) -> None:
         sub_agents = (await db.execute(sub_stmt)).scalars().all()
         for sub in sub_agents:
             await db.delete(sub)
+            _cleanup_agent_skills_dir(sub.id)
             logger.info("Cascade-deleted sub-agent '%s'", sub.name)
 
     await db.delete(agent)
+    _cleanup_agent_skills_dir(agent_id)
     logger.info("Deleted agent '%s' (type=%s)", agent.name, agent.type)
 
 
@@ -295,6 +302,23 @@ async def clone_agent(db: AsyncSession, agent_id: str) -> AgentInfo:
     skill_links = (await db.execute(skill_stmt)).scalars().all()
     for link in skill_links:
         db.add(AgentSkill(agent_id=cloned.id, skill_id=link.skill_id))
+
+    # Clone skill filesystem directories
+    if skill_links:
+        skill_ids = [link.skill_id for link in skill_links]
+        skill_rows = (await db.execute(
+            select(Skill).where(Skill.id.in_(skill_ids))
+        )).scalars().all()
+        for skill in skill_rows:
+            src = _agent_skill_dir(agent_id, skill.name)
+            dst = _agent_skill_dir(cloned.id, skill.name)
+            if os.path.isdir(src):
+                os.makedirs(_agent_skills_dir(cloned.id), exist_ok=True)
+                shutil.copytree(src, dst)
+                logger.info(
+                    "Copied skill '%s' from agent '%s' to '%s'",
+                    skill.name, agent_id, cloned.id,
+                )
 
     # Clone file contents
     src_files = source.files if isinstance(source.files, list) else []
@@ -585,6 +609,30 @@ async def list_agent_file_descriptions(
     return [{"filename": row.filename, "description": row.description or ""} for row in rows]
 
 
+# ── Agent-Skill helpers ───────────────────────────────────────────────────
+
+
+SKILLS_ROOT = os.path.join(settings.WORKSPACE, "skills")
+
+
+def _agent_skills_dir(agent_id: str) -> str:
+    """Return the filesystem path for an agent's skills directory."""
+    return os.path.join(SKILLS_ROOT, agent_id)
+
+
+def _agent_skill_dir(agent_id: str, skill_name: str) -> str:
+    """Return the filesystem path for a specific skill under an agent."""
+    return os.path.join(_agent_skills_dir(agent_id), skill_name)
+
+
+def _cleanup_agent_skills_dir(agent_id: str) -> None:
+    """Remove the entire skills directory for an agent."""
+    agent_dir = _agent_skills_dir(agent_id)
+    if os.path.isdir(agent_dir):
+        shutil.rmtree(agent_dir, ignore_errors=True)
+        logger.info("Removed skills directory for agent '%s': %s", agent_id, agent_dir)
+
+
 # ── Agent-Skill relationship ──────────────────────────────────────────────
 
 
@@ -623,6 +671,21 @@ async def add_skill_to_agent(
     if dup is not None:
         raise HTTPException(status_code=409, detail="Skill already added to this agent")
 
+    # Copy skill from catalog to agent's skills directory
+    skill_upload_path = get_skill_upload_path(skill.name)
+    agent_skill_dest = _agent_skill_dir(agent_id, skill.name)
+
+    if not os.path.isdir(skill_upload_path):
+        raise HTTPException(
+            status_code=500,
+            detail=f"Skill package not found on disk: {skill_upload_path}",
+        )
+
+    os.makedirs(_agent_skills_dir(agent_id), exist_ok=True)
+    if not os.path.isdir(agent_skill_dest):
+        shutil.copytree(skill_upload_path, agent_skill_dest)
+        logger.info("Copied skill '%s' to agent '%s' at '%s'", skill.name, agent.name, agent_skill_dest)
+
     db.add(AgentSkill(agent_id=agent_id, skill_id=req.skill_id))
     await db.flush()
     logger.info("Added skill '%s' to agent '%s'", skill.name, agent.name)
@@ -633,7 +696,7 @@ async def add_skill_to_agent(
 async def remove_skill_from_agent(
     db: AsyncSession, agent_id: str, skill_id: str
 ) -> None:
-    """Remove a skill from an agent via the junction table."""
+    """Remove a skill from an agent — DB record and filesystem directory."""
     stmt = select(AgentSkill).where(
         AgentSkill.agent_id == agent_id, AgentSkill.skill_id == skill_id
     )
@@ -641,9 +704,22 @@ async def remove_skill_from_agent(
     if link is None:
         raise HTTPException(status_code=404, detail="Skill not found on this agent")
 
+    # Resolve skill name for filesystem cleanup
+    skill_stmt = select(Skill).where(Skill.id == skill_id)
+    skill = (await db.execute(skill_stmt)).scalar_one_or_none()
+
     await db.delete(link)
     await db.flush()
     logger.info("Removed skill '%s' from agent '%s'", skill_id, agent_id)
+
+    if skill is not None:
+        agent_skill_path = _agent_skill_dir(agent_id, skill.name)
+        if os.path.isdir(agent_skill_path):
+            shutil.rmtree(agent_skill_path, ignore_errors=True)
+            logger.info(
+                "Deleted skill directory '%s' for agent '%s'",
+                agent_skill_path, agent_id,
+            )
 
 
 # ── Agent-CronJob relationship ────────────────────────────────────────────

@@ -78,6 +78,7 @@ async def create_subagents() -> list[dict]:
             "tools": tools,
             "model": _resolve_model(),
             "system_prompt": system_prompt,
+            "skills": [f"/skills/{info.id}/"],
         })
 
     logger.info("Loaded %d sub-agent(s) from database", len(subagents))

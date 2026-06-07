@@ -35,7 +35,7 @@ async def upload_skills(
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """上传 skills 的压缩包（zip, tar.gz, tar.bz2, tar.xz），校验并安装到 workspace/skills/。
+    """上传 skills 的压缩包（zip, tar.gz, tar.bz2, tar.xz），校验并安装到 workspace/skills_upload/。
 
     解压后每个子目录视为一个 skill 包，按 Agent Skills 规范校验 SKILL.md。
     校验失败的 skill 仍会复制到目标目录，在响应中标记 valid=false。
