@@ -103,7 +103,6 @@ const menuGroups: MenuGroup[] = [
       { icon: LayoutDashboard, text: '概览', route: '/overview', pinyin: 'gailan' },
       { icon: Server, text: '实例', pinyin: 'shili' },
       { icon: MessagesSquare, text: '会话', pinyin: 'huihua' },
-      { icon: Brain, text: '模型', route: '/models', pinyin: 'moxing' },
       { icon: BarChart3, text: '使用情况', pinyin: 'shiyongqingkuang' },
       { icon: Timer, text: '定时任务', route: '/scheduled-tasks', pinyin: 'dingshirenwu' },
     ],
@@ -112,6 +111,7 @@ const menuGroups: MenuGroup[] = [
     label: '智能体',
     items: [
       { icon: Bot, text: '智能体', route: '/agents', pinyin: 'zhinengti' },
+      { icon: Brain, text: '模型', route: '/models', pinyin: 'moxing' },
       { icon: Wrench, text: '工具', route: '/tools', pinyin: 'gongju' },
       { icon: Zap, text: '技能', route: '/skills', pinyin: 'jineng' },
       { icon: Network, text: '节点', pinyin: 'jiedian' },

@@ -31,6 +31,7 @@ async def get_db():
 
 async def init_db():
     from db.base import Base
+    from db.models.cron_job import CronJob  # noqa: F401  ensure table is registered
 
     logger.info("Initializing database...")
     async with async_engine.begin() as conn:
@@ -38,6 +39,7 @@ async def init_db():
         await _migrate_agents_drop_skills(conn)
         await _migrate_skills_drop_user_id(conn)
         await _migrate_agents_drop_tools_column(conn)
+        await _migrate_agents_rename_prompts(conn)
         await conn.run_sync(Base.metadata.create_all)
         await _migrate_agents_add_provider_model(conn)
     logger.info("Database tables created")
@@ -132,6 +134,30 @@ async def _migrate_agents_add_provider_model(conn) -> None:
     if "model_id" not in columns:
         logger.info("Migrating: adding model_id column to agents table")
         await conn.execute(text("ALTER TABLE agents ADD COLUMN model_id VARCHAR(36)"))
+
+
+async def _migrate_agents_rename_prompts(conn) -> None:
+    """Rename prompts column to system_prompt in agents table if it exists."""
+    from sqlalchemy import inspect, text
+
+    tables = await conn.run_sync(lambda sync_conn: inspect(sync_conn).get_table_names())
+    if "agents" not in tables:
+        return
+
+    columns = await conn.run_sync(
+        lambda sync_conn: [c["name"] for c in inspect(sync_conn).get_columns("agents")]
+    )
+    if "prompts" not in columns:
+        return
+    if "system_prompt" in columns:
+        return
+
+    logger.info("Migrating: renaming prompts column to system_prompt in agents table")
+    if settings.DATABASE_BACKEND == "postgres":
+        await conn.execute(text("ALTER TABLE agents RENAME COLUMN prompts TO system_prompt"))
+    else:
+        # SQLite 3.25+ supports RENAME COLUMN
+        await conn.execute(text("ALTER TABLE agents RENAME COLUMN prompts TO system_prompt"))
 
 
 async def _migrate_agents_drop_tools_column(conn) -> None:

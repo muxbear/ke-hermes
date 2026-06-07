@@ -9,6 +9,7 @@ class AgentCreateRequest(BaseModel):
 
     name: str = Field(min_length=1, max_length=128)
     description: str = ""
+    system_prompt: str = ""
     parent_id: str | None = None
     provider_id: str | None = None
     model_id: str | None = None
@@ -19,6 +20,7 @@ class AgentUpdateRequest(BaseModel):
 
     name: str = Field(min_length=1, max_length=128)
     description: str = ""
+    system_prompt: str = ""
     provider_id: str | None = None
     model_id: str | None = None
 
@@ -71,7 +73,7 @@ class AgentInfo(BaseModel):
     description: str
     tools: list[str]
     skills: list[SkillBrief]
-    prompts: list[str]
+    system_prompt: str
     files: list[str]
     sub_agents: list[str] = []
     parent_id: str | None = None
@@ -85,6 +87,28 @@ class AgentInfo(BaseModel):
 
     class Config:
         """Pydantic config for ORM model compatibility."""
+        from_attributes = True
+
+
+class CronJobBrief(BaseModel):
+    """Brief cron job info embedded in agent responses."""
+
+    id: str
+    agent_id: str
+    name: str
+    description: str
+    cron_expression: str
+    cron_label: str
+    status: str
+    target_type: str
+    target: str
+    last_run: datetime | None = None
+    next_run: datetime | None = None
+    tags: list[str] = []
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
         from_attributes = True
 
 

@@ -8,6 +8,24 @@ export interface SkillBrief {
   enabled: boolean
 }
 
+/** 定时任务简要信息 */
+export interface CronJobBrief {
+  id: string
+  agentId: string
+  name: string
+  description: string
+  cronExpression: string
+  cronLabel: string
+  status: string
+  targetType: string
+  target: string
+  lastRun: string | null
+  nextRun: string | null
+  tags: string[]
+  createdAt: string
+  updatedAt: string
+}
+
 /** 代理实体 */
 export interface Agent {
   id: string
@@ -16,8 +34,9 @@ export interface Agent {
   status: 'active' | 'inactive' | 'error'
   tools: string[]
   skills: SkillBrief[]
-  prompts: string[]
+  systemPrompt: string
   files: string[]
+  cronJobs: CronJobBrief[]
   subAgents?: string[]
   parentId?: string
   providerId?: string
@@ -32,6 +51,7 @@ export interface Agent {
 export interface AgentCreateRequest {
   name: string
   description?: string
+  systemPrompt?: string
   parentId?: string
   providerId?: string
   modelId?: string
@@ -41,6 +61,7 @@ export interface AgentCreateRequest {
 export interface AgentUpdateRequest {
   name: string
   description?: string
+  systemPrompt?: string
   providerId?: string
   modelId?: string
 }

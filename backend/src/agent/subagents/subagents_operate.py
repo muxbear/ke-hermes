@@ -70,7 +70,7 @@ async def create_subagents() -> list[dict]:
             else:
                 logger.warning("Tool '%s' not found in registry, skipping", name)
 
-        system_prompt = "\n\n".join(info.prompts) if info.prompts else ""
+        system_prompt = info.system_prompt or ""
 
         subagents.append({
             "name": info.name,

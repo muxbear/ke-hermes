@@ -1,7 +1,7 @@
 /**
  * Agent API — 后端真实接口调用
  */
-import type { Agent, AgentCreateRequest, AgentFileContent, AgentUpdateRequest, ConfigType, SkillBrief } from '@/types/agent'
+import type { Agent, AgentCreateRequest, AgentFileContent, AgentUpdateRequest, ConfigType, CronJobBrief, SkillBrief } from '@/types/agent'
 import request from '@/services/request'
 
 /* ------------------------------------------------------------------ */
@@ -18,7 +18,7 @@ function toAgent(raw: Record<string, unknown>): Agent {
     description: (raw.description as string) || '',
     tools: (raw.tools as string[]) || [],
     skills: (raw.skills as SkillBrief[]) || [],
-    prompts: (raw.prompts as string[]) || [],
+    systemPrompt: (raw.system_prompt as string) || '',
     files: (raw.files as string[]) || [],
     subAgents: (raw.sub_agents as string[]) || [],
     parentId: (raw.parent_id as string) ?? undefined,
@@ -27,6 +27,7 @@ function toAgent(raw: Record<string, unknown>): Agent {
     lastActive: (raw.last_active as string) ?? undefined,
     callCount: (raw.call_count as number) ?? 0,
     undeletable: (raw.undeletable as boolean) ?? false,
+    cronJobs: [],
   }
 }
 
@@ -44,6 +45,7 @@ export async function createAgent(data: AgentCreateRequest): Promise<Agent> {
   const res = await request.post('/agents', {
     name: data.name,
     description: data.description || '',
+    system_prompt: data.systemPrompt || '',
     parent_id: data.parentId || undefined,
     provider_id: data.providerId || undefined,
     model_id: data.modelId || undefined,
@@ -55,6 +57,7 @@ export async function updateAgent(id: string, data: AgentUpdateRequest): Promise
   const res = await request.put(`/agents/${id}`, {
     name: data.name,
     description: data.description || '',
+    system_prompt: data.systemPrompt || '',
     provider_id: data.providerId || undefined,
     model_id: data.modelId || undefined,
   })
@@ -176,4 +179,32 @@ export async function addAgentSkill(agentId: string, skillId: string): Promise<S
 
 export async function removeAgentSkill(agentId: string, skillId: string): Promise<void> {
   await request.delete(`/agents/${agentId}/skills/${skillId}`)
+}
+
+/* ------------------------------------------------------------------ */
+/*  智能体-定时任务关联 API                                               */
+/* ------------------------------------------------------------------ */
+
+function toCronJob(raw: Record<string, unknown>): CronJobBrief {
+  return {
+    id: raw.id as string,
+    agentId: raw.agent_id as string,
+    name: raw.name as string,
+    description: (raw.description as string) || '',
+    cronExpression: raw.cron_expression as string,
+    cronLabel: (raw.cron_label as string) || '',
+    status: (raw.status as string) || 'active',
+    targetType: (raw.target_type as string) || 'agent',
+    target: raw.target as string,
+    lastRun: (raw.last_run as string) ?? null,
+    nextRun: (raw.next_run as string) ?? null,
+    tags: (raw.tags as string[]) || [],
+    createdAt: raw.created_at as string,
+    updatedAt: raw.updated_at as string,
+  }
+}
+
+export async function fetchAgentCronJobs(agentId: string): Promise<CronJobBrief[]> {
+  const res = await request.get(`/agents/${agentId}/cron-jobs`)
+  return ((res.data.data as Record<string, unknown>[]) || []).map(toCronJob)
 }

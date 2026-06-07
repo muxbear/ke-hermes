@@ -113,11 +113,10 @@ async def create_main_agent(checkpointer=None, store=None):
 
     agent_info = main_agents[0]
     logger.info(
-        "正在创建主智能体 '%s'（id=%s, 工具=%d, 提示词=%d, 文件=%d）",
+        "正在创建主智能体 '%s'（id=%s, 工具=%d, 文件=%d）",
         agent_info.name,
         agent_info.id,
         len(agent_info.tools),
-        len(agent_info.prompts),
         len(agent_info.files),
     )
 
@@ -135,8 +134,8 @@ async def create_main_agent(checkpointer=None, store=None):
             logger.warning("工具 '%s' 在注册表中未找到，已跳过", name)
 
     # 4. 根据智能体提示词构建 system_prompt
-    if agent_info.prompts:
-        system_prompt = "\n\n".join(agent_info.prompts)
+    if agent_info.system_prompt:
+        system_prompt = agent_info.system_prompt
     else:
         system_prompt = (
             "你是 ke-hermes 通用智能体，请根据用户的需求委派对应的子智能体进行处理。"

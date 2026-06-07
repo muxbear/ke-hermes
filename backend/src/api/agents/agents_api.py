@@ -12,6 +12,7 @@ from api.agents.schemas import (
     AgentInfo,
     AgentListResponse,
     AgentUpdateRequest,
+    CronJobBrief,
     SkillBrief,
 )
 from api.agents.service import (
@@ -21,6 +22,7 @@ from api.agents.service import (
     create_agent,
     delete_agent,
     get_agent,
+    get_agent_cron_jobs,
     get_agent_file,
     get_agent_skills,
     list_agent_file_descriptions,
@@ -280,6 +282,21 @@ async def agent_remove_skill(
     try:
         await remove_skill_from_agent(db, agent_id, skill_id)
         return ok(None, "Skill removed from agent")
+    except Exception as e:
+        if hasattr(e, "status_code"):
+            return error(e.status_code, e.detail)
+        raise
+
+
+@router.get("/{agent_id}/cron-jobs", response_model=ApiResponse[list[CronJobBrief]])
+async def agent_cron_jobs(
+    agent_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """获取智能体的所有定时任务。"""  # noqa: D415
+    try:
+        result = await get_agent_cron_jobs(db, agent_id)
+        return ok(result)
     except Exception as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)

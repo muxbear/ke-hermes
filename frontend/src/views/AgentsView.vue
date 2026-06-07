@@ -155,10 +155,10 @@ function handleEditAgent(agent: Agent) {
   agentFormVisible.value = true
 }
 
-async function handleAgentFormSubmit(data: { name: string; description: string; providerId: string; modelId: string }) {
+async function handleAgentFormSubmit(data: { name: string; description: string; systemPrompt: string; providerId: string; modelId: string }) {
   try {
     if (agentFormMode.value === 'create') {
-      await agentStore.createSubAgent(data.name, data.description, data.providerId || undefined, data.modelId || undefined)
+      await agentStore.createSubAgent(data.name, data.description, data.systemPrompt || undefined, data.providerId || undefined, data.modelId || undefined)
       ElMessage.success('子智能体创建成功')
     } else {
       const agentId = editingAgent.value?.id
@@ -166,6 +166,7 @@ async function handleAgentFormSubmit(data: { name: string; description: string; 
       await agentStore.updateAgent(agentId, {
         name: data.name,
         description: data.description,
+        systemPrompt: data.systemPrompt || undefined,
         providerId: data.providerId || undefined,
         modelId: data.modelId || undefined,
       })

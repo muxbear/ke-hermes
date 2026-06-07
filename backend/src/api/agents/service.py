@@ -14,19 +14,20 @@ from api.agents.schemas import (
     AgentInfo,
     AgentListResponse,
     AgentUpdateRequest,
+    CronJobBrief,
     SkillBrief,
 )
 from db.models.agent import Agent
 from db.models.agent_file import AgentFile
 from db.models.agent_skill import AgentSkill
 from db.models.agent_tool import AgentTool
+from db.models.cron_job import CronJob
 from db.models.skill import Skill
 from db.models.tool import Tool
 
 logger = logging.getLogger(__name__)
 
 CONFIG_TYPE_TO_COLUMN: dict[str, str] = {
-    "prompt": "prompts",
     "file": "files",
 }
 
@@ -92,7 +93,7 @@ def _agent_to_info(
         description=agent.description,
         tools=tool_names if tool_names is not None else [],
         skills=skills if skills is not None else [],
-        prompts=agent.prompts if isinstance(agent.prompts, list) else [],
+        system_prompt=agent.system_prompt or "",
         files=agent.files if isinstance(agent.files, list) else [],
         sub_agents=sub_agent_ids if sub_agent_ids is not None else [],
         parent_id=agent.parent_id,
@@ -177,6 +178,7 @@ async def create_agent(db: AsyncSession, req: AgentCreateRequest) -> AgentInfo:
     agent = Agent(
         name=req.name,
         description=req.description or "",
+        system_prompt=req.system_prompt or "",
         provider_id=req.provider_id,
         model_id=req.model_id,
     )
@@ -273,7 +275,7 @@ async def clone_agent(db: AsyncSession, agent_id: str) -> AgentInfo:
         status="inactive",
         description=source.description,
         parent_id=source.parent_id,
-        prompts=list(source.prompts) if isinstance(source.prompts, list) else [],
+        system_prompt=source.system_prompt or "",
         files=list(source.files) if isinstance(source.files, list) else [],
         provider_id=source.provider_id,
         model_id=source.model_id,
@@ -330,6 +332,7 @@ async def update_agent(db: AsyncSession, agent_id: str, req: AgentUpdateRequest)
 
     agent.name = req.name
     agent.description = req.description
+    agent.system_prompt = req.system_prompt
     agent.provider_id = req.provider_id
     agent.model_id = req.model_id
 
@@ -641,3 +644,36 @@ async def remove_skill_from_agent(
     await db.delete(link)
     await db.flush()
     logger.info("Removed skill '%s' from agent '%s'", skill_id, agent_id)
+
+
+# ── Agent-CronJob relationship ────────────────────────────────────────────
+
+
+async def get_agent_cron_jobs(db: AsyncSession, agent_id: str) -> list[CronJobBrief]:
+    """Get all cron jobs belonging to an agent."""
+    stmt = select(Agent).where(Agent.id == agent_id)
+    agent = (await db.execute(stmt)).scalar_one_or_none()
+    if agent is None:
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    cron_stmt = select(CronJob).where(CronJob.agent_id == agent_id).order_by(CronJob.created_at)
+    rows = (await db.execute(cron_stmt)).scalars().all()
+    return [
+        CronJobBrief(
+            id=cj.id,
+            agent_id=cj.agent_id,
+            name=cj.name,
+            description=cj.description,
+            cron_expression=cj.cron_expression,
+            cron_label=cj.cron_label,
+            status=cj.status,
+            target_type=cj.target_type,
+            target=cj.target,
+            last_run=cj.last_run,
+            next_run=cj.next_run,
+            tags=cj.tags if isinstance(cj.tags, list) else [],
+            created_at=cj.created_at,
+            updated_at=cj.updated_at,
+        )
+        for cj in rows
+    ]

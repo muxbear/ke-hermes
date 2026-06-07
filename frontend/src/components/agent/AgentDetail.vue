@@ -58,6 +58,7 @@ watch(
     editContent.value = ''
     agentStore.clearFileContent()
     agentStore.fetchFileDescriptions(props.agent.id)
+    agentStore.fetchCronJobs(props.agent.id)
   },
   { immediate: true },
 )
@@ -129,7 +130,7 @@ interface ConfigSection {
   icon: typeof Zap
   colorClass: string
   iconBg: string
-  key: 'tools' | 'skills' | 'prompts' | 'files'
+  key: 'tools' | 'skills' | 'files' | 'cronJobs'
 }
 
 const configSections: ConfigSection[] = [
@@ -158,12 +159,12 @@ const configSections: ConfigSection[] = [
     key: 'skills',
   },
   {
-    type: 'prompt',
-    label: 'Cron Jobs',
+    type: 'cronjob',
+    label: '定时任务 (Cron Jobs)',
     icon: Clock,
     colorClass: 'section--green',
     iconBg: 'rgba(34, 197, 94, 0.1)',
-    key: 'prompts',
+    key: 'cronJobs',
   },
 ]
 
@@ -227,9 +228,14 @@ function getStatusColor(status: string): string {
           </span>
           <span class="hstat hstat--green">
             <Clock :size="13" />
-            {{ agent.prompts?.length ?? 0 }}
+            {{ agentStore.cronJobs?.length ?? 0 }}
           </span>
         </div>
+      </div>
+      <div v-if="agent.systemPrompt" class="system-prompt-row">
+        <el-tooltip :content="agent.systemPrompt" placement="bottom" :show-after="300">
+          <pre class="prompt-content">{{ agent.systemPrompt }}</pre>
+        </el-tooltip>
       </div>
       <div class="header-actions">
         <button
@@ -377,6 +383,37 @@ function getStatusColor(status: string): string {
           </div>
         </div>
 
+        <!-- Cron Jobs tab -->
+        <div v-else-if="activeTab === 'cronjob'" class="tags-wrap">
+          <template v-if="agentStore.cronJobs && agentStore.cronJobs.length > 0">
+            <el-tooltip
+              v-for="job in agentStore.cronJobs"
+              :key="job.id"
+              placement="top"
+              :show-after="400"
+              :hide-after="0"
+            >
+              <template #content>
+                <div class="cron-tooltip">
+                  <div>{{ job.description || '暂无描述' }}</div>
+                  <div>Cron: {{ job.cronExpression }}</div>
+                  <div>状态: {{ job.status }}</div>
+                </div>
+              </template>
+              <span class="config-tag section--green">
+                <Clock :size="12" class="tag-icon" />
+                {{ job.name }}
+                <span class="cron-hint">{{ job.cronLabel || job.cronExpression }}</span>
+              </span>
+            </el-tooltip>
+          </template>
+          <div v-else class="empty-section">
+            <Clock :size="20" class="empty-icon" />
+            <p>暂无定时任务</p>
+            <span class="empty-hint">点击上方"添加"按钮创建定时任务</span>
+          </div>
+        </div>
+
         <!-- Generic config tags for non-skill tabs -->
         <div v-else class="tags-wrap">
           <template v-if="agent[activeSection.key] && agent[activeSection.key].length > 0">
@@ -398,7 +435,7 @@ function getStatusColor(status: string): string {
           </template>
           <div v-else class="empty-section">
             <component :is="activeSection.icon" :size="20" class="empty-icon" />
-            <p>暂无{{ activeSection.type === 'tool' ? '工具' : activeSection.type === 'prompt' ? 'Cron Job' : activeSection.label }}</p>
+            <p>暂无{{ activeSection.type === 'tool' ? '工具' : activeSection.label }}</p>
             <span class="empty-hint">点击上方"添加"按钮</span>
           </div>
         </div>
@@ -507,6 +544,28 @@ function getStatusColor(status: string): string {
 .hstat--purple { color: #a78bfa; }
 .hstat--yellow { color: #eab308; }
 .hstat--green { color: #4ade80; }
+
+.system-prompt-row {
+  flex-basis: 100%;
+  padding: 6px 24px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: rgba(59, 130, 246, 0.04);
+}
+
+.prompt-content {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--foreground-secondary);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-family-base);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  cursor: pointer;
+}
 
 .header-actions {
   display: flex;
@@ -780,6 +839,16 @@ function getStatusColor(status: string): string {
 .section--purple .tag-icon { color: #a78bfa; }
 .section--yellow .tag-icon { color: #eab308; }
 .section--green .tag-icon { color: #4ade80; }
+
+.cron-hint {
+  font-size: var(--font-size-xs);
+  color: var(--foreground-muted);
+  margin-left: 4px;
+}
+
+.cron-hint::before {
+  content: '· ';
+}
 
 .tag-edit,
 .tag-delete {

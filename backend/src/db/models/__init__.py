@@ -4,6 +4,7 @@ from db.models.agent_skill import AgentSkill
 from db.models.agent_tool import AgentTool
 from db.models.ai_model import AIModel
 from db.models.conversation import Conversation
+from db.models.cron_job import CronJob
 from db.models.login_record import LoginRecord
 from db.models.mcp_installation import McpInstallation
 from db.models.mcp_tool import McpTool
@@ -20,6 +21,7 @@ __all__ = [
     "AgentTool",
     "AIModel",
     "Conversation",
+    "CronJob",
     "LoginRecord",
     "McpInstallation",
     "McpTool",

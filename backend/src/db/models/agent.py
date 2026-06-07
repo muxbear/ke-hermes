@@ -30,7 +30,7 @@ class Agent(Base):
     status: Mapped[str] = mapped_column(String(16), default="inactive", comment="代理状态: active, inactive, error")
     description: Mapped[str] = mapped_column(Text, default="", comment="代理描述")
     parent_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True, comment="父代理ID (NULL表示主代理)")
-    prompts: Mapped[list] = mapped_column(JSON, default=list, comment="提示词/Cron Job 列表")
+    system_prompt: Mapped[str] = mapped_column(Text, default="", comment="系统提示词")
     files: Mapped[list] = mapped_column(JSON, default=list, comment="文件名称列表")
     provider_id: Mapped[str | None] = mapped_column(String(36), nullable=True, comment="关联的模型提供商ID")
     model_id: Mapped[str | None] = mapped_column(String(36), nullable=True, comment="关联的AI模型ID")

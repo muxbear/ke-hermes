@@ -18,11 +18,12 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (e: 'close'): void
-  (e: 'submit', data: { name: string; description: string; providerId: string; modelId: string }): void
+  (e: 'submit', data: { name: string; description: string; systemPrompt: string; providerId: string; modelId: string }): void
 }>()
 
 const nameValue = ref('')
 const descValue = ref('')
+const systemPromptValue = ref('')
 const selectedProviderId = ref('')
 const selectedModelId = ref('')
 const providers = ref<Provider[]>([])
@@ -40,6 +41,7 @@ const availableModels = computed(() => selectedProvider.value?.models ?? [])
 function resetForm() {
   nameValue.value = ''
   descValue.value = ''
+  systemPromptValue.value = ''
   selectedProviderId.value = ''
   selectedModelId.value = ''
 }
@@ -47,6 +49,7 @@ function resetForm() {
 function populateForm(agent: Agent) {
   nameValue.value = agent.name
   descValue.value = agent.description ?? ''
+  systemPromptValue.value = agent.systemPrompt ?? ''
   selectedProviderId.value = agent.providerId ?? ''
   selectedModelId.value = agent.modelId ?? ''
 }
@@ -68,6 +71,7 @@ function handleSubmit() {
   emit('submit', {
     name: nameValue.value.trim(),
     description: descValue.value.trim(),
+    systemPrompt: systemPromptValue.value,
     providerId: selectedProviderId.value,
     modelId: selectedModelId.value,
   })
@@ -91,7 +95,9 @@ watch(
 )
 
 watch(selectedProviderId, () => {
-  if (selectedModelId.value && !availableModels.value.find((m) => m.id === selectedModelId.value)) {
+  if (!selectedModelId.value) return
+  if (providers.value.length === 0) return
+  if (!availableModels.value.find((m) => m.id === selectedModelId.value)) {
     selectedModelId.value = ''
   }
 })
@@ -176,6 +182,16 @@ watch(selectedProviderId, () => {
                   </option>
                 </select>
               </div>
+            </div>
+
+            <div class="form-field">
+              <label class="field-label">提示词</label>
+              <textarea
+                v-model="systemPromptValue"
+                class="text-input textarea"
+                :rows="5"
+                placeholder="输入系统提示词，定义智能体的角色和行为规范..."
+              />
             </div>
 
             <div class="form-field">

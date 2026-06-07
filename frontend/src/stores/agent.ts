@@ -1,12 +1,13 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Agent, AgentFileContent, AgentUpdateRequest, ConfigType, SkillBrief } from '@/types/agent'
+import type { Agent, AgentFileContent, AgentUpdateRequest, ConfigType, CronJobBrief, SkillBrief } from '@/types/agent'
 import * as agentApi from '@/services/agentApi'
 
 export const useAgentStore = defineStore('agent', () => {
   /* ---------- state ---------- */
   const agents = ref<Agent[]>([])
   const selectedAgentId = ref<string | null>(null)
+  const cronJobs = ref<CronJobBrief[]>([])
   const loading = ref(false)
   const error = ref<string | null>(null)
   const searchQuery = ref('')
@@ -72,6 +73,14 @@ export const useAgentStore = defineStore('agent', () => {
 
   function selectAgent(id: string) {
     selectedAgentId.value = id
+  }
+
+  async function fetchCronJobs(agentId: string) {
+    try {
+      cronJobs.value = await agentApi.fetchAgentCronJobs(agentId)
+    } catch {
+      cronJobs.value = []
+    }
   }
 
   function toggleExpand(id: string) {
@@ -202,11 +211,11 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
-  async function createSubAgent(name: string, description?: string, providerId?: string, modelId?: string) {
+  async function createSubAgent(name: string, description?: string, systemPrompt?: string, providerId?: string, modelId?: string) {
     const main = mainAgent.value
     if (!main) throw new Error('主智能体不存在，无法创建子智能体')
     try {
-      const newAgent = await agentApi.createAgent({ name, description, parentId: main.id, providerId, modelId })
+      const newAgent = await agentApi.createAgent({ name, description, systemPrompt, parentId: main.id, providerId, modelId })
       agents.value = await agentApi.fetchAgents()
       // 自动展开主智能体并选中新创建的子智能体
       expandedIds.value = new Set([...expandedIds.value, main.id])
@@ -297,5 +306,7 @@ export const useAgentStore = defineStore('agent', () => {
     clearFileContent,
     fileDescriptions,
     fetchFileDescriptions: fetchFileDescriptionsAction,
+    cronJobs,
+    fetchCronJobs,
   }
 })
