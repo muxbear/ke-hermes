@@ -98,6 +98,15 @@ watch(() => chatStore.loading, (loading) => {
       </button>
     </div>
 
+    <div class="trace-toggle-row">
+      <el-switch
+        v-model="chatStore.traceEnabled"
+        size="small"
+        :disabled="chatStore.loading"
+      />
+      <span class="trace-toggle-label">跟踪调用</span>
+    </div>
+
     <span class="kb-hint">Enter 发送 · Shift+Enter 换行</span>
   </div>
 </template>
@@ -238,6 +247,18 @@ watch(() => chatStore.loading, (loading) => {
 .plus-menu-item:hover {
   background: var(--border-subtle);
   color: var(--foreground-primary);
+}
+
+.trace-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px;
+}
+
+.trace-toggle-label {
+  font-size: var(--font-size-xs);
+  color: var(--foreground-muted);
 }
 
 .kb-hint {

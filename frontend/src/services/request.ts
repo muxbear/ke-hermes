@@ -134,19 +134,25 @@ function chatAuthHeaders(): Record<string, string> {
   return headers
 }
 
+import type { TraceEntry } from '@/types/chat'
+
 function parseSseDataLine(
   line: string,
   onToken: (token: string) => void,
   onThreadId?: (threadId: string) => void,
+  onTrace?: (entry: Omit<TraceEntry, 'id'>) => void,
 ): void {
   if (!line.startsWith('data: ')) return
   try {
-    const json = JSON.parse(line.slice(6)) as { token?: string; thread_id?: string }
+    const json = JSON.parse(line.slice(6)) as { token?: string; thread_id?: string; trace?: Omit<TraceEntry, 'id'> }
     if (json.token) {
       onToken(json.token)
     }
     if (json.thread_id && onThreadId) {
       onThreadId(json.thread_id)
+    }
+    if (json.trace && onTrace) {
+      onTrace(json.trace)
     }
   } catch {
     // skip malformed SSE line
@@ -160,13 +166,15 @@ export async function sendStreamRequest(
   message: string,
   options: {
     threadId?: string | null
+    traceEnabled?: boolean
     onToken: (token: string) => void
+    onTrace?: (entry: Omit<TraceEntry, 'id'>) => void
     onThreadId?: (threadId: string) => void
     onDone: () => void
     onError: (err: Error) => void
   },
 ): Promise<void> {
-  const { threadId, onToken, onThreadId, onDone, onError } = options
+  const { threadId, traceEnabled, onToken, onTrace, onThreadId, onDone, onError } = options
 
   const body: { message: string; thread_id?: string } = { message }
   if (threadId) {
@@ -204,13 +212,13 @@ export async function sendStreamRequest(
       buffer = lines.pop() || ''
 
       for (const line of lines) {
-        parseSseDataLine(line, onToken, onThreadId)
+        parseSseDataLine(line, onToken, onThreadId, traceEnabled ? onTrace : undefined)
       }
     }
 
     if (buffer.trim()) {
       for (const line of buffer.split('\n')) {
-        parseSseDataLine(line, onToken, onThreadId)
+        parseSseDataLine(line, onToken, onThreadId, traceEnabled ? onTrace : undefined)
       }
     }
   } catch (err) {

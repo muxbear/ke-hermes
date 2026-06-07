@@ -2,18 +2,15 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { sendStreamRequest } from '@/services/request'
 import { useUiStore } from '@/stores/ui'
+import type { ChatMessage, TraceEntry } from '@/types/chat'
 
-export interface ChatMessage {
-  id: number
-  role: 'user' | 'assistant'
-  content: string
-  streaming: boolean
-}
+export type { ChatMessage, TraceEntry }
 
 export const useChatStore = defineStore('chat', () => {
   const messages = ref<ChatMessage[]>([])
   const loading = ref(false)
   const threadId = ref<string | null>(null)
+  const traceEnabled = ref(false)
   let nextId = 1
 
   function addMessage(role: 'user' | 'assistant', content = '', streaming = false): ChatMessage {
@@ -28,15 +25,30 @@ export const useChatStore = defineStore('chat', () => {
     loading.value = true
     addMessage('user', text.trim())
     const assistantId = addMessage('assistant', '', true).id
+    let traceIdCounter = 0
+
+    if (traceEnabled.value) {
+      const idx = messages.value.findIndex(m => m.id === assistantId)
+      if (idx !== -1) {
+        messages.value[idx] = { ...messages.value[idx], traces: [] }
+      }
+    }
 
     try {
       await sendStreamRequest(text.trim(), {
         threadId: threadId.value,
+        traceEnabled: traceEnabled.value,
         onToken(token: string) {
-          // 通过响应式数组修改，确保 Vue 跟踪变化
           const idx = messages.value.findIndex(m => m.id === assistantId)
           if (idx !== -1) {
             messages.value[idx] = { ...messages.value[idx], content: messages.value[idx].content + token }
+          }
+        },
+        onTrace(entry: Omit<TraceEntry, 'id'>) {
+          const idx = messages.value.findIndex(m => m.id === assistantId)
+          if (idx !== -1 && messages.value[idx].traces) {
+            const traces = [...messages.value[idx].traces!, { ...entry, id: ++traceIdCounter }]
+            messages.value[idx] = { ...messages.value[idx], traces }
           }
         },
         onThreadId(id: string) {
@@ -91,7 +103,7 @@ export const useChatStore = defineStore('chat', () => {
     loading.value = true
     try {
       const detail = await fetchConversationMessages(tid)
-      
+
       messages.value = detail.messages
         .filter((m) => m.role === 'user' || m.role === 'assistant')
         .map((m, idx) => ({
@@ -107,5 +119,5 @@ export const useChatStore = defineStore('chat', () => {
     loading.value = false
   }
 
-  return { messages, loading, threadId, sendMessage, clearMessages, loadConversation }
+  return { messages, loading, threadId, traceEnabled, sendMessage, clearMessages, loadConversation }
 })

@@ -66,6 +66,7 @@ declare module 'vue' {
     ToolDialog: typeof import('./src/components/tool/ToolDialog.vue')['default']
     ToolSelectDialog: typeof import('./src/components/agent/ToolSelectDialog.vue')['default']
     TopBar: typeof import('./src/components/TopBar.vue')['default']
+    TracePanel: typeof import('./src/components/TracePanel.vue')['default']
   }
   export interface ComponentCustomProperties {
     vLoading: typeof import('element-plus/es')['ElLoadingDirective']

@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { Sparkles, UserCircle } from 'lucide-vue-next'
 import { marked } from 'marked'
+import TracePanel from './TracePanel.vue'
 
 const props = defineProps({
   message: {
@@ -25,6 +26,11 @@ const renderedContent = computed(() => {
     </div>
     <div class="message-body">
       <div class="message-bubble">
+        <TracePanel
+          v-if="message.role === 'assistant' && message.traces && message.traces.length > 0"
+          :traces="message.traces"
+          :streaming="message.streaming"
+        />
         <div v-if="message.role === 'assistant'" class="markdown-body" v-html="renderedContent"></div>
         <div v-else>{{ message.content }}</div>
         <span v-if="message.streaming && !message.content" class="typing-indicator">

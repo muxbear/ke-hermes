@@ -39,6 +39,9 @@ export default {
     confirmPasswordMatch: '两次密码输入不一致',
     agreementRequired: '请先同意用户协议',
   },
+  chat: {
+    traceCall: '跟踪调用',
+  },
   error: {
     AUTH_001: '账号或密码错误',
     AUTH_002: '账号已被锁定，请稍后再试',
