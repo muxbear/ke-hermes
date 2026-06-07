@@ -26,6 +26,10 @@ def get_default_workspace() -> str:
 
 
 class Settings(BaseSettings):
+    # ---- Server ----
+    HOST: str = os.getenv("HOST", "127.0.0.1")
+    PORT: int = os.getenv("PORT", 8000)
+
     # ---- LLM (DeepSeek) ----
     DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY")
     DEEPSEEK_MODEL: str = os.getenv("DEEPSEEK_MODEL")
@@ -39,14 +43,6 @@ class Settings(BaseSettings):
     # ---- Tavily ----
     TAVILY_API_KEY: str = os.getenv("TAVILY_API_KEY")
 
-    # ---- Server ----
-    HOST: str = os.getenv("HOST", "127.0.0.1")
-    PORT: int = os.getenv("PORT", 8000)
-
-    # ---- OpenSandBox
-    OPENSANDBOX_DOMAIN: str = os.getenv("OPENSANDBOX_DOMAIN", "http://127.0.0.1:8080")
-    OPENSANDBOX_API_KEY: str = os.getenv("OPENSANDBOX_API_KEY", "")
-
     # ---- Workspace ----
     WORKSPACE: str = Field(default_factory=get_default_workspace)
 
@@ -57,11 +53,16 @@ class Settings(BaseSettings):
             return get_default_workspace()
         return str(value)
 
+    SKILLS_ROOT: str = f"{WORKSPACE}/skills/"
+
+    # ---- OpenSandBox
+    OPENSANDBOX_DOMAIN: str = os.getenv("OPENSANDBOX_DOMAIN", "http://127.0.0.1:8080")
+    OPENSANDBOX_API_KEY: str = os.getenv("OPENSANDBOX_API_KEY", "")
+
     # ---- Database ----
     DATABASE_BACKEND: str = os.getenv("DATABASE_BACKEND", "sqlite")
     DATABASE_URL: str = os.getenv("DATABASE_URL")
     DATABASE_PATH: str = os.getenv("DATABASE_PATH")
-
 
     # ---- Checkpoint Database
     CHECKPOINT_BACKEND: str = os.getenv("CHECKPOINT_BACKEND", "sqlite")

@@ -34,7 +34,7 @@ DEFAULT_AGENT_FILES = [
     "AGENTS.md", "SOUL.md", "TOOLS.md", "IDENTITY.md",
     "USER.md", "HEARTBEAT.md", "MEMORY.md",
 ]
-DEFAULT_AGENT_TOOLS = ["web_search", "file_reader", "code_executor"]
+DEFAULT_AGENT_TOOLS = ["tavily_search", "file_reader", "code_executor"]
 
 
 async def _get_sub_agent_ids(db: AsyncSession, agent_id: str) -> list[str]:

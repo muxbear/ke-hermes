@@ -268,15 +268,17 @@ BUILTIN_TOOLS: list[dict] = [
         ],
     },
     {
-        "name": "web_search",
-        "display_name": "网页搜索",
-        "description": "调用搜索引擎对互联网进行实时检索，返回摘要及来源 URL。",
+        "name": "tavily_search",
+        "display_name": "Tavily 网络搜索",
+        "description": "通过 Tavily Search API 对互联网进行实时检索，支持 general/news/finance 三种搜索主题，返回摘要、原始内容及来源 URL。",
         "category": "network",
         "version": "1.5.2",
-        "tags": ["search", "google", "bing"],
+        "tags": ["search", "tavily", "web"],
         "params": [
             {"key": "query", "label": "搜索词", "required": True, "type": "string"},
-            {"key": "limit", "label": "结果数", "required": False, "type": "number"},
+            {"key": "max_results", "label": "最大结果数", "required": False, "type": "number"},
+            {"key": "topic", "label": "搜索主题", "required": False, "type": "string"},
+            {"key": "include_raw_content", "label": "包含原始内容", "required": False, "type": "boolean"},
         ],
     },
     {
