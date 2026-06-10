@@ -19,9 +19,7 @@ def get_default_workspace() -> str:
 
     # config.py lives at backend/src/agent/config/ — four levels up to backend/
     backend_root = os.path.dirname(
-        os.path.dirname(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        )
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     )
     return os.path.join(backend_root, "workspace")
 
@@ -67,7 +65,18 @@ class Settings(BaseSettings):
     )
     SANDBOX_CPU: str = os.getenv("SANDBOX_CPU", "2")
     SANDBOX_MEMORY: str = os.getenv("SANDBOX_MEMORY", "3Gi")
-    SANDBOX_IDLE_TIMEOUT_MINUTES: int = int(os.getenv("SANDBOX_IDLE_TIMEOUT_MINUTES", "10"))
+    SANDBOX_IDLE_TIMEOUT_MINUTES: int = int(
+        os.getenv("SANDBOX_IDLE_TIMEOUT_MINUTES", "10")
+    )
+    SANDBOX_ALLOWED_DOMAINS: str = os.getenv("SANDBOX_ALLOWED_DOMAINS", "")
+
+    @property
+    def sandbox_allowed_domains_list(self) -> list[str]:
+        """解析 SANDBOX_ALLOWED_DOMAINS 为域名列表。"""
+        raw = self.SANDBOX_ALLOWED_DOMAINS.strip()
+        if not raw:
+            return []
+        return [d.strip() for d in raw.split(",") if d.strip()]
 
     # ---- Database ----
     DATABASE_BACKEND: str = os.getenv("DATABASE_BACKEND", "sqlite")
@@ -76,12 +85,16 @@ class Settings(BaseSettings):
 
     # ---- Checkpoint Database
     CHECKPOINT_BACKEND: str = os.getenv("CHECKPOINT_BACKEND", "sqlite")
-    CHECKPOINT_DB_URL: str = os.getenv("CHECKPOINT_DB_URL", "postgresql://127.0.0.1:5432/ke_hermes")
+    CHECKPOINT_DB_URL: str = os.getenv(
+        "CHECKPOINT_DB_URL", "postgresql://127.0.0.1:5432/ke_hermes"
+    )
     CHECKPOINT_DB_PATH: str = os.getenv("CHECKPOINT_DB_PATH", "./db/ke_hermes.db")
 
     # ---- Store Database
     STORE_BACKEND: str = os.getenv("STORE_BACKEND", "sqlite")
-    STORE_DB_URL: str = os.getenv("STORE_DB_URL", "postgresql://127.0.0.1:5432/ke_hermes")
+    STORE_DB_URL: str = os.getenv(
+        "STORE_DB_URL", "postgresql://127.0.0.1:5432/ke_hermes"
+    )
     STORE_DB_PATH: str = os.getenv("STORE_DB_PATH", "./db/ke_hermes.db")
 
     # ---- Encryption ----

@@ -11,6 +11,7 @@ from sqlalchemy import select
 from agent import tools as agent_tools
 from agent.config import settings
 from agent.context.context import Context
+from agent.middleware.skill_sandbox_sync import SkillSandboxSyncMiddleware
 from agent.models.llm import llm as default_llm
 from agent.sandbox.sandbox_manager import SandboxManager
 from agent.sandbox.user_aware_sandbox_backend import UserAwareSandboxBackend
@@ -136,7 +137,7 @@ async def create_main_agent(checkpointer=None, store=None, sandbox_manager=None)
         else:
             logger.warning("工具 '%s' 在注册表中未找到，已跳过", name)
 
-    # skills_root = os.path.join(settings.WORKSPACE, "skills")            
+    skills_root = os.path.join(settings.WORKSPACE, "skills")
 
     # 4. 根据智能体提示词构建 system_prompt
     if agent_info.system_prompt:
@@ -151,17 +152,20 @@ async def create_main_agent(checkpointer=None, store=None, sandbox_manager=None)
 
     # 6. 创建沙箱后端（每个用户独立沙箱，带 TTL 管理）
     if sandbox_manager is None:
-        sandbox_manager = SandboxManager()
+        sandbox_manager = SandboxManager(
+            extra_domains=settings.sandbox_allowed_domains_list,
+        )
         sandbox_manager.start_cleanup()
 
     sandbox_backend = UserAwareSandboxBackend(sandbox_manager=sandbox_manager)
-    
+
     backend = CompositeBackend(
         default=sandbox_backend,
         routes={
             "/memories/": StoreBackend(
                 namespace=lambda ctx: (ctx.runtime.context.user_id,),
             ),
+            "/skills/": FilesystemBackend(root_dir=skills_root, virtual_mode=True),
         },
     )
 
@@ -171,7 +175,14 @@ async def create_main_agent(checkpointer=None, store=None, sandbox_manager=None)
     else:
         memory = ["/memories/AGENT.md"]
 
-    # 8. 创建 deep agent
+    # 8. 创建技能沙盒同步中间件
+    skill_sync_middleware = SkillSandboxSyncMiddleware(
+        sandbox_manager=sandbox_manager,
+        skills_root=skills_root,
+        agent_id=agent_info.id,
+    )
+
+    # 9. 创建 deep agent
     agent = create_deep_agent(
         name=agent_info.name,
         model=model,
@@ -184,6 +195,7 @@ async def create_main_agent(checkpointer=None, store=None, sandbox_manager=None)
         backend=backend,
         subagents=subagents,
         system_prompt=system_prompt,
+        middleware=[skill_sync_middleware],  # type: ignore[list-item]
     )
 
     logger.info("主智能体 '%s' 创建成功", agent_info.name)

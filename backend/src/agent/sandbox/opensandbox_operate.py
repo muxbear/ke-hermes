@@ -15,6 +15,20 @@ from opensandbox.sync import SandboxSync
 from code_interpreter import CodeInterpreter, SupportedLanguage
 
 
+def _default_network_policy(
+    extra_domains: list[str] | None = None,
+) -> NetworkPolicy:
+    """构建沙盒网络策略，合并默认域名和额外域名。"""
+    rules = [
+        NetworkRule(action="allow", target="pypi.org"),
+        NetworkRule(action="allow", target="*.github.com"),
+        NetworkRule(action="allow", target="*.baidu.com"),
+    ]
+    for domain in extra_domains or []:
+        rules.append(NetworkRule(action="allow", target=domain))
+    return NetworkPolicy(defaultAction="deny", egress=rules)
+
+
 def create_sandboxsync(config=None, sandbox_id=None, image=None):
     """获取或创建 SandboxSync
 
@@ -28,7 +42,9 @@ def create_sandboxsync(config=None, sandbox_id=None, image=None):
 
     if sandbox_id:
         try:
-            sandbox = SandboxSync.connect(sandbox_id=sandbox_id, connection_config=config)
+            sandbox = SandboxSync.connect(
+                sandbox_id=sandbox_id, connection_config=config
+            )
             return sandbox
         except Exception as e:
             logger.error(f"连接到沙盒 {sandbox_id} 出错：{str(e)}")
@@ -42,16 +58,9 @@ def create_sandboxsync(config=None, sandbox_id=None, image=None):
         entrypoint=["/opt/opensandbox/code-interpreter.sh"],
         env={"PYTHON_VERSION": "3.11"},
         resource={"cpu": "2", "memory": "3Gi"},
-        timeout=timedelta(minutes=10), # 10 分钟不使用会停止沙盒
+        timeout=timedelta(minutes=10),  # 10 分钟不使用会停止沙盒
         connection_config=config,
-        network_policy=NetworkPolicy( # 沙盒网络路由策略
-            defaultAction="deny",
-            egress=[
-                NetworkRule(action="allow", target="pypi.org"),
-                NetworkRule(action="allow", target="*.github.com"),
-                NetworkRule(action="allow", target="*.baidu.com"),
-            ]
-        )
+        network_policy=_default_network_policy(),
     )
 
     return sandbox
@@ -70,7 +79,9 @@ async def create_sandbox(config=None, sandbox_id=None, image=None):
 
     if sandbox_id:
         try:
-            sandbox = await Sandbox.connect(sandbox_id=sandbox_id, connection_config=config)
+            sandbox = await Sandbox.connect(
+                sandbox_id=sandbox_id, connection_config=config
+            )
             return sandbox
         except Exception as e:
             logger.error(f"连接到沙盒 {sandbox_id} 出错：{str(e)}")
@@ -86,6 +97,7 @@ async def create_sandbox(config=None, sandbox_id=None, image=None):
         resource={"cpu": "2", "memory": "3Gi"},
         timeout=timedelta(minutes=10),
         connection_config=config,
+        network_policy=_default_network_policy(),
     )
 
     return sandbox
@@ -121,9 +133,11 @@ def _get_config():
         transport=httpx.HTTPTransport(limits=httpx.Limits(max_connections=20)),
     )
 
-def main(): 
+
+def main():
     config = _get_config_sync()
     sandbox = create_sandboxsync(config)
+
 
 async def main():
     config = _get_config()
@@ -135,9 +149,11 @@ async def main():
         print(execution.logs.stdout[0].text)
 
         # 3. Write a file
-        await sandbox.files.write_files([
-            WriteEntry(path="/tmp/hello.txt", data="Hello World", mode=644),
-        ])
+        await sandbox.files.write_files(
+            [
+                WriteEntry(path="/tmp/hello.txt", data="Hello World", mode=644),
+            ]
+        )
 
         # 4. Read a file
         content = await sandbox.files.read_file("/tmp/hello.txt")
@@ -167,4 +183,3 @@ async def main():
 if __name__ == "__main__":
     main()
     # asyncio.run(main())
-    

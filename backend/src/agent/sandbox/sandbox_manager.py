@@ -11,7 +11,10 @@ from opensandbox.sync import SandboxSync
 
 from agent.config import settings
 from agent.sandbox.opensandbox_backend import OpenSandBoxBackend
-from agent.sandbox.opensandbox_operate import _get_config_sync
+from agent.sandbox.opensandbox_operate import (
+    _default_network_policy,
+    _get_config_sync,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -51,10 +54,15 @@ class SandboxManager:
         cpu: str | None = None,
         memory: str | None = None,
         idle_timeout_minutes: int | None = None,
+        extra_domains: list[str] | None = None,
     ) -> None:
-        self._ttl_seconds = ttl_seconds if ttl_seconds is not None else settings.SANDBOX_TTL_SECONDS
+        self._ttl_seconds = (
+            ttl_seconds if ttl_seconds is not None else settings.SANDBOX_TTL_SECONDS
+        )
         self._cleanup_interval = (
-            cleanup_interval if cleanup_interval is not None else settings.SANDBOX_CLEANUP_INTERVAL
+            cleanup_interval
+            if cleanup_interval is not None
+            else settings.SANDBOX_CLEANUP_INTERVAL
         )
         self._image = image or settings.SANDBOX_IMAGE
         self._cpu = cpu or settings.SANDBOX_CPU
@@ -64,6 +72,7 @@ class SandboxManager:
             if idle_timeout_minutes is not None
             else settings.SANDBOX_IDLE_TIMEOUT_MINUTES
         )
+        self._extra_domains = extra_domains or []
         self._config = _get_config_sync()
 
         self._sandboxes: dict[str, SandboxEntry] = {}
@@ -81,7 +90,9 @@ class SandboxManager:
                 if self._is_healthy(entry.sandbox):
                     self._renew(entry)
                     entry.last_access = time.monotonic()
-                    logger.debug("Reusing sandbox %s for user %s", entry.sandbox.id, user_id)
+                    logger.debug(
+                        "Reusing sandbox %s for user %s", entry.sandbox.id, user_id
+                    )
                     return entry.backend
 
                 logger.warning(
@@ -114,7 +125,9 @@ class SandboxManager:
             daemon=True,
         )
         self._cleanup_thread.start()
-        logger.info("Sandbox cleanup thread started (interval=%ds)", self._cleanup_interval)
+        logger.info(
+            "Sandbox cleanup thread started (interval=%ds)", self._cleanup_interval
+        )
 
     def shutdown(self) -> None:
         """Stop cleanup loop and kill all tracked sandboxes."""
@@ -158,14 +171,7 @@ class SandboxManager:
             resource={"cpu": self._cpu, "memory": self._memory},
             timeout=timedelta(minutes=self._idle_timeout_minutes),
             connection_config=self._config,
-            network_policy=NetworkPolicy(
-                defaultAction="deny",
-                egress=[
-                    NetworkRule(action="allow", target="pypi.org"),
-                    NetworkRule(action="allow", target="*.github.com"),
-                    NetworkRule(action="allow", target="*.baidu.com"),
-                ],
-            ),
+            network_policy=_default_network_policy(self._extra_domains),
         )
 
     def _renew(self, entry: SandboxEntry) -> None:
@@ -184,7 +190,9 @@ class SandboxManager:
         try:
             return sandbox.is_healthy()
         except Exception:
-            logger.warning("Health check failed for sandbox %s", sandbox.id, exc_info=True)
+            logger.warning(
+                "Health check failed for sandbox %s", sandbox.id, exc_info=True
+            )
             return False
 
     @staticmethod

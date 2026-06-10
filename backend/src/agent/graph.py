@@ -50,7 +50,11 @@ async def init_graph():
         _conn_pool = AsyncConnectionPool(
             conninfo=settings.CHECKPOINT_DB_URL,
             open=False,
-            kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
+            kwargs={
+                "autocommit": True,
+                "prepare_threshold": 0,
+                "row_factory": dict_row,
+            },
         )
         await _conn_pool.open()
 
@@ -64,7 +68,9 @@ async def init_graph():
             f"未知的 CHECKPOINT_BACKEND: '{backend}'，期望 'sqlite' 或 'postgres'。"
         )
 
-    _sandbox_manager = SandboxManager()
+    _sandbox_manager = SandboxManager(
+        extra_domains=settings.sandbox_allowed_domains_list,
+    )
     _sandbox_manager.start_cleanup()
 
     _graph = await create_main_agent(

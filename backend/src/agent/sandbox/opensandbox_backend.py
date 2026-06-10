@@ -4,7 +4,11 @@ from time import time
 from collections.abc import Callable
 from unittest import result
 from uuid import uuid4
-from deepagents.backends.protocol import ExecuteResponse, FileDownloadResponse, FileUploadResponse
+from deepagents.backends.protocol import (
+    ExecuteResponse,
+    FileDownloadResponse,
+    FileUploadResponse,
+)
 from deepagents.backends.sandbox import BaseSandbox
 from deepagents.graph import logger
 from opensandbox.sync import SandboxSync
@@ -14,6 +18,7 @@ from urllib3 import response
 SyncPollingInterval = float | Callable[[float], float]
 PollingStrategy = Callable[[float], float]
 
+
 class OpenSandBoxBackend(BaseSandbox):
     """OpenSandBoxBackend 的实现符合 SandboxBackendProtocol协议.
 
@@ -21,7 +26,7 @@ class OpenSandBoxBackend(BaseSandbox):
     """
 
     def __init__(
-        self, 
+        self,
         *,
         sandbox: SandboxSync,
         timeout: int = 30 * 60,
@@ -40,10 +45,16 @@ class OpenSandBoxBackend(BaseSandbox):
         if callable(sync_polling_interval):
             polling_strategy = cast("PollingStrategy", sync_polling_interval)
         else:
+
             def polling_strategy(_elapsed: float) -> float:
                 return sync_polling_interval
 
         self._sync_polling_strategy = polling_strategy
+
+    @property
+    def sandbox(self) -> SandboxSync:
+        """返回底层 SandboxSync 实例，用于高级操作（如网络策略修改）。"""
+        return self._sandbox
 
     def id(self) -> str:
         """返回沙箱的唯一标识符。
@@ -53,13 +64,7 @@ class OpenSandBoxBackend(BaseSandbox):
         """
         return self._sandbox.id
 
-
-    def execute(
-        self, 
-        command: str, 
-        *,
-        timeout: int | None = None
-    ) -> ExecuteResponse:
+    def execute(self, command: str, *, timeout: int | None = None) -> ExecuteResponse:
         """执行一个 Shell 命令并返回结果。
 
         Args:
@@ -73,12 +78,7 @@ class OpenSandBoxBackend(BaseSandbox):
         # return self._execute_via_session_logs(command, timeoout=effective_timeout)
         return self._execute_command(command, timeout=effective_timeout)
 
-    def _execute_command(
-        self,
-        command: str,
-        *,
-        timeout: int
-    ) -> ExecuteResponse:
+    def _execute_command(self, command: str, *, timeout: int) -> ExecuteResponse:
         """使用 OpenSandbox 的 API 执行命令
 
         Args:
@@ -101,36 +101,28 @@ class OpenSandBoxBackend(BaseSandbox):
                 stderr = "\n".join([log.text for log in result.logs.stderr])
                 logger.debug(f"命令标准错误长度：{len(stderr)}")
 
-
             # 合并输出
             output = stdout
             if stderr and stderr.strip():
                 output += f"\n<stderr>{stderr.strip()}</stderr>"
-            
+
             logger.info(f"命令执行成功，退出码：{result.exit_code or 0}")
 
             return ExecuteResponse(
-                output=output,
-                exit_code=result.exit_code or 0,
-                truncated=False
+                output=output, exit_code=result.exit_code or 0, truncated=False
             )
         except Exception as e:
-                error_msg = str(e)
-                logger.error(f"执行命令时发生错误：{error_msg}", exc_info=True)
+            error_msg = str(e)
+            logger.error(f"执行命令时发生错误：{error_msg}", exc_info=True)
 
-                if "timeout" in error_msg.lower():
-                    logger.warning(f"命令在 {timeout} 秒后超时")
-                    return ExecuteResponse(
-                        output=f"命令在 {timeout} 秒后超时",
-                        exit_code=124,
-                        truncated=False
-                    )
+            if "timeout" in error_msg.lower():
+                logger.warning(f"命令在 {timeout} 秒后超时")
+                return ExecuteResponse(
+                    output=f"命令在 {timeout} 秒后超时", exit_code=124, truncated=False
+                )
 
     def _execute_via_session_logs(
-        self,
-        command: str,
-        *,
-        timeout: int
+        self, command: str, *, timeout: int
     ) -> ExecuteResponse:
         """通过会话执行命令，并轮询日志直至执行完成。。
 
@@ -146,16 +138,16 @@ class OpenSandBoxBackend(BaseSandbox):
         try:
             start_at = time.monotonic()
             result = self._sandbox.process.execute_session_command(
-                session_id, 
+                session_id,
                 # SessionExecuteRequest(command=command, run_async=True),
-                timeout=timeout
+                timeout=timeout,
             )
         finally:
-            self._sandbox.process.delete_session(session_id)    
+            self._sandbox.process.delete_session(session_id)
 
     def download_files(self, paths: list[str]) -> list[FileDownloadResponse]:
         """从 OpenSandbox 中下载文件
-        
+
         Args:
             paths: 要下载文件的路径
 
@@ -170,13 +162,17 @@ class OpenSandBoxBackend(BaseSandbox):
 
             if not path.startswith("/"):
                 logger.error(f"路径必须是绝对路径,以 / 开头")
-                responses.append(FileDownloadResponse(path=path, content=None, error="无效的路径"))
+                responses.append(
+                    FileDownloadResponse(path=path, content=None, error="无效的路径")
+                )
                 continue
 
             try:
                 logger.debug(f"正在从沙盒读取文件: {path}")
                 content = self._sandbox.files.read_file(path)
-                content_bytes = content.encode("utf-8") if isinstance(content, str) else content
+                content_bytes = (
+                    content.encode("utf-8") if isinstance(content, str) else content
+                )
                 logger.debug(f"文件读取成功，大小: {len(content_bytes)}")
 
                 responses.append(
@@ -192,39 +188,42 @@ class OpenSandBoxBackend(BaseSandbox):
                 # 尝试检查文件是否存在
                 try:
                     logger.debug(f"检查文件 {path} 是否存在")
-                    result = self._sandbox.commands.run(f"test -f '{path}' && echo 'exists'")
-                    if not result.logs.stdout or "exists" not in result.logs.stdout[0].text:
+                    result = self._sandbox.commands.run(
+                        f"test -f '{path}' && echo 'exists'"
+                    )
+                    if (
+                        not result.logs.stdout
+                        or "exists" not in result.logs.stdout[0].text
+                    ):
                         logger.error(f"文件 {path} 不存在")
                         responses.append(
                             FileDownloadResponse(
-                                path=path,
-                                content=None,
-                                error="file_not_found"
+                                path=path, content=None, error="file_not_found"
                             )
                         )
                     else:
                         logger.error(f"文件 {path} 存在，但读取失败，错误：{str(e)}")
                         responses.append(
-                            path=path,
-                            content=None,
-                            error=f"read_error: {str(e)}"
+                            path=path, content=None, error=f"read_error: {str(e)}"
                         )
                 except Exception as check_error:
-                    logger.error(f"检查文件 {path} 时出错：{check_error}", exc_info=True)
+                    logger.error(
+                        f"检查文件 {path} 时出错：{check_error}", exc_info=True
+                    )
                     responses.append(
                         FileDownloadResponse(
                             path=path,
                             content=None,
-                            error=f"check_error: {str(check_error)}"
+                            error=f"check_error: {str(check_error)}",
                         )
                     )
 
         success_count = sum(1 for r in responses if r.error is None)
         logger.info(f"文件下载完成，成功下载 {success_count} 个文件")
         return responses
-        
-    def upload_files(self, files: list[tuple[str, bytes]]) -> list[FileUploadResponse]:        
-        """ 上传文件到 OpenSandbox
+
+    def upload_files(self, files: list[tuple[str, bytes]]) -> list[FileUploadResponse]:
+        """上传文件到 OpenSandbox
 
         Args:
             files: 要上传的文件列表
@@ -238,29 +237,32 @@ class OpenSandBoxBackend(BaseSandbox):
         upload_entries = []
 
         for i, (path, content) in enumerate(files):
-            logger.debug(f"正在上传第 {i}/{len(files)} 文件：{path}, 大小：{len(content)} 字节")
+            logger.debug(
+                f"正在上传第 {i}/{len(files)} 文件：{path}, 大小：{len(content)} 字节"
+            )
             if not path.startswith("/"):
-                responses.append(
-                    FileUploadResponse(
-                        path=path,
-                        error="invalid_path"
-                    )
-                )
+                responses.append(FileUploadResponse(path=path, error="invalid_path"))
                 continue
-        
+
             try:
                 # 将字节内容转换成字符串
                 if isinstance(content, bytes):
                     try:
                         content_str = content.decode("utf-8")
-                        logger.debug(f"用 utf-8 解码字节，获取到内容长度：{len(content_str)}")
+                        logger.debug(
+                            f"用 utf-8 解码字节，获取到内容长度：{len(content_str)}"
+                        )
                     except UnicodeDecodeError as decode_error:
-                        logger.warning(f"用 utf-8 解码失败，将以字符串的形式存储，错误信息: {decode_error}")
+                        logger.warning(
+                            f"用 utf-8 解码失败，将以字符串的形式存储，错误信息: {decode_error}"
+                        )
                         content_str = str(content)
                 else:
                     content_str = str(content)
 
-                upload_entries.append(WriteEntry(path=path, data=content_str, mode=0o644))
+                upload_entries.append(
+                    WriteEntry(path=path, data=content_str, mode=0o644)
+                )
                 responses.append(FileUploadResponse(path=path, error=None))
                 logger.debug(f"文件 {path} 已加入到上传队列")
             except Exception as e:
@@ -280,14 +282,12 @@ class OpenSandBoxBackend(BaseSandbox):
                     for i, resp in enumerate(responses):
                         if resp.error is None:
                             response[i] = FileUploadResponse(
-                                path=resp.path,
-                                error=f"upload_failed：{str(e)}"
+                                path=resp.path, error=f"upload_failed：{str(e)}"
                             )
                         else:
-                            logger.warning(f"没有有效的文件需要上传")    
+                            logger.warning(f"没有有效的文件需要上传")
 
             # 上传结果
             success_count = sum(1 for r in responses if r.error is None)
             error_count = len(responses) - success_count
             return responses
-            
