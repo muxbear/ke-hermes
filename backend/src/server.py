@@ -42,6 +42,12 @@ async def lifespan(app: FastAPI):
         await seed_builtin_tools(session)
         await session.commit()
 
+    # Migrate any plaintext api_key values to encrypted
+    from api.providers.service import migrate_plaintext_api_keys
+    async with async_session() as session:
+        await migrate_plaintext_api_keys(session)
+        await session.commit()
+
     await init_graph()
     store = await create_store()
     set_store(store)

@@ -4,12 +4,13 @@ import secrets
 import time
 
 import bcrypt
+import jwt
+from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from fastapi import HTTPException
 from pydantic import BaseModel
 
-import jwt
 from agent.config import settings
 
 logger = logging.getLogger(__name__)
@@ -132,3 +133,51 @@ def decode_token(token: str, expected_type: str = "access") -> dict:
         raise HTTPException(status_code=401, detail="Invalid token type")
 
     return payload
+
+
+# ---- Fernet symmetric encryption for API keys ----
+
+_fernet: Fernet | None = None
+_FERNET_KEY_FILE = ".fernet_key"
+
+
+def _get_fernet() -> Fernet:
+    global _fernet
+    if _fernet is not None:
+        return _fernet
+
+    key = settings.ENCRYPTION_KEY
+    if key:
+        _fernet = Fernet(key.encode())
+        return _fernet
+
+    import os
+    key_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        _FERNET_KEY_FILE,
+    )
+    try:
+        with open(key_path) as f:
+            key = f.read().strip()
+        _fernet = Fernet(key.encode())
+        logger.info("Loaded encryption key from %s", _FERNET_KEY_FILE)
+    except FileNotFoundError:
+        key = Fernet.generate_key().decode()
+        with open(key_path, "w") as f:
+            f.write(key)
+        _fernet = Fernet(key.encode())
+        logger.info("Generated persistent encryption key → %s", _FERNET_KEY_FILE)
+
+    return _fernet
+
+
+def encrypt_api_key(plain: str) -> str:
+    if not plain:
+        return ""
+    return _get_fernet().encrypt(plain.encode()).decode()
+
+
+def decrypt_api_key(encrypted: str) -> str:
+    if not encrypted:
+        return ""
+    return _get_fernet().decrypt(encrypted.encode()).decode()

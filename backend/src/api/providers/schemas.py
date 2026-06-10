@@ -1,7 +1,7 @@
 """Request and response schemas for provider and model management."""
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 # ---- 模型参数 ----
 
@@ -105,7 +105,7 @@ class ProviderResponse(BaseModel):
     logo: str
     status: str
     api_base: str
-    api_key: str
+    api_key: SecretStr
     description: str
     website: str
     models: list[ModelResponse] = []

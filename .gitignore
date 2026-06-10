@@ -44,6 +44,8 @@ backend/workspace/
 backend/*.egg-info/
 backend/*.egg
 backend/uv.lock
+backend/.fernet_key
+backend/.jwt_secret
 
 # ========================
 # Python packaging & tools

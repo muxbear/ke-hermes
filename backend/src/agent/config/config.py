@@ -1,7 +1,8 @@
+import os
+
+from dotenv import load_dotenv
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings
-from dotenv import load_dotenv
-import os
 
 load_dotenv()
 
@@ -28,20 +29,20 @@ def get_default_workspace() -> str:
 class Settings(BaseSettings):
     # ---- Server ----
     HOST: str = os.getenv("HOST", "127.0.0.1")
-    PORT: int = os.getenv("PORT", 8000)
+    PORT: int = int(os.getenv("PORT") or 8000)
 
     # ---- LLM (DeepSeek) ----
-    DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY")
-    DEEPSEEK_MODEL: str = os.getenv("DEEPSEEK_MODEL")
-    DEEPSEEK_BASE_URL: str = os.getenv("DEEPSEEK_BASE_URL")
+    DEEPSEEK_API_KEY: str = os.getenv("DEEPSEEK_API_KEY", "")
+    DEEPSEEK_MODEL: str = os.getenv("DEEPSEEK_MODEL", "deepseek-v4-pro")
+    DEEPSEEK_BASE_URL: str = os.getenv("DEEPSEEK_BASE_URL", "")
 
     # ---- Embeddings (DashScope) ----
-    DASHSCOPE_API_KEY: str = os.getenv("DASHSCOPE_API_KEY")
-    DASHSCOPE_EMBEDDING: str = os.getenv("DASHSCOPE_EMBEDDING")
-    DASHSCOPE_BASE_URL: str = os.getenv("DASHSCOPE_BASE_URL")
+    DASHSCOPE_API_KEY: str = os.getenv("DASHSCOPE_API_KEY", "")
+    DASHSCOPE_EMBEDDING: str = os.getenv("DASHSCOPE_EMBEDDING", "")
+    DASHSCOPE_BASE_URL: str = os.getenv("DASHSCOPE_BASE_URL", "")
 
     # ---- Tavily ----
-    TAVILY_API_KEY: str = os.getenv("TAVILY_API_KEY")
+    TAVILY_API_KEY: str = os.getenv("TAVILY_API_KEY", "")
 
     # ---- Workspace ----
     WORKSPACE: str = Field(default_factory=get_default_workspace)
@@ -61,8 +62,8 @@ class Settings(BaseSettings):
 
     # ---- Database ----
     DATABASE_BACKEND: str = os.getenv("DATABASE_BACKEND", "sqlite")
-    DATABASE_URL: str = os.getenv("DATABASE_URL")
-    DATABASE_PATH: str = os.getenv("DATABASE_PATH")
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "")
+    DATABASE_PATH: str = os.getenv("DATABASE_PATH", "")
 
     # ---- Checkpoint Database
     CHECKPOINT_BACKEND: str = os.getenv("CHECKPOINT_BACKEND", "sqlite")
@@ -74,22 +75,25 @@ class Settings(BaseSettings):
     STORE_DB_URL: str = os.getenv("STORE_DB_URL", "postgresql://127.0.0.1:5432/ke_hermes")
     STORE_DB_PATH: str = os.getenv("STORE_DB_PATH", "./db/ke_hermes.db")
 
+    # ---- Encryption ----
+    ENCRYPTION_KEY: str = os.getenv("ENCRYPTION_KEY", "")
+
     # ---- JWT ----
     JWT_SECRET_KEY: str = ""
-    JWT_ACCESS_EXPIRE: int = os.getenv("JWT_ACCESS_EXPIRE", 7200)
-    JWT_REFRESH_EXPIRE: int = os.getenv("JWT_REFRESH_EXPIRE", 604800)
+    JWT_ACCESS_EXPIRE: int = int(os.getenv("JWT_ACCESS_EXPIRE") or 7200)
+    JWT_REFRESH_EXPIRE: int = int(os.getenv("JWT_REFRESH_EXPIRE") or 604800)
 
     # ---- RSA ----
-    RSA_KEY_SIZE: int = os.getenv("RSA_KEY_SIZE", 2048)
+    RSA_KEY_SIZE: int = int(os.getenv("RSA_KEY_SIZE") or 2048)
 
     # ---- Rate Limit ----
-    LOGIN_MAX_FAILS: int = os.getenv("LOGIN_MAX_FAILS", 5)
-    LOGIN_LOCK_MINUTES: int = os.getenv("LOGIN_LOCK_MINUTES", 30)
-    SMS_DAILY_LIMIT: int = os.getenv("SMS_DAILY_LIMIT", 5)
+    LOGIN_MAX_FAILS: int = int(os.getenv("LOGIN_MAX_FAILS") or 5)
+    LOGIN_LOCK_MINUTES: int = int(os.getenv("LOGIN_LOCK_MINUTES") or 30)
+    SMS_DAILY_LIMIT: int = int(os.getenv("SMS_DAILY_LIMIT") or 5)
 
     # ---- Captcha ----
-    CAPTCHA_EXPIRE: int = os.getenv("CAPTCHA_EXPIRE", 300)
-    SLIDE_THRESHOLD: int = os.getenv("SLIDE_THRESHOLD", 8)
+    CAPTCHA_EXPIRE: int = int(os.getenv("CAPTCHA_EXPIRE") or 300)
+    SLIDE_THRESHOLD: int = int(os.getenv("SLIDE_THRESHOLD") or 8)
 
     # ---- Redis ----
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")

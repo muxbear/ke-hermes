@@ -1,5 +1,8 @@
 """Business logic for provider and model CRUD operations."""
+import logging
+
 from fastapi import HTTPException
+from pydantic import SecretStr
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,8 +14,11 @@ from api.providers.schemas import (
     ProviderResponse,
     ProviderUpdateRequest,
 )
+from core.security import decrypt_api_key, encrypt_api_key
 from db.models.ai_model import AIModel
 from db.models.provider import Provider
+
+logger = logging.getLogger(__name__)
 
 
 def _provider_to_response(p: Provider, models: list[AIModel]) -> ProviderResponse:
@@ -23,7 +29,7 @@ def _provider_to_response(p: Provider, models: list[AIModel]) -> ProviderRespons
         logo=p.logo,
         status=p.status,
         api_base=p.api_base,
-        api_key=p.api_key,
+        api_key=SecretStr(decrypt_api_key(p.api_key)),
         description=p.description,
         website=p.website,
         models=[_model_to_response(m) for m in models],
@@ -103,12 +109,11 @@ async def create_provider(
         name=req.name,
         logo=req.logo,
         api_base=req.api_base,
-        api_key=req.api_key,
+        api_key=encrypt_api_key(req.api_key),
         description=req.description,
         website=req.website,
         user_id=user_id,
     )
-    db.add(provider)
     await db.commit()
     await db.refresh(provider)
     return _provider_to_response(provider, [])
@@ -122,7 +127,7 @@ async def update_provider(
     provider.name = req.name
     provider.logo = req.logo
     provider.api_base = req.api_base
-    provider.api_key = req.api_key
+    provider.api_key = encrypt_api_key(req.api_key)
     provider.status = req.status
     provider.description = req.description
     provider.website = req.website
@@ -237,3 +242,37 @@ async def toggle_model_status(
     await db.commit()
     await db.refresh(model)
     return _model_to_response(model)
+
+
+# ---- 已有明文密钥自动升级 ----
+
+_FERNET_PREFIX = "gAAAAAB"
+
+
+async def migrate_plaintext_api_keys(db: AsyncSession) -> int:
+    """Upgrade any plaintext api_key values to encrypted form.
+
+    Returns the number of keys that were upgraded.
+    """
+    result = await db.execute(select(Provider))
+    providers = result.scalars().all()
+
+    upgraded = 0
+    for p in providers:
+        if p.api_key and not p.api_key.startswith(_FERNET_PREFIX):
+            try:
+                p.api_key = encrypt_api_key(p.api_key)
+                upgraded += 1
+                logger.info(
+                    "Migrated api_key for provider '%s' (%s)", p.name, p.id,
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to migrate api_key for provider '%s' (%s)", p.name, p.id,
+                )
+
+    if upgraded:
+        await db.commit()
+        logger.info("Migrated %d plaintext api_key(s) to encrypted", upgraded)
+
+    return upgraded

@@ -3,22 +3,23 @@
 import logging
 import os
 
+from deepagents import create_deep_agent
+from deepagents.backends import CompositeBackend, FilesystemBackend, StoreBackend
+from langchain_openai import ChatOpenAI
 from sqlalchemy import select
 
+from agent import tools as agent_tools
 from agent.config import settings
 from agent.context.context import Context
 from agent.models.llm import llm as default_llm
 from agent.sandbox.opensandbox_backend import OpenSandBoxBackend
 from agent.sandbox.opensandbox_operate import create_sandboxsync
 from agent.subagents.subagents_operate import create_subagents
-from agent import tools as agent_tools
 from api.agents.service import list_agents
+from core.security import decrypt_api_key
 from db.engine import async_session
 from db.models.ai_model import AIModel
 from db.models.provider import Provider
-from deepagents import create_deep_agent
-from deepagents.backends import CompositeBackend, FilesystemBackend, StoreBackend
-from langchain_openai import ChatOpenAI
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,7 @@ async def _resolve_model(provider_id: str | None, model_id: str | None):
 
             return ChatOpenAI(
                 model=model.name,
-                api_key=provider.api_key or settings.DEEPSEEK_API_KEY,
+                api_key=decrypt_api_key(provider.api_key) or settings.DEEPSEEK_API_KEY,
                 base_url=provider.api_base,
             )
         except Exception:

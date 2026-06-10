@@ -1,5 +1,7 @@
 import logging
 
+from sqlalchemy import select
+
 from agent import tools as agent_tools
 
 logger = logging.getLogger(__name__)
@@ -15,11 +17,62 @@ def _get_tool_registry() -> dict[str, object]:
     return registry
 
 
-def _resolve_model() -> object:
-    """Resolve default model for sub-agents."""
-    from agent.models import qwen_llm
+async def _resolve_model(provider_id: str | None, model_id: str | None):
+    """Resolve model for a sub-agent from database config, fallback to default DeepSeek."""
+    from langchain_openai import ChatOpenAI
 
-    return qwen_llm
+    from agent.models import llm as default_llm
+    from db.engine import async_session
+    from db.models.ai_model import AIModel
+    from db.models.provider import Provider
+
+    if not provider_id or not model_id:
+        return default_llm
+
+    async with async_session() as session:
+        try:
+            provider = (
+                await session.execute(
+                    select(Provider).where(Provider.id == provider_id)
+                )
+            ).scalar_one_or_none()
+
+            if provider is None:
+                logger.warning("Provider '%s' not found, using default LLM", provider_id)
+                return default_llm
+
+            from core.security import decrypt_api_key
+
+            decrypted_key = decrypt_api_key(provider.api_key)
+            if not decrypted_key:
+                logger.warning(
+                    "Provider '%s' has no api_key, using default LLM", provider_id,
+                )
+                return default_llm
+
+            model = (
+                await session.execute(
+                    select(AIModel).where(
+                        AIModel.id == model_id, AIModel.provider_id == provider_id
+                    )
+                )
+            ).scalar_one_or_none()
+
+            if model is None:
+                logger.warning(
+                    "Model '%s' in provider '%s' not found, using default LLM",
+                    model_id, provider_id,
+                )
+                return default_llm
+
+            return ChatOpenAI(
+                model=model.name,
+                api_key=decrypted_key,
+                base_url=provider.api_base,
+            )
+        except Exception:
+            logger.exception("Failed to resolve model, using default LLM")
+            return default_llm
 
 
 async def create_subagents() -> list[dict]:
@@ -76,7 +129,7 @@ async def create_subagents() -> list[dict]:
             "name": info.name,
             "description": info.description or "",
             "tools": tools,
-            "model": _resolve_model(),
+            "model": await _resolve_model(info.provider_id, info.model_id),
             "system_prompt": system_prompt,
             "skills": [f"/skills/{info.id}/"],
         })
