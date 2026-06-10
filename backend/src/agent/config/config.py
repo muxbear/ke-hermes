@@ -59,6 +59,15 @@ class Settings(BaseSettings):
     # ---- OpenSandBox
     OPENSANDBOX_DOMAIN: str = os.getenv("OPENSANDBOX_DOMAIN", "http://127.0.0.1:8080")
     OPENSANDBOX_API_KEY: str = os.getenv("OPENSANDBOX_API_KEY", "")
+    SANDBOX_TTL_SECONDS: int = int(os.getenv("SANDBOX_TTL_SECONDS", "1800"))
+    SANDBOX_CLEANUP_INTERVAL: int = int(os.getenv("SANDBOX_CLEANUP_INTERVAL", "300"))
+    SANDBOX_IMAGE: str = os.getenv(
+        "SANDBOX_IMAGE",
+        "sandbox-registry.cn-zhangjiakou.cr.aliyuncs.com/opensandbox/code-interpreter:v1.0.2",
+    )
+    SANDBOX_CPU: str = os.getenv("SANDBOX_CPU", "2")
+    SANDBOX_MEMORY: str = os.getenv("SANDBOX_MEMORY", "3Gi")
+    SANDBOX_IDLE_TIMEOUT_MINUTES: int = int(os.getenv("SANDBOX_IDLE_TIMEOUT_MINUTES", "10"))
 
     # ---- Database ----
     DATABASE_BACKEND: str = os.getenv("DATABASE_BACKEND", "sqlite")

@@ -12,8 +12,8 @@ from agent import tools as agent_tools
 from agent.config import settings
 from agent.context.context import Context
 from agent.models.llm import llm as default_llm
-from agent.sandbox.opensandbox_backend import OpenSandBoxBackend
-from agent.sandbox.opensandbox_operate import create_sandboxsync
+from agent.sandbox.sandbox_manager import SandboxManager
+from agent.sandbox.user_aware_sandbox_backend import UserAwareSandboxBackend
 from agent.subagents.subagents_operate import create_subagents
 from api.agents.service import list_agents
 from core.security import decrypt_api_key
@@ -81,7 +81,7 @@ async def _resolve_model(provider_id: str | None, model_id: str | None):
             return default_llm
 
 
-async def create_main_agent(checkpointer=None, store=None):
+async def create_main_agent(checkpointer=None, store=None, sandbox_manager=None):
     """从数据库配置创建主智能体。
 
     从 agents 表中查询活跃的主智能体（type == 'main'），解析其模型、工具、
@@ -91,6 +91,7 @@ async def create_main_agent(checkpointer=None, store=None):
     Args:
         checkpointer: LangGraph 检查点实例（AsyncSqliteSaver 或 AsyncPostgresSaver），生产环境必须传入。
         store: LangGraph 存储实例（InMemoryStore 或 AsyncPostgresStore），生产环境必须传入。
+        sandbox_manager: 可选，SandboxManager 实例。传入时由调用方管理生命周期（启动/关闭）；未传入时内部创建。
 
     Returns:
         配置完成的 deep agent 实例。
@@ -135,6 +136,8 @@ async def create_main_agent(checkpointer=None, store=None):
         else:
             logger.warning("工具 '%s' 在注册表中未找到，已跳过", name)
 
+    # skills_root = os.path.join(settings.WORKSPACE, "skills")            
+
     # 4. 根据智能体提示词构建 system_prompt
     if agent_info.system_prompt:
         system_prompt = agent_info.system_prompt
@@ -146,10 +149,13 @@ async def create_main_agent(checkpointer=None, store=None):
     # 5. 从数据库加载子智能体
     subagents = await create_subagents()
 
-    # 6. 创建沙箱后端
-    sandbox = create_sandboxsync()
-    sandbox_backend = OpenSandBoxBackend(sandbox=sandbox)
-    skills_root = os.path.join(settings.WORKSPACE, "skills")
+    # 6. 创建沙箱后端（每个用户独立沙箱，带 TTL 管理）
+    if sandbox_manager is None:
+        sandbox_manager = SandboxManager()
+        sandbox_manager.start_cleanup()
+
+    sandbox_backend = UserAwareSandboxBackend(sandbox_manager=sandbox_manager)
+    
     backend = CompositeBackend(
         default=sandbox_backend,
         routes={

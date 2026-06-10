@@ -1,6 +1,7 @@
 import logging
 
 from agent.mainagents import create_main_agent
+from agent.sandbox.sandbox_manager import SandboxManager
 from psycopg.rows import dict_row
 from psycopg_pool import AsyncConnectionPool
 
@@ -19,6 +20,7 @@ _graph = None
 _conn_pool = None
 _checkpointer = None
 _store = None
+_sandbox_manager = None
 
 
 def get_graph():
@@ -36,7 +38,7 @@ def get_checkpointer():
 
 async def init_graph():
     """初始化检查点和图（在应用启动时调用一次）。"""
-    global _graph, _conn_pool, _checkpointer, _store
+    global _graph, _conn_pool, _checkpointer, _store, _sandbox_manager
 
     backend = settings.CHECKPOINT_BACKEND
 
@@ -62,14 +64,21 @@ async def init_graph():
             f"未知的 CHECKPOINT_BACKEND: '{backend}'，期望 'sqlite' 或 'postgres'。"
         )
 
+    _sandbox_manager = SandboxManager()
+    _sandbox_manager.start_cleanup()
+
     _graph = await create_main_agent(
         checkpointer=_checkpointer,
         store=_store,
+        sandbox_manager=_sandbox_manager,
     )
 
 
 async def shutdown_graph():
-    global _conn_pool
+    global _conn_pool, _sandbox_manager
+    if _sandbox_manager is not None:
+        _sandbox_manager.shutdown()
+        _sandbox_manager = None
     if _conn_pool is not None:
         await _conn_pool.close()
         _conn_pool = None
