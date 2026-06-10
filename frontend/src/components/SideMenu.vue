@@ -9,6 +9,7 @@ import {
   MessagesSquare,
   LayoutDashboard,
   Server,
+  Database,
   Timer,
   BarChart3,
   Bot,
@@ -94,7 +95,7 @@ const menuGroups: MenuGroup[] = [
   {
     label: '知识库',
     items: [
-      {icon: Server, text: '知识库', pinyin: 'zhishiku' },
+      { icon: Database, text: '知识库', route: '/knowledge-base', pinyin: 'zhishiku' },
     ]
   },
   {

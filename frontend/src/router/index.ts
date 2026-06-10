@@ -52,6 +52,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '定时任务' },
       },
       {
+        path: 'knowledge-base',
+        name: 'knowledge-base',
+        component: () => import('@/views/KnowledgeBaseView.vue'),
+        meta: { title: '知识库' },
+      },
+      {
         path: 'mcp',
         name: 'mcp-square',
         component: () => import('@/views/McpSquareView.vue'),
