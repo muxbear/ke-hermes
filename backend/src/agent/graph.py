@@ -22,20 +22,20 @@ _store = None
 
 
 def get_graph():
-    """Return the initialized graph. Must be called after init_graph()."""
+    """返回已初始化的图。必须在 init_graph() 之后调用。"""
     if _graph is None:
-        raise RuntimeError("Graph not initialized. Call init_graph() first.")
+        raise RuntimeError("图未初始化，请先调用 init_graph()。")
     return _graph
 
 
 def get_checkpointer():
     if _checkpointer is None:
-        raise RuntimeError("Checkpointer not initialized. Call init_graph() first.")
+        raise RuntimeError("检查点未初始化，请先调用 init_graph()。")
     return _checkpointer
 
 
 async def init_graph():
-    """Initialize the checkpointer and graph (called once at app startup)."""
+    """初始化检查点和图（在应用启动时调用一次）。"""
     global _graph, _conn_pool, _checkpointer, _store
 
     backend = settings.CHECKPOINT_BACKEND
@@ -59,7 +59,7 @@ async def init_graph():
         await _store.setup()  # 会自动创建 store 表和 store_migrations 表
     else:
         raise ValueError(
-            f"Unknown CHECKPOINT_BACKEND: '{backend}'. Expected 'sqlite' or 'postgres'."
+            f"未知的 CHECKPOINT_BACKEND: '{backend}'，期望 'sqlite' 或 'postgres'。"
         )
 
     _graph = await create_main_agent(

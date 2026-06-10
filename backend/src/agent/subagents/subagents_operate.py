@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 def _get_tool_registry() -> dict[str, object]:
-    """Build a mapping from tool name strings to callable tool functions."""
+    """构建工具名称字符串到可调用工具函数的映射。"""
     registry: dict[str, object] = {}
     for name in agent_tools.__all__:
         tool = getattr(agent_tools, name, None)
@@ -18,7 +18,7 @@ def _get_tool_registry() -> dict[str, object]:
 
 
 async def _resolve_model(provider_id: str | None, model_id: str | None):
-    """Resolve model for a sub-agent from database config, fallback to default DeepSeek."""
+    """从数据库中解析子智能体的模型配置，失败时回退到默认的 DeepSeek 模型。"""
     from langchain_openai import ChatOpenAI
 
     from agent.models import llm as default_llm
@@ -38,7 +38,7 @@ async def _resolve_model(provider_id: str | None, model_id: str | None):
             ).scalar_one_or_none()
 
             if provider is None:
-                logger.warning("Provider '%s' not found, using default LLM", provider_id)
+                logger.warning("提供商 '%s' 未找到，使用默认 LLM", provider_id)
                 return default_llm
 
             from core.security import decrypt_api_key
@@ -46,7 +46,7 @@ async def _resolve_model(provider_id: str | None, model_id: str | None):
             decrypted_key = decrypt_api_key(provider.api_key)
             if not decrypted_key:
                 logger.warning(
-                    "Provider '%s' has no api_key, using default LLM", provider_id,
+                    "提供商 '%s' 没有 api_key，使用默认 LLM", provider_id,
                 )
                 return default_llm
 
@@ -60,7 +60,7 @@ async def _resolve_model(provider_id: str | None, model_id: str | None):
 
             if model is None:
                 logger.warning(
-                    "Model '%s' in provider '%s' not found, using default LLM",
+                    "模型 '%s' 在提供商 '%s' 未找到，使用默认 LLM",
                     model_id, provider_id,
                 )
                 return default_llm
@@ -71,7 +71,7 @@ async def _resolve_model(provider_id: str | None, model_id: str | None):
                 base_url=provider.api_base,
             )
         except Exception:
-            logger.exception("Failed to resolve model, using default LLM")
+            logger.exception("解析模型失败，使用默认 LLM")
             return default_llm
 
 
@@ -90,7 +90,7 @@ async def create_subagents() -> list[dict]:
         }
     ]
     """
-    # Lazy imports to avoid circular dependencies at module level
+    # 懒加载导入，避免模块级别的循环依赖
     from api.agents.service import list_agents  # noqa: PLC0415
     from db.engine import async_session  # noqa: PLC0415
 
@@ -110,7 +110,7 @@ async def create_subagents() -> list[dict]:
     ]
 
     if not sub_agent_infos:
-        logger.info("No active sub-agents found in database")
+        logger.info("数据库中未找到活跃的子智能体")
         return []
 
     subagents: list[dict] = []
@@ -121,7 +121,7 @@ async def create_subagents() -> list[dict]:
             if fn is not None:
                 tools.append(fn)
             else:
-                logger.warning("Tool '%s' not found in registry, skipping", name)
+                logger.warning("工具 '%s' 在注册表中未找到，跳过", name)
 
         system_prompt = info.system_prompt or ""
 
@@ -134,5 +134,5 @@ async def create_subagents() -> list[dict]:
             "skills": [f"/skills/{info.id}/"],
         })
 
-    logger.info("Loaded %d sub-agent(s) from database", len(subagents))
+    logger.info("从数据库加载了 %d 个子智能体", len(subagents))
     return subagents

@@ -145,7 +145,6 @@ async def create_main_agent(checkpointer=None, store=None):
 
     # 5. 从数据库加载子智能体
     subagents = await create_subagents()
-    logger.info("已加载 %d 个子智能体", len(subagents))
 
     # 6. 创建沙箱后端
     sandbox = create_sandboxsync()
@@ -154,7 +153,6 @@ async def create_main_agent(checkpointer=None, store=None):
     backend = CompositeBackend(
         default=sandbox_backend,
         routes={
-            "/skills/": FilesystemBackend(root_dir=skills_root, virtual_mode=True),
             "/memories/": StoreBackend(
                 namespace=lambda ctx: (ctx.runtime.context.user_id,),
             ),
