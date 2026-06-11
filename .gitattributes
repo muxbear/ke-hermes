@@ -15,6 +15,12 @@
 *.bat text eol=crlf
 *.cmd text eol=crlf
 
+#
+
+*.js linguist-language=Python
+*.css linguist-language=Python
+*.html linguist-language=Python
+
 # TypeScript相关配置
 *.ts text diff=typescript
 *.tsx text diff=typescript

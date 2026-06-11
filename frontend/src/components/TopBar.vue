@@ -28,6 +28,7 @@ const breadcrumb = computed(() => {
     '/scheduled-tasks': { group: '控制', item: '定时任务' },
     '/tools': { group: '智能体', item: '工具' },
     '/mcp': { group: 'MCP', item: 'MCP 广场' },
+    '/knowledge-base': { group: '知识库', item: '知识库' },
   }
   const path = route.path
   if (path.startsWith('/mcp/')) return map['/mcp']
