@@ -20,12 +20,12 @@ const displayName = computed(() => {
 
 const breadcrumb = computed(() => {
   const map: Record<string, { group: string; item: string }> = {
-    '/': { group: '聊天', item: '对话' },
+    '/chat': { group: '聊天', item: '对话' },
     '/agents': { group: '代理', item: '代理' },
     '/skills': { group: '代理', item: '技能 Hub' },
-    '/overview': { group: '控制', item: '概览' },
-    '/models': { group: '控制', item: '模型' },
-    '/scheduled-tasks': { group: '控制', item: '定时任务' },
+    '/overview': { group: '首页', item: '概览' },
+    '/models': { group: '首页', item: '模型' },
+    '/scheduled-tasks': { group: '首页', item: '定时任务' },
     '/tools': { group: '智能体', item: '工具' },
     '/mcp': { group: 'MCP', item: 'MCP 广场' },
     '/knowledge-base': { group: '知识库', item: '知识库' },

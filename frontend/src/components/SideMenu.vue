@@ -87,19 +87,7 @@ function clearSearch() {
 
 const menuGroups: MenuGroup[] = [
   {
-    label: '聊天',
-    items: [
-      { icon: MessageSquare, text: '对话', route: '/', pinyin: 'duihua' },
-    ],
-  },
-  {
-    label: '知识库',
-    items: [
-      { icon: Database, text: '知识库', route: '/knowledge-base', pinyin: 'zhishiku' },
-    ]
-  },
-  {
-    label: '控制',
+    label: '首页',
     items: [
       { icon: LayoutDashboard, text: '概览', route: '/overview', pinyin: 'gailan' },
       { icon: Server, text: '实例', pinyin: 'shili' },
@@ -107,6 +95,18 @@ const menuGroups: MenuGroup[] = [
       { icon: BarChart3, text: '使用情况', pinyin: 'shiyongqingkuang' },
       { icon: Timer, text: '定时任务', route: '/scheduled-tasks', pinyin: 'dingshirenwu' },
     ],
+  },
+  {
+    label: '聊天',
+    items: [
+      { icon: MessageSquare, text: '对话', route: '/chat', pinyin: 'duihua' },
+    ],
+  },
+  {
+    label: '知识库',
+    items: [
+      { icon: Database, text: '知识库', route: '/knowledge-base', pinyin: 'zhishiku' },
+    ]
   },
   {
     label: '智能体',
@@ -123,13 +123,6 @@ const menuGroups: MenuGroup[] = [
     items: [
       { icon: CloudMoon, text: 'MCP 广场', route: '/mcp', pinyin: 'mcpguangchang' },
       { icon: CloudMoon, text: 'MCP 管理', pinyin: 'mcpguanli' },
-    ],
-  },
-  {
-    label: '设置',
-    items: [
-      { icon: Settings, text: '配置', pinyin: 'peizhi' },
-      { icon: FileText, text: '文档', pinyin: 'wendang' },
     ],
   },
   {

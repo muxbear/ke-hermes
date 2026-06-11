@@ -1,7 +1,14 @@
 <script setup lang="ts">
-import { Check, Minus, ChevronRight, ChevronDown } from 'lucide-vue-next'
+import {
+  Check, Minus, ChevronRight, ChevronDown,
+  MessageSquare, Send, Database, Upload, LayoutGrid, Timer, Play,
+  Bot, Cpu, Wrench, Zap, Puzzle, Shield, ShieldCheck, Users,
+  UserPlus, Edit2, Save, LayoutList, Folder, FolderTree, MousePointerClick,
+  ScrollText,
+} from 'lucide-vue-next'
 import { PERM_TYPE_CONFIG } from '@/types/admin'
 import type { PermResource } from '@/types/admin'
+import type { Component } from 'vue'
 
 const props = defineProps<{
   node: PermResource
@@ -18,6 +25,17 @@ const emit = defineEmits<{
   toggle: [id: string]
   toggleExpand: [id: string]
 }>()
+
+const iconMap: Record<string, Component> = {
+  MessageSquare, Send, Database, Upload, LayoutGrid, Timer, Play,
+  Bot, Cpu, Wrench, Zap, Puzzle, Shield, ShieldCheck, Users,
+  UserPlus, Edit2, Save, LayoutList, Folder, FolderTree, MousePointerClick,
+  ScrollText,
+}
+
+function resolveIcon(name: string): Component {
+  return iconMap[name] || Folder
+}
 
 const typeConfig = PERM_TYPE_CONFIG[props.node.type]
 
@@ -53,7 +71,7 @@ function isExpanded() {
       </button>
       <span v-else class="expand-spacer" />
 
-      <component :is="node.icon" :size="16" class="node-icon" :class="typeConfig.color" />
+      <component :is="resolveIcon(node.icon)" :size="16" class="node-icon" :class="typeConfig.color" />
 
       <span class="node-label">{{ node.label }}</span>
 

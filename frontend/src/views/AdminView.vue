@@ -98,7 +98,7 @@ function handleTileClick(tile: { id: string; route?: string }) {
   <div class="admin-page">
     <div class="page-header">
       <div class="header-left">
-        <h1 class="page-title">后台</h1>
+        <h1 class="page-title">管理控制台</h1>
         <p class="page-subtitle">管理员控制台 · 集中管理系统、人员、扩展与集成</p>
       </div>
       <div class="header-right">

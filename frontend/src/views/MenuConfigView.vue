@@ -4,12 +4,27 @@ import { useRouter } from 'vue-router'
 import {
   ChevronLeft, Plus, Edit2, Trash2, Check, X, Info, Lock, Search,
   Layers, KeyRound, Route, Save, MousePointerClick,
+  MessageSquare, Send, Database, Upload, LayoutGrid, Timer, Play,
+  Bot, Cpu, Wrench, Zap, Puzzle, Shield, ShieldCheck, Users,
+  UserPlus, LayoutList, Folder, FolderTree, ScrollText,
 } from 'lucide-vue-next'
+import type { Component } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useMenuConfigStore } from '@/stores/menuConfig'
 import { PERM_TYPE_CONFIG, PERM_STATUS_CONFIG, BTN_VARIANT_LABEL } from '@/types/admin'
 import type { PermResource, PermType, PermStatus, BtnVariant } from '@/types/admin'
 import MenuConfigTreeNode from '@/components/admin/MenuConfigTreeNode.vue'
+
+const iconMap: Record<string, Component> = {
+  MessageSquare, Send, Database, Upload, LayoutGrid, Timer, Play,
+  Bot, Cpu, Wrench, Zap, Puzzle, Shield, ShieldCheck, Users,
+  UserPlus, Edit2, Save, LayoutList, Folder, FolderTree, MousePointerClick,
+  Plus, Trash2, ScrollText,
+}
+
+function resolveIcon(name: string): Component {
+  return iconMap[name] || Folder
+}
 
 const router = useRouter()
 const store = useMenuConfigStore()
@@ -169,9 +184,6 @@ function handleBack() {
         <span v-if="store.saved" class="saved-badge">
           <Check :size="12" />已保存
         </span>
-        <button class="create-root-btn" @click="openCreate(null, 'catalog')">
-          <Plus :size="16" />新建顶级目录
-        </button>
       </div>
     </div>
 
@@ -195,6 +207,9 @@ function handleBack() {
           </button>
           <button class="tool-btn" @click="store.expandedIds = new Set()">
             全折叠
+          </button>
+          <button class="create-root-btn" @click="openCreate(null, 'catalog')">
+            <Plus :size="14" />新建顶级目录
           </button>
         </div>
         <div class="tree-area">
@@ -226,7 +241,7 @@ function handleBack() {
           <div class="detail-header">
             <div class="detail-title-row">
               <div class="detail-icon" :class="PERM_TYPE_CONFIG[store.selected.type].bg">
-                <component :is="store.selected.icon" :size="24" :class="PERM_TYPE_CONFIG[store.selected.type].color" />
+                <component :is="resolveIcon(store.selected.icon)" :size="24" :class="PERM_TYPE_CONFIG[store.selected.type].color" />
               </div>
               <div>
                 <div class="detail-title">
@@ -292,7 +307,7 @@ function handleBack() {
               </thead>
               <tbody>
                 <tr v-for="b in store.buttonsOfSelected" :key="b.id">
-                  <td><component :is="b.icon" :size="14" class="mr-1" />{{ b.label }}</td>
+                  <td><component :is="resolveIcon(b.icon)" :size="14" class="mr-1" />{{ b.label }}</td>
                   <td class="mono">{{ b.permKey }}</td>
                   <td><span class="variant-tag" :class="BTN_VARIANT_LABEL[b.btnVariant ?? 'default'].color">{{ BTN_VARIANT_LABEL[b.btnVariant ?? 'default'].label }}</span></td>
                   <td>{{ PERM_STATUS_CONFIG[b.status].label }}</td>
@@ -495,7 +510,7 @@ function handleBack() {
 .mc-body {
   flex: 1; min-height: 0;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(340px, 440px) 1fr;
   overflow: hidden;
 }
 .mc-left {

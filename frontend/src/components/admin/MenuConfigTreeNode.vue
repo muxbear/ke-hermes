@@ -1,7 +1,14 @@
 <script setup lang="ts">
-import { ChevronRight, ChevronDown, Plus, Edit2, Trash2, Lock } from 'lucide-vue-next'
+import {
+  ChevronRight, ChevronDown, Plus, Edit2, Trash2, Lock,
+  MessageSquare, Send, Database, Upload, LayoutGrid, Timer, Play,
+  Bot, Cpu, Wrench, Zap, Puzzle, Shield, ShieldCheck, Users,
+  UserPlus, Save, LayoutList, Folder, FolderTree, MousePointerClick,
+  ScrollText,
+} from 'lucide-vue-next'
 import { PERM_TYPE_CONFIG, PERM_STATUS_CONFIG } from '@/types/admin'
 import type { PermResource } from '@/types/admin'
+import type { Component } from 'vue'
 
 const props = defineProps<{
   resource: PermResource
@@ -18,6 +25,17 @@ const emit = defineEmits<{
   edit: [resource: PermResource]
   delete: [resource: PermResource]
 }>()
+
+const iconMap: Record<string, Component> = {
+  MessageSquare, Send, Database, Upload, LayoutGrid, Timer, Play,
+  Bot, Cpu, Wrench, Zap, Puzzle, Shield, ShieldCheck, Users,
+  UserPlus, Edit2, Save, LayoutList, Folder, FolderTree, MousePointerClick,
+  Plus, Trash2, ScrollText,
+}
+
+function resolveIcon(name: string): Component {
+  return iconMap[name] || Folder
+}
 </script>
 
 <template>
@@ -38,7 +56,7 @@ const emit = defineEmits<{
       </button>
 
       <div class="node-icon" :class="PERM_TYPE_CONFIG[resource.type].bg">
-        <component :is="resource.icon" :size="14" :class="PERM_TYPE_CONFIG[resource.type].color" />
+        <component :is="resolveIcon(resource.icon)" :size="14" :class="PERM_TYPE_CONFIG[resource.type].color" />
       </div>
 
       <div class="node-body">
