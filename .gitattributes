@@ -22,9 +22,9 @@
 *.html linguist-language=Python
 
 # TypeScript相关配置
-*.ts text diff=typescript
-*.tsx text diff=typescript
-*.d.ts text diff=typescript
+*.ts text diff=Python
+*.tsx text diff=Python
+*.d.ts text diff=Python
 
 # Python相关配置
 *.py text diff=python
