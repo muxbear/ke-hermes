@@ -69,6 +69,30 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/McpDetailView.vue'),
         meta: { title: 'MCP 详情' },
       },
+      {
+        path: 'admin',
+        name: 'admin',
+        component: () => import('@/views/AdminView.vue'),
+        meta: { title: '后台管理' },
+      },
+      {
+        path: 'admin/users',
+        name: 'admin-users',
+        component: () => import('@/views/UserManagementView.vue'),
+        meta: { title: '人员管理' },
+      },
+      {
+        path: 'admin/rbac',
+        name: 'admin-rbac',
+        component: () => import('@/views/RbacView.vue'),
+        meta: { title: '角色权限' },
+      },
+      {
+        path: 'admin/menu-config',
+        name: 'admin-menu-config',
+        component: () => import('@/views/MenuConfigView.vue'),
+        meta: { title: '菜单配置' },
+      },
     ],
   },
   {

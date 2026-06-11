@@ -133,9 +133,9 @@ const menuGroups: MenuGroup[] = [
     ],
   },
   {
-    label: '后台',
+    label: '管理',
     items: [
-      { icon: Shield, text: '后台', pinyin: 'houtai' },
+      { icon: Shield, text: '管理', route: '/admin', pinyin: 'guanli' },
     ],
   },
 ]

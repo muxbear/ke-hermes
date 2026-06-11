@@ -29,8 +29,13 @@ const breadcrumb = computed(() => {
     '/tools': { group: '智能体', item: '工具' },
     '/mcp': { group: 'MCP', item: 'MCP 广场' },
     '/knowledge-base': { group: '知识库', item: '知识库' },
+    '/admin': { group: '管理', item: '后台管理' },
+    '/admin/users': { group: '管理', item: '人员管理' },
+    '/admin/rbac': { group: '管理', item: '角色权限' },
+    '/admin/menu-config': { group: '管理', item: '菜单配置' },
   }
   const path = route.path
+  if (path.startsWith('/admin/')) return map['/admin']
   if (path.startsWith('/mcp/')) return map['/mcp']
   return map[path] ?? null
 })
