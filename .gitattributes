@@ -15,16 +15,16 @@
 *.bat text eol=crlf
 *.cmd text eol=crlf
 
-#
-
-*.js linguist-language=Python
-*.css linguist-language=Python
-*.html linguist-language=Python
+# 设置 GitHub 默认语言
+*.ts linguist-language=Python
+*.tsx linguist-language=Python
+*.d.ts linguist-language=Python
+*.vue linguist-language=Python
 
 # TypeScript相关配置
-*.ts text diff=Python
-*.tsx text diff=Python
-*.d.ts text diff=Python
+*.ts text diff=typescript
+*.tsx text diff=typescript
+*.d.ts text diff=typescript
 
 # Python相关配置
 *.py text diff=python
