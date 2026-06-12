@@ -1,14 +1,19 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { Network, Download } from 'lucide-vue-next'
+import { Network, Download, RefreshCw } from 'lucide-vue-next'
+import { ElMessage } from 'element-plus'
 import type { KB } from '@/types/knowledgeBase'
+import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
+import { reExtractGraph as reExtractGraphApi } from '@/services/knowledgeBaseApi'
 
 const props = defineProps<{
   kb: KB
 }>()
 
+const store = useKnowledgeBaseStore()
 const hoveredId = ref<string | null>(null)
 const filterType = ref<string>('all')
+const reExtracting = ref(false)
 
 const ENTITY_COLORS: Record<string, string> = {
   '人物': '#60a5fa',
@@ -16,6 +21,23 @@ const ENTITY_COLORS: Record<string, string> = {
   '产品': '#34d399',
   '概念': '#fbbf24',
   '算法': '#f87171',
+}
+
+async function handleReExtract() {
+  reExtracting.value = true
+  try {
+    const result = await reExtractGraphApi(props.kb.id)
+    ElMessage.success(
+      `知识图谱重建完成：${result.entities} 个实体，${result.relations} 个关系`
+    )
+    // 刷新图谱数据
+    await store.selectKb(props.kb.id)
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : '图谱重建失败'
+    ElMessage.error(msg)
+  } finally {
+    reExtracting.value = false
+  }
 }
 
 const entityTypes = computed(() =>
@@ -53,6 +75,9 @@ const sortedEntities = computed(() =>
                 <el-option label="全部类型" value="all" />
                 <el-option v-for="t in entityTypes" :key="t" :label="t" :value="t" />
               </el-select>
+              <el-button size="small" :loading="reExtracting" @click="handleReExtract">
+                <RefreshCw :size="14" class="btn-icon" />重建图谱
+              </el-button>
               <el-button size="small">
                 <Download :size="14" class="btn-icon" />导出
               </el-button>

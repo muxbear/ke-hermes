@@ -1,15 +1,18 @@
 <script setup lang="ts">
-import { ref, reactive, watchEffect } from 'vue'
+import { ref, reactive, watchEffect, onMounted, computed } from 'vue'
 import {
   Scissors, Sparkle, Hash, Network, Target, Cpu, Save, CheckCircle2,
 } from 'lucide-vue-next'
 import type { IndexConfig, SparseAlgo } from '@/types/knowledgeBase'
 import {
   CHUNK_STRATEGY_OPTIONS,
-  EMBEDDING_MODEL_OPTIONS,
-  LLM_MODEL_OPTIONS,
   RERANKER_MODEL_OPTIONS,
 } from '@/types/knowledgeBase'
+import {
+  fetchAvailableProviders,
+  type AvailableProvider,
+  type AvailableModel,
+} from '@/services/knowledgeBaseApi'
 import KbConfigSummary from './KbConfigSummary.vue'
 
 const props = defineProps<{
@@ -23,6 +26,62 @@ const emit = defineEmits<{
 const draft = reactive<IndexConfig>({ ...props.config })
 const saved = ref(false)
 
+// ── embedding 提供商 + 模型 ──
+const embProviders = ref<AvailableProvider[]>([])
+const embProviderId = ref('')
+const embProviderModels = computed(() => {
+  if (!embProviderId.value) return []
+  const p = embProviders.value.find(x => x.id === embProviderId.value)
+  return p?.models || []
+})
+
+// ── LLM 提供商 + 模型 ──
+const llmProviders = ref<AvailableProvider[]>([])
+const llmProviderId = ref('')
+const llmProviderModels = computed(() => {
+  if (!llmProviderId.value) return []
+  const p = llmProviders.value.find(x => x.id === llmProviderId.value)
+  return p?.models || []
+})
+
+onMounted(async () => {
+  try {
+    const [ep, lp] = await Promise.all([
+      fetchAvailableProviders('embedding'),
+      fetchAvailableProviders('llm'),
+    ])
+    embProviders.value = ep
+    llmProviders.value = lp
+
+    // 根据当前 draft 中的模型名反查 provider
+    if (draft.embeddingModel) {
+      for (const p of ep) {
+        if (p.models.some(m => m.name === draft.embeddingModel)) {
+          embProviderId.value = p.id
+          break
+        }
+      }
+    }
+    if (!embProviderId.value && ep.length > 0) {
+      embProviderId.value = ep[0].id
+    }
+
+    if (draft.entityModel) {
+      for (const p of lp) {
+        if (p.models.some(m => m.name === draft.entityModel)) {
+          llmProviderId.value = p.id
+          break
+        }
+      }
+    }
+    if (!llmProviderId.value && lp.length > 0) {
+      llmProviderId.value = lp[0].id
+    }
+  } catch {
+    /* ignore */
+  }
+})
+
 watchEffect(() => {
   Object.assign(draft, props.config)
 })
@@ -31,10 +90,40 @@ function set<K extends keyof IndexConfig>(key: K, value: IndexConfig[K]) {
   ;(draft as Record<string, unknown>)[key] = value
 }
 
-function onEmbeddingChange(v: string) {
-  const m = EMBEDDING_MODEL_OPTIONS.find((x) => x.value === v)
-  draft.embeddingModel = v
-  if (m) draft.embeddingDim = m.dim
+function inferDim(name: string, display: string): number {
+  const combined = `${name} ${display}`.toLowerCase()
+  if (combined.includes('4096')) return 4096
+  if (combined.includes('3072')) return 3072
+  if (combined.includes('1536')) return 1536
+  if (combined.includes('1024')) return 1024
+  if (combined.includes('768')) return 768
+  if (combined.includes('512')) return 512
+  return 1024
+}
+
+function onEmbProviderChange(pid: string) {
+  embProviderId.value = pid
+  const p = embProviders.value.find(x => x.id === pid)
+  if (p && p.models.length > 0) {
+    draft.embeddingModel = p.models[0].name
+    draft.embeddingDim = inferDim(p.models[0].name, p.models[0].display_name)
+  }
+}
+
+function onEmbModelChange(name: string) {
+  draft.embeddingModel = name
+  const p = embProviders.value.find(x => x.id === embProviderId.value)
+  const m = p?.models.find(x => x.name === name)
+  if (m) draft.embeddingDim = inferDim(m.name, m.display_name)
+}
+
+function onLlmProviderChange(pid: string) {
+  llmProviderId.value = pid
+  const p = llmProviders.value.find(x => x.id === pid)
+  if (p && p.models.length > 0) {
+    draft.entityModel = p.models[0].name
+    draft.relationModel = p.models[0].name
+  }
 }
 
 function handleSave() {
@@ -101,21 +190,29 @@ function handleReset() {
           <h3 class="section-title">
             <span class="section-icon icon-purple"><Sparkle :size="16" /></span>向量化 (Embedding)
           </h3>
-          <div class="field">
-            <label class="field-label">Embedding 模型</label>
-            <el-select
-              :model-value="draft.embeddingModel"
-              @update:model-value="onEmbeddingChange"
-              style="width: 100%"
-              popper-class="config-select-popper"
-            >
-              <el-option
-                v-for="m in EMBEDDING_MODEL_OPTIONS"
-                :key="m.value"
-                :label="`${m.label} · ${m.dim}d`"
-                :value="m.value"
-              />
-            </el-select>
+          <div class="field-row">
+            <div class="field flex-1">
+              <label class="field-label">Embedding 提供商</label>
+              <el-select
+                :model-value="embProviderId"
+                @update:model-value="onEmbProviderChange"
+                style="width: 100%"
+                popper-class="config-select-popper"
+              >
+                <el-option v-for="p in embProviders" :key="p.id" :label="p.name" :value="p.id" />
+              </el-select>
+            </div>
+            <div class="field flex-1">
+              <label class="field-label">Embedding 模型</label>
+              <el-select
+                :model-value="draft.embeddingModel"
+                @update:model-value="onEmbModelChange"
+                style="width: 100%"
+                popper-class="config-select-popper"
+              >
+                <el-option v-for="m in embProviderModels" :key="m.id" :label="m.display_name || m.name" :value="m.name" />
+              </el-select>
+            </div>
           </div>
         </div>
 
@@ -175,6 +272,17 @@ function handleReset() {
           </div>
           <div v-if="draft.enableGraph" class="field-row">
             <div class="field flex-1">
+              <label class="field-label">LLM 提供商</label>
+              <el-select
+                :model-value="llmProviderId"
+                @update:model-value="onLlmProviderChange"
+                style="width: 100%"
+                popper-class="config-select-popper"
+              >
+                <el-option v-for="p in llmProviders" :key="p.id" :label="p.name" :value="p.id" />
+              </el-select>
+            </div>
+            <div class="field flex-1">
               <label class="field-label">实体抽取模型</label>
               <el-select
                 :model-value="draft.entityModel"
@@ -182,9 +290,11 @@ function handleReset() {
                 style="width: 100%"
                 popper-class="config-select-popper"
               >
-                <el-option v-for="m in LLM_MODEL_OPTIONS" :key="m" :label="m" :value="m" />
+                <el-option v-for="m in llmProviderModels" :key="m.id" :label="m.display_name || m.name" :value="m.name" />
               </el-select>
             </div>
+          </div>
+          <div v-if="draft.enableGraph" class="field-row" style="margin-top: 12px;">
             <div class="field flex-1">
               <label class="field-label">关系抽取模型</label>
               <el-select
@@ -193,7 +303,7 @@ function handleReset() {
                 style="width: 100%"
                 popper-class="config-select-popper"
               >
-                <el-option v-for="m in LLM_MODEL_OPTIONS" :key="m" :label="m" :value="m" />
+                <el-option v-for="m in llmProviderModels" :key="m.id" :label="m.display_name || m.name" :value="m.name" />
               </el-select>
             </div>
           </div>

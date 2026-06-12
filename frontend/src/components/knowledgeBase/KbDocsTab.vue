@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { ElMessage } from 'element-plus'
 import {
   Search, Upload, Edit2, Trash2, RefreshCw, FolderOpen,
   FileType2, FileCode2, FileText, FileSpreadsheet, FileImage, Globe,
 } from 'lucide-vue-next'
 import type { KB, KBDoc, DocType } from '@/types/knowledgeBase'
+import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import KbDocStatusBadge from './KbDocStatusBadge.vue'
 import KbUploadDialog from './KbUploadDialog.vue'
 import KbIndexingPipeline from './KbIndexingPipeline.vue'
@@ -13,11 +15,7 @@ const props = defineProps<{
   kb: KB
 }>()
 
-const emit = defineEmits<{
-  updateDoc: [patch: { documents: KBDoc[] }]
-  deleteDoc: [docId: string]
-  retryDoc: [docId: string]
-}>()
+const store = useKnowledgeBaseStore()
 
 const search = ref('')
 const uploadVisible = ref(false)
@@ -33,20 +31,37 @@ const filteredDocs = computed(() => {
   return props.kb.documents.filter((d) => d.name.toLowerCase().includes(q))
 })
 
-function handleUpload(files: { name: string; type: DocType; size: string }[]) {
+const uploading = ref(false)
+
+async function handleUpload(files: File[]) {
   uploadVisible.value = false
-  const newDocs: KBDoc[] = files.map((f, i) => ({
-    id: `d-${Date.now()}-${i}`,
-    name: f.name,
-    type: f.type,
-    size: f.size,
-    status: 'parsing' as const,
-    progress: 5,
-    chunks: 0, entities: 0, relations: 0,
-    uploadedAt: new Date().toISOString().slice(0, 10),
-    stages: [],
-  }))
-  emit('updateDoc', { documents: [...newDocs, ...props.kb.documents] })
+  try {
+    uploading.value = true
+    await store.uploadDocs(props.kb.id, files)
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : '上传失败'
+    ElMessage.error(msg)
+  } finally {
+    uploading.value = false
+  }
+}
+
+async function handleDelete(docId: string) {
+  try {
+    await store.deleteDoc(props.kb.id, docId)
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : '删除失败'
+    ElMessage.error(msg)
+  }
+}
+
+async function handleRetry(docId: string) {
+  try {
+    await store.retryDoc(props.kb.id, docId)
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : '重试失败'
+    ElMessage.error(msg)
+  }
 }
 </script>
 
@@ -65,8 +80,8 @@ function handleUpload(files: { name: string; type: DocType; size: string }[]) {
               class="search-input"
             />
           </div>
-          <button class="btn-upload" @click="uploadVisible = true">
-            <Upload :size="16" class="btn-icon" />上传文档
+          <button class="btn-upload" :disabled="uploading" @click="uploadVisible = true">
+            <Upload :size="16" class="btn-icon" />{{ uploading ? '上传中…' : '上传文档' }}
           </button>
         </div>
 
@@ -118,7 +133,7 @@ function handleUpload(files: { name: string; type: DocType; size: string }[]) {
                   <button
                     v-if="doc.status === 'failed'"
                     class="action-btn"
-                    @click.stop="$emit('retryDoc', doc.id)"
+                    @click.stop="handleRetry(doc.id)"
                     title="重试"
                   >
                     <RefreshCw :size="14" />
@@ -126,7 +141,7 @@ function handleUpload(files: { name: string; type: DocType; size: string }[]) {
                   <button class="action-btn" @click.stop title="编辑">
                     <Edit2 :size="14" />
                   </button>
-                  <button class="action-btn action-del" @click.stop="$emit('deleteDoc', doc.id)" title="删除">
+                  <button class="action-btn action-del" @click.stop="handleDelete(doc.id)" title="删除">
                     <Trash2 :size="14" />
                   </button>
                 </td>

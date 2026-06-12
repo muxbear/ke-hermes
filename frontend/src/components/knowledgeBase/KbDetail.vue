@@ -78,14 +78,7 @@ function handleConfigSave(config: typeof props.kb.config) {
           <template #label>
             <FileText :size="14" class="tab-icon" />文档 ({{ kb.documents.length }})
           </template>
-          <KbDocsTab
-            :kb="kb"
-            @updateDoc="(p) => $emit('update', p)"
-            @deleteDoc="(id) => $emit('update', { documents: kb.documents.filter(d => d.id !== id) })"
-            @retryDoc="(id) => $emit('update', {
-              documents: kb.documents.map(d => d.id === id ? { ...d, status: 'parsing', progress: 5 } : d)
-            })"
-          />
+          <KbDocsTab :kb="kb" />
         </el-tab-pane>
 
         <el-tab-pane name="graph">

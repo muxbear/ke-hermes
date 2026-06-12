@@ -134,3 +134,39 @@ class Settings(BaseSettings):
     SMS_SECRET_KEY: str = os.getenv("SMS_SECRET_KEY", "")
     SMS_SIGN_NAME: str = os.getenv("SMS_SIGN_NAME", "")
     SMS_TEMPLATE_CODE: str = os.getenv("SMS_TEMPLATE_CODE", "")
+
+    # ---- Milvus ----
+    MILVUS_URI: str = os.getenv("MILVUS_URI", "http://localhost:19530")
+    MILVUS_USER: str = os.getenv("MILVUS_USER", "root")
+    MILVUS_PASSWORD: str = os.getenv("MILVUS_PASSWORD", "Milvus")
+    MILVUS_DEFAULT_DB: str = os.getenv("MILVUS_DEFAULT_DB", "ke_hermes")
+
+    # ---- 向量数据库 ----
+    VECTOR_DB_BACKEND: str = os.getenv("VECTOR_DB_BACKEND", "milvus")
+    CHROMA_HOST: str = os.getenv("CHROMA_HOST", "localhost")
+    CHROMA_PORT: int = int(os.getenv("CHROMA_PORT") or 8001)
+    CHROMA_PERSIST_DIR: str = os.getenv("CHROMA_PERSIST_DIR", "./chroma_data")
+
+    # ---- 文档存储 ----
+    DOC_STORE_BACKEND: str = os.getenv("DOC_STORE_BACKEND", "local")
+    DOC_UPLOAD_DIR: str = os.getenv("DOC_UPLOAD_DIR", "")
+
+    @property
+    def doc_upload_dir(self) -> str:
+        """Return the resolved document upload directory."""
+        raw = self.DOC_UPLOAD_DIR.strip()
+        if raw:
+            return os.path.abspath(raw)
+        return os.path.join(self.WORKSPACE, "docs_upload")
+
+    # ---- 图存储 ----
+    GRAPH_STORE_BACKEND: str = os.getenv("GRAPH_STORE_BACKEND", "langextract")
+
+    # ---- Embedding ----
+    DEFAULT_EMBEDDING_MODEL: str = os.getenv("DEFAULT_EMBEDDING_MODEL", "text-embedding-v4")
+    DEFAULT_EMBEDDING_DIM: int = int(os.getenv("DEFAULT_EMBEDDING_DIM") or 1024)
+
+    # ---- 索引 ----
+    INDEXING_MAX_CONCURRENT: int = int(os.getenv("INDEXING_MAX_CONCURRENT") or 3)
+    BM25_DEFAULT_K1: float = float(os.getenv("BM25_DEFAULT_K1") or 1.5)
+    BM25_DEFAULT_B: float = float(os.getenv("BM25_DEFAULT_B") or 0.75)

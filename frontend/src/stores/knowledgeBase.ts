@@ -3,7 +3,6 @@ import { defineStore } from 'pinia'
 import type {
   KB,
   KBDoc,
-  IndexConfig,
   DocType,
   SearchResult,
   SearchMode,
@@ -25,11 +24,20 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
   // 视图模式
   const viewMode = ref<ViewMode>('grid')
 
-  // 搜索
+  // 搜索（本地过滤用）
   const searchQuery = ref('')
 
-  // 索引动画定时器
-  let indexTimer: ReturnType<typeof setInterval> | null = null
+  // 统计信息
+  const stats = ref({
+    totalKbs: 0,
+    totalDocs: 0,
+    totalChunks: 0,
+    totalEntities: 0,
+    indexing: 0,
+  })
+
+  // 索引进度轮询定时器
+  let indexPollTimer: ReturnType<typeof setInterval> | null = null
 
   // ─── 计算属性 ──────────────────────────────────────────────────────────
 
@@ -44,20 +52,6 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
     )
   })
 
-  const stats = computed(() => {
-    const totalDocs = kbs.value.reduce((s, k) => s + k.docs, 0)
-    const totalChunks = kbs.value.reduce((s, k) => s + k.chunks, 0)
-    const totalEntities = kbs.value.reduce((s, k) => s + k.entities, 0)
-    const indexing = kbs.value.filter((k) => k.status === 'indexing').length
-    return {
-      totalKbs: kbs.value.length,
-      totalDocs,
-      totalChunks,
-      totalEntities,
-      indexing,
-    }
-  })
-
   // ─── Actions ───────────────────────────────────────────────────────────
 
   async function fetchKbs() {
@@ -65,6 +59,15 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
     error.value = null
     try {
       kbs.value = await kbApi.fetchKnowledgeBases()
+      // 同时拉取统计信息
+      const s = await kbApi.fetchStats()
+      stats.value = {
+        totalKbs: s.totalKbs,
+        totalDocs: s.totalDocs,
+        totalChunks: s.totalChunks,
+        totalEntities: s.totalEntities,
+        indexing: s.indexing,
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '加载知识库失败'
       error.value = msg
@@ -74,16 +77,36 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
   }
 
   async function selectKb(id: string) {
-    const kb = await kbApi.fetchKnowledgeBase(id)
-    if (kb) {
-      selectedKb.value = kb
-      selectedDoc.value = null
-      startIndexAnimation()
+    loading.value = true
+    try {
+      const kb = await kbApi.fetchKnowledgeBase(id)
+      if (kb) {
+        // 拉取文档列表和实体/关系数据
+        const docData = await kbApi.fetchDocuments(id, { page_size: 100 })
+        const graphData = await kbApi.fetchGraphData(id)
+        selectedKb.value = {
+          ...kb,
+          documents: docData.items,
+          entitiesData: graphData.entities.map((e, i) => ({
+            ...e,
+            x: 100 + (i % 5) * 120,
+            y: 100 + Math.floor(i / 5) * 100,
+          })),
+          relationsData: graphData.relations,
+        }
+        selectedDoc.value = null
+        startIndexPolling()
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '加载知识库详情失败'
+      error.value = msg
+    } finally {
+      loading.value = false
     }
   }
 
   function clearSelection() {
-    stopIndexAnimation()
+    stopIndexPolling()
     selectedKb.value = null
     selectedDoc.value = null
   }
@@ -93,7 +116,18 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
     try {
       const kb = await kbApi.createKnowledgeBase(data)
       kbs.value.unshift(kb)
-      selectedKb.value = kb
+      // 新创建的知识库设置空数组避免组件访问 .slice/.filter 时崩溃
+      selectedKb.value = { ...kb, documents: [], entitiesData: [], relationsData: [] }
+      selectedDoc.value = null
+      // 刷新统计
+      const s = await kbApi.fetchStats()
+      stats.value = {
+        totalKbs: s.totalKbs,
+        totalDocs: s.totalDocs,
+        totalChunks: s.totalChunks,
+        totalEntities: s.totalEntities,
+        indexing: s.indexing,
+      }
       return kb
     } finally {
       loading.value = false
@@ -102,10 +136,10 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
 
   async function updateKb(id: string, patch: Partial<KB>) {
     const updated = await kbApi.updateKnowledgeBase(id, patch)
-    if (updated) {
-      const idx = kbs.value.findIndex((k) => k.id === id)
-      if (idx !== -1) kbs.value[idx] = updated
-      if (selectedKb.value?.id === id) selectedKb.value = updated
+    const idx = kbs.value.findIndex((k) => k.id === id)
+    if (idx !== -1) kbs.value[idx] = { ...kbs.value[idx], ...updated }
+    if (selectedKb.value?.id === id) {
+      selectedKb.value = { ...selectedKb.value, ...updated }
     }
   }
 
@@ -113,17 +147,25 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
     await kbApi.deleteKnowledgeBase(id)
     kbs.value = kbs.value.filter((k) => k.id !== id)
     if (selectedKb.value?.id === id) clearSelection()
+    // 刷新统计
+    const s = await kbApi.fetchStats()
+    stats.value = {
+      totalKbs: s.totalKbs,
+      totalDocs: s.totalDocs,
+      totalChunks: s.totalChunks,
+      totalEntities: s.totalEntities,
+      indexing: s.indexing,
+    }
   }
 
-  async function uploadDocs(
-    kbId: string,
-    files: { name: string; type: DocType; size: string }[],
-  ) {
+  async function uploadDocs(kbId: string, files: File[]) {
+    if (!files.length) return
     const newDocs = await kbApi.uploadDocuments(kbId, files)
-    if (newDocs && selectedKb.value && selectedKb.value.id === kbId) {
+    if (selectedKb.value && selectedKb.value.id === kbId) {
       selectedKb.value = {
         ...selectedKb.value,
         documents: [...newDocs, ...selectedKb.value.documents],
+        docs: selectedKb.value.docs + newDocs.length,
       }
     }
   }
@@ -140,14 +182,12 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
   }
 
   async function retryDoc(kbId: string, docId: string) {
-    await kbApi.retryDocument(kbId, docId)
+    const updatedDoc = await kbApi.retryDocument(kbId, docId)
     if (selectedKb.value && selectedKb.value.id === kbId) {
       selectedKb.value = {
         ...selectedKb.value,
         documents: selectedKb.value.documents.map((d) =>
-          d.id === docId
-            ? { ...d, status: 'parsing' as const, progress: 5 }
-            : d,
+          d.id === docId ? updatedDoc : d,
         ),
       }
     }
@@ -161,39 +201,39 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
     return kbApi.searchKnowledgeBase(kbId, query, mode)
   }
 
-  // ─── 索引动画 ──────────────────────────────────────────────────────────
+  // ─── 索引进度轮询 ──────────────────────────────────────────────────────
 
-  function startIndexAnimation() {
-    stopIndexAnimation()
-    indexTimer = setInterval(() => {
+  function startIndexPolling() {
+    stopIndexPolling()
+    indexPollTimer = setInterval(async () => {
       if (!selectedKb.value) return
-      selectedKb.value = {
-        ...selectedKb.value,
-        documents: selectedKb.value.documents.map((d) => {
-          if (
-            d.status === 'failed' ||
-            d.status === 'indexed' ||
-            d.status === 'queued'
-          )
-            return d
-          const next = Math.min(100, d.progress + Math.random() * 5)
-          let newStatus = d.status
-          if (next >= 100) newStatus = 'indexed'
-          else if (next < 12) newStatus = 'parsing'
-          else if (next < 30) newStatus = 'chunking'
-          else if (next < 50) newStatus = 'embedding'
-          else if (next < 65) newStatus = 'bm25'
-          else if (next < 85) newStatus = 'extracting'
-          return { ...d, progress: next, status: newStatus }
-        }),
+      const kbId = selectedKb.value.id
+
+      // 只对有索引中文档的知识库做轮询
+      const hasActive = selectedKb.value.documents.some(
+        (d) => d.status !== 'indexed' && d.status !== 'failed',
+      )
+      if (!hasActive) return
+
+      try {
+        // 重新拉取文档列表
+        const docData = await kbApi.fetchDocuments(kbId, { page_size: 100 })
+        if (selectedKb.value) {
+          selectedKb.value = {
+            ...selectedKb.value,
+            documents: docData.items,
+          }
+        }
+      } catch {
+        // 轮询失败静默忽略
       }
-    }, 1200)
+    }, 5000)
   }
 
-  function stopIndexAnimation() {
-    if (indexTimer) {
-      clearInterval(indexTimer)
-      indexTimer = null
+  function stopIndexPolling() {
+    if (indexPollTimer) {
+      clearInterval(indexPollTimer)
+      indexPollTimer = null
     }
   }
 
@@ -206,9 +246,9 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
     selectedDoc,
     viewMode,
     searchQuery,
+    stats,
     // getters
     filteredKbs,
-    stats,
     // actions
     fetchKbs,
     selectKb,
@@ -220,7 +260,7 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
     deleteDoc,
     retryDoc,
     searchKb,
-    startIndexAnimation,
-    stopIndexAnimation,
+    startIndexPolling,
+    stopIndexPolling,
   }
 })

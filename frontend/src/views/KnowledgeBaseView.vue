@@ -24,7 +24,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  store.stopIndexAnimation()
+  store.stopIndexPolling()
 })
 
 // ─── Actions ──────────────────────────────────────────────────────────────

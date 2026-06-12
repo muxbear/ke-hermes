@@ -1,11 +1,8 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
-import { Upload, X } from 'lucide-vue-next'
+import { Upload, X, FileType2, FileCode2, FileText, FileSpreadsheet, FileImage, Globe } from 'lucide-vue-next'
 import type { DocType } from '@/types/knowledgeBase'
 import { DOC_TYPE_CONFIG } from '@/types/knowledgeBase'
-import {
-  FileType2, FileCode2, FileText, FileSpreadsheet, FileImage, Globe,
-} from 'lucide-vue-next'
 
 const props = defineProps<{
   visible: boolean
@@ -13,18 +10,18 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
-  upload: [files: { name: string; type: DocType; size: string }[]]
+  upload: [files: File[]]
 }>()
 
 const dialogVisible = ref(false)
-const draftName = ref('')
-const files = ref<{ name: string; type: DocType; size: string }[]>([])
+const fileInput = ref<HTMLInputElement | null>(null)
+const files = ref<File[]>([])
 
 const docTypeIcons: Record<DocType, typeof FileText> = {
   pdf: FileType2, md: FileCode2, docx: FileText, csv: FileSpreadsheet, image: FileImage, html: Globe,
 }
 
-const docTypes: DocType[] = ['pdf', 'md', 'docx', 'csv', 'html', 'image']
+const ALLOWED_TYPES = '.pdf,.docx,.xlsx,.pptx,.csv,.json,.md,.html,.txt,.png,.jpg,.jpeg'
 
 const hasFiles = computed(() => files.value.length > 0)
 
@@ -34,7 +31,6 @@ watch(() => props.visible, (v) => {
 })
 
 function reset() {
-  draftName.value = ''
   files.value = []
 }
 
@@ -43,11 +39,53 @@ function handleClose() {
   emit('close')
 }
 
-function addFile(type: DocType) {
-  const ext: Record<DocType, string> = { pdf: '.pdf', md: '.md', docx: '.docx', csv: '.csv', image: '.png', html: '.html' }
-  const name = (draftName.value.trim() || `文档-${Date.now()}`) + ext[type]
-  files.value.push({ name, type, size: `${(Math.random() * 5 + 0.1).toFixed(1)} MB` })
-  draftName.value = ''
+function getFileType(name: string): string {
+  const ext = name.split('.').pop()?.toLowerCase()
+  return ext && ext in DOC_TYPE_CONFIG ? ext : 'md'
+}
+
+function getFileIcon(name: string) {
+  const ft = getFileType(name) as DocType
+  return docTypeIcons[ft] || FileText
+}
+
+function getFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function triggerFileInput() {
+  fileInput.value?.click()
+}
+
+function handleFileChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  if (input.files) {
+    for (let i = 0; i < input.files.length; i++) {
+      const file = input.files[i]
+      if (file.size > 100 * 1024 * 1024) {
+        // Skip files > 100MB
+        continue
+      }
+      files.value.push(file)
+    }
+  }
+  // Reset input so the same file can be selected again
+  input.value = ''
+}
+
+function handleDragOver(e: DragEvent) {
+  e.preventDefault()
+}
+
+function handleDrop(e: DragEvent) {
+  e.preventDefault()
+  if (e.dataTransfer?.files) {
+    for (let i = 0; i < e.dataTransfer.files.length; i++) {
+      files.value.push(e.dataTransfer.files[i])
+    }
+  }
 }
 
 function removeFile(index: number) {
@@ -73,45 +111,39 @@ function handleUpload() {
     <template #header>
       <div class="dialog-header">
         <h2 class="dialog-title">上传文档</h2>
-        <p class="dialog-desc">支持 PDF / Word / Markdown / HTML / CSV / 图片(OCR)</p>
+        <p class="dialog-desc">支持 PDF / Word / Markdown / HTML / CSV / JSON / TXT / 图片</p>
       </div>
     </template>
 
     <div class="dialog-body">
+      <!-- 文件选择 -->
+      <input
+        ref="fileInput"
+        type="file"
+        :accept="ALLOWED_TYPES"
+        multiple
+        style="display: none"
+        @change="handleFileChange"
+      />
+
       <!-- 拖拽区 -->
-      <div class="dropzone">
+      <div
+        class="dropzone"
+        @click="triggerFileInput"
+        @dragover="handleDragOver"
+        @drop="handleDrop"
+      >
         <Upload :size="32" class="dropzone-icon" />
         <div class="dropzone-text">拖拽文件到此处或点击选择</div>
-        <div class="dropzone-sub">单文件最大 100MB</div>
-      </div>
-
-      <!-- 快速添加 -->
-      <div class="quick-section">
-        <label class="field-label">快速添加示例文件</label>
-        <input
-          v-model="draftName"
-          type="text"
-          class="field-input"
-          placeholder="文件名（可选）"
-        />
-        <div class="type-btns">
-          <button
-            v-for="t in docTypes"
-            :key="t"
-            class="type-btn"
-            @click="addFile(t)"
-          >
-            + {{ DOC_TYPE_CONFIG[t].label }}
-          </button>
-        </div>
+        <div class="dropzone-sub">支持 PDF / Word / Excel / Markdown / HTML / CSV / JSON / TXT / 图片，单文件最大 100MB</div>
       </div>
 
       <!-- 文件列表 -->
       <div v-if="hasFiles" class="file-list">
         <div v-for="(f, i) in files" :key="i" class="file-item">
-          <component :is="docTypeIcons[f.type]" :size="16" class="file-item-icon" />
+          <component :is="getFileIcon(f.name)" :size="16" class="file-item-icon" />
           <span class="file-item-name">{{ f.name }}</span>
-          <span class="file-item-size">{{ f.size }}</span>
+          <span class="file-item-size">{{ getFileSize(f.size) }}</span>
           <button class="file-item-del" @click="removeFile(i)">
             <X :size="14" />
           </button>
@@ -186,63 +218,9 @@ function handleUpload() {
   margin-top: 4px;
 }
 
-/* Quick add */
-.quick-section {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.field-label {
-  font-size: var(--font-size-xs);
-  color: var(--foreground-secondary);
-}
-
-.field-input {
-  height: 36px;
-  padding: 0 12px;
-  background: rgba(15, 23, 46, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  color: var(--foreground-primary);
-  font-size: var(--font-size-base);
-  font-family: inherit;
-  outline: none;
-  transition: border-color 0.2s;
-}
-
-.field-input::placeholder { color: var(--foreground-muted); }
-.field-input:focus { border-color: rgba(59, 130, 246, 0.45); }
-
-.type-btns {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.type-btn {
-  display: inline-flex;
-  align-items: center;
-  height: 30px;
-  padding: 0 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  color: var(--foreground-primary);
-  font-size: var(--font-size-xs);
-  font-family: inherit;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.type-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.2);
-}
-
 /* File list */
 .file-list {
-  max-height: 160px;
+  max-height: 200px;
   overflow-y: auto;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: var(--radius-lg);
