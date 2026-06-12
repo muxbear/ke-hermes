@@ -2,14 +2,17 @@
 import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
-  Search, Upload, Edit2, Trash2, RefreshCw, FolderOpen,
+  Search, Upload, Trash2, RefreshCw, FolderOpen,
   FileType2, FileCode2, FileText, FileSpreadsheet, FileImage, Globe,
+  Eye, Scissors,
 } from 'lucide-vue-next'
 import type { KB, KBDoc, DocType } from '@/types/knowledgeBase'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import KbDocStatusBadge from './KbDocStatusBadge.vue'
 import KbUploadDialog from './KbUploadDialog.vue'
 import KbIndexingPipeline from './KbIndexingPipeline.vue'
+import KbDocDetailDrawer from './KbDocDetailDrawer.vue'
+import KbFragmentEditor from './KbFragmentEditor.vue'
 
 const props = defineProps<{
   kb: KB
@@ -20,6 +23,8 @@ const store = useKnowledgeBaseStore()
 const search = ref('')
 const uploadVisible = ref(false)
 const selectedDoc = ref<KBDoc | null>(null)
+const detailDoc = ref<KBDoc | null>(null)
+const editDoc = ref<KBDoc | null>(null)
 
 const docTypeIcons: Record<DocType, typeof FileText> = {
   pdf: FileType2, md: FileCode2, docx: FileText, csv: FileSpreadsheet, image: FileImage, html: Globe,
@@ -63,121 +68,162 @@ async function handleRetry(docId: string) {
     ElMessage.error(msg)
   }
 }
+
+function handleViewDetail(doc: KBDoc) {
+  detailDoc.value = doc
+}
+
+function handleEditFragment(doc: KBDoc) {
+  editDoc.value = doc
+}
 </script>
 
 <template>
   <div class="docs-tab">
-    <div class="docs-layout" :class="{ 'has-panel': selectedDoc }">
-      <div class="docs-table-area">
-        <!-- 工具栏 -->
-        <div class="docs-toolbar">
-          <div class="search-wrap">
-            <Search :size="16" class="search-icon" />
-            <input
-              v-model="search"
-              type="text"
-              placeholder="检索文档…"
-              class="search-input"
-            />
-          </div>
-          <button class="btn-upload" :disabled="uploading" @click="uploadVisible = true">
-            <Upload :size="16" class="btn-icon" />{{ uploading ? '上传中…' : '上传文档' }}
-          </button>
-        </div>
-
-        <!-- 文档表格 -->
-        <div class="card">
-          <table class="docs-table">
-            <thead>
-              <tr>
-                <th class="col-doc">文档</th>
-                <th class="col-size">大小</th>
-                <th class="col-chunks">分片</th>
-                <th class="col-er">实体/关系</th>
-                <th class="col-status">状态</th>
-                <th class="col-action">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr
-                v-for="doc in filteredDocs"
-                :key="doc.id"
-                :class="['doc-row', { 'doc-row--sel': selectedDoc?.id === doc.id }]"
-                @click="selectedDoc = doc"
-              >
-                <td>
-                  <div class="doc-cell">
-                    <component :is="docTypeIcons[doc.type]" :size="16" class="doc-type-icon" />
-                    <div class="doc-cell-info">
-                      <div class="doc-cell-name">{{ doc.name }}</div>
-                      <div class="doc-cell-date">{{ doc.uploadedAt }}</div>
-                    </div>
-                  </div>
-                </td>
-                <td class="cell-text">{{ doc.size }}</td>
-                <td class="cell-text">{{ doc.chunks || '-' }}</td>
-                <td class="cell-text">{{ doc.entities || '-' }} / {{ doc.relations || '-' }}</td>
-                <td>
-                  <div class="status-cell">
-                    <el-tooltip
-                      v-if="doc.status === 'failed' && doc.errorMessage"
-                      :content="doc.errorMessage"
-                      placement="top"
-                      :show-after="300"
-                    >
-                      <KbDocStatusBadge :status="doc.status" />
-                    </el-tooltip>
-                    <KbDocStatusBadge v-else :status="doc.status" />
-                    <el-progress
-                      v-if="doc.status !== 'indexed' && doc.status !== 'queued' && doc.status !== 'failed'"
-                      :percentage="Math.round(doc.progress)"
-                      :stroke-width="3"
-                      :show-text="false"
-                      class="inline-progress"
-                    />
-                  </div>
-                </td>
-                <td class="col-action">
-                  <div class="action-row">
-                    <button
-                      v-if="doc.status === 'failed'"
-                      class="action-btn"
-                      @click.stop="handleRetry(doc.id)"
-                      title="重试"
-                    >
-                      <RefreshCw :size="14" />
-                    </button>
-                    <button class="action-btn" @click.stop title="编辑">
-                      <Edit2 :size="14" />
-                    </button>
-                    <button class="action-btn action-del" @click.stop="handleDelete(doc.id)" title="删除">
-                      <Trash2 :size="14" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-              <tr v-if="filteredDocs.length === 0">
-                <td colspan="6" class="empty-cell">
-                  <FolderOpen :size="32" class="empty-icon" />
-                  <p>暂无文档，点击右上角上传</p>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- 索引流水线面板 -->
-      <div v-if="selectedDoc" class="docs-panel">
-        <KbIndexingPipeline :doc="selectedDoc" @close="selectedDoc = null" />
-      </div>
-    </div>
-
-    <KbUploadDialog
-      :visible="uploadVisible"
-      @close="uploadVisible = false"
-      @upload="handleUpload"
+    <!-- 查看详情 (full-page inline view) -->
+    <KbDocDetailDrawer
+      v-if="detailDoc"
+      :doc="detailDoc"
+      :kb-id="kb.id"
+      @back="detailDoc = null"
     />
+
+    <!-- 编辑分片 (full-page inline view) -->
+    <KbFragmentEditor
+      v-else-if="editDoc"
+      :doc="editDoc"
+      :kb-id="kb.id"
+      @back="editDoc = null"
+    />
+
+    <!-- 文档列表 -->
+    <template v-else>
+      <div class="docs-layout" :class="{ 'has-panel': selectedDoc }">
+        <div class="docs-table-area">
+          <!-- 工具栏 -->
+          <div class="docs-toolbar">
+            <div class="search-wrap">
+              <Search :size="16" class="search-icon" />
+              <input
+                v-model="search"
+                type="text"
+                placeholder="检索文档…"
+                class="search-input"
+              />
+            </div>
+            <button class="btn-upload" :disabled="uploading" @click="uploadVisible = true">
+              <Upload :size="16" class="btn-icon" />{{ uploading ? '上传中…' : '上传文档' }}
+            </button>
+          </div>
+
+          <!-- 文档表格 -->
+          <div class="card">
+            <table class="docs-table">
+              <thead>
+                <tr>
+                  <th class="col-doc">文档</th>
+                  <th class="col-size">大小</th>
+                  <th class="col-chunks">分片</th>
+                  <th class="col-er">实体/关系</th>
+                  <th class="col-status">状态</th>
+                  <th class="col-action">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr
+                  v-for="doc in filteredDocs"
+                  :key="doc.id"
+                  :class="['doc-row', { 'doc-row--sel': selectedDoc?.id === doc.id }]"
+                  @click="selectedDoc = doc"
+                >
+                  <td>
+                    <div class="doc-cell">
+                      <component :is="docTypeIcons[doc.type]" :size="16" class="doc-type-icon" />
+                      <div class="doc-cell-info">
+                        <div class="doc-cell-name">{{ doc.name }}</div>
+                        <div class="doc-cell-date">{{ doc.uploadedAt }}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td class="cell-text">{{ doc.size }}</td>
+                  <td class="cell-text">{{ doc.chunks || '-' }}</td>
+                  <td class="cell-text">{{ doc.entities || '-' }} / {{ doc.relations || '-' }}</td>
+                  <td>
+                    <div class="status-cell">
+                      <el-tooltip
+                        v-if="doc.status === 'failed' && doc.errorMessage"
+                        :content="doc.errorMessage"
+                        placement="top"
+                        :show-after="300"
+                      >
+                        <KbDocStatusBadge :status="doc.status" />
+                      </el-tooltip>
+                      <KbDocStatusBadge v-else :status="doc.status" />
+                      <el-progress
+                        v-if="doc.status !== 'indexed' && doc.status !== 'queued' && doc.status !== 'failed'"
+                        :percentage="Math.round(doc.progress)"
+                        :stroke-width="3"
+                        :show-text="false"
+                        class="inline-progress"
+                      />
+                    </div>
+                  </td>
+                  <td class="col-action">
+                    <div class="action-row">
+                      <el-tooltip content="查看详情" placement="top" :show-after="300">
+                        <button class="action-btn action-view" @click.stop="handleViewDetail(doc)" title="查看详情">
+                          <Eye :size="14" />
+                        </button>
+                      </el-tooltip>
+                      <el-tooltip content="编辑分片" placement="top" :show-after="300">
+                        <button
+                          class="action-btn action-edit"
+                          @click.stop="handleEditFragment(doc)"
+                          title="编辑分片"
+                          :disabled="doc.status === 'failed'"
+                        >
+                          <Scissors :size="14" />
+                        </button>
+                      </el-tooltip>
+                      <button
+                        v-if="doc.status === 'failed'"
+                        class="action-btn"
+                        @click.stop="handleRetry(doc.id)"
+                        title="重试"
+                      >
+                        <RefreshCw :size="14" />
+                      </button>
+                      <el-tooltip content="删除" placement="top" :show-after="300">
+                        <button class="action-btn action-del" @click.stop="handleDelete(doc.id)" title="删除">
+                          <Trash2 :size="14" />
+                        </button>
+                      </el-tooltip>
+                    </div>
+                  </td>
+                </tr>
+                <tr v-if="filteredDocs.length === 0">
+                  <td colspan="6" class="empty-cell">
+                    <FolderOpen :size="32" class="empty-icon" />
+                    <p>暂无文档，点击右上角上传</p>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 索引流水线面板 -->
+        <div v-if="selectedDoc" class="docs-panel">
+          <KbIndexingPipeline :doc="selectedDoc" @close="selectedDoc = null" />
+        </div>
+      </div>
+
+      <KbUploadDialog
+        :visible="uploadVisible"
+        @close="uploadVisible = false"
+        @upload="handleUpload"
+      />
+    </template>
   </div>
 </template>
 
@@ -333,7 +379,7 @@ async function handleRetry(docId: string) {
 .col-chunks { width: 70px; }
 .col-er { width: 100px; }
 .col-status { width: 180px; }
-.col-action { width: 110px; text-align: right; }
+.col-action { width: 150px; text-align: right; }
 
 .action-row {
   display: flex;
@@ -360,6 +406,34 @@ async function handleRetry(docId: string) {
 .action-btn:hover {
   background: rgba(255, 255, 255, 0.1);
   color: var(--foreground-primary);
+}
+
+.action-view {
+  color: #60a5fa;
+}
+
+.action-view:hover {
+  background: rgba(59, 130, 246, 0.15);
+  color: #93c5fd;
+}
+
+.action-edit {
+  color: #a78bfa;
+}
+
+.action-edit:hover {
+  background: rgba(139, 92, 246, 0.15);
+  color: #c4b5fd;
+}
+
+.action-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.action-btn:disabled:hover {
+  background: transparent;
+  color: var(--foreground-secondary);
 }
 
 .action-del:hover {
