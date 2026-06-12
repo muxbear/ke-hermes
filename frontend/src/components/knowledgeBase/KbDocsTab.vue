@@ -119,7 +119,15 @@ async function handleRetry(docId: string) {
                 <td class="cell-text">{{ doc.entities || '-' }} / {{ doc.relations || '-' }}</td>
                 <td>
                   <div class="status-cell">
-                    <KbDocStatusBadge :status="doc.status" />
+                    <el-tooltip
+                      v-if="doc.status === 'failed' && doc.errorMessage"
+                      :content="doc.errorMessage"
+                      placement="top"
+                      :show-after="300"
+                    >
+                      <KbDocStatusBadge :status="doc.status" />
+                    </el-tooltip>
+                    <KbDocStatusBadge v-else :status="doc.status" />
                     <el-progress
                       v-if="doc.status !== 'indexed' && doc.status !== 'queued' && doc.status !== 'failed'"
                       :percentage="Math.round(doc.progress)"
@@ -130,20 +138,22 @@ async function handleRetry(docId: string) {
                   </div>
                 </td>
                 <td class="col-action">
-                  <button
-                    v-if="doc.status === 'failed'"
-                    class="action-btn"
-                    @click.stop="handleRetry(doc.id)"
-                    title="重试"
-                  >
-                    <RefreshCw :size="14" />
-                  </button>
-                  <button class="action-btn" @click.stop title="编辑">
-                    <Edit2 :size="14" />
-                  </button>
-                  <button class="action-btn action-del" @click.stop="handleDelete(doc.id)" title="删除">
-                    <Trash2 :size="14" />
-                  </button>
+                  <div class="action-row">
+                    <button
+                      v-if="doc.status === 'failed'"
+                      class="action-btn"
+                      @click.stop="handleRetry(doc.id)"
+                      title="重试"
+                    >
+                      <RefreshCw :size="14" />
+                    </button>
+                    <button class="action-btn" @click.stop title="编辑">
+                      <Edit2 :size="14" />
+                    </button>
+                    <button class="action-btn action-del" @click.stop="handleDelete(doc.id)" title="删除">
+                      <Trash2 :size="14" />
+                    </button>
+                  </div>
                 </td>
               </tr>
               <tr v-if="filteredDocs.length === 0">
@@ -324,6 +334,14 @@ async function handleRetry(docId: string) {
 .col-er { width: 100px; }
 .col-status { width: 180px; }
 .col-action { width: 110px; text-align: right; }
+
+.action-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+  white-space: nowrap;
+}
 
 .action-btn {
   display: inline-flex;

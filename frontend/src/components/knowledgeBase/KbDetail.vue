@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import {
   Database, ChevronLeft, RefreshCw, Trash2,
   Activity, FileText, Network, FileSearch, Settings2,
 } from 'lucide-vue-next'
 import type { KB } from '@/types/knowledgeBase'
 import { KB_STATUS_CONFIG } from '@/types/knowledgeBase'
+import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import KbOverviewTab from './KbOverviewTab.vue'
 import KbDocsTab from './KbDocsTab.vue'
 import KbGraphTab from './KbGraphTab.vue'
@@ -22,12 +24,27 @@ const emit = defineEmits<{
   update: [patch: Partial<KB>]
 }>()
 
+const store = useKnowledgeBaseStore()
 const activeTab = ref('overview')
+const reindexing = ref(false)
 
 const statusCfg = KB_STATUS_CONFIG[props.kb.status]
 
 function handleConfigSave(config: typeof props.kb.config) {
   emit('update', { config })
+}
+
+async function handleSaveAndReindex(config: typeof props.kb.config) {
+  try {
+    reindexing.value = true
+    await store.reindexKb(props.kb.id, config)
+    ElMessage.success('配置已保存，正在重新索引全部文档')
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : '重新索引失败'
+    ElMessage.error(msg)
+  } finally {
+    reindexing.value = false
+  }
 }
 </script>
 
@@ -99,7 +116,11 @@ function handleConfigSave(config: typeof props.kb.config) {
           <template #label>
             <Settings2 :size="14" class="tab-icon" />索引配置
           </template>
-          <KbConfigTab :config="kb.config" @save="handleConfigSave" />
+          <KbConfigTab
+            :config="kb.config"
+            @save="handleConfigSave"
+            @save-and-reindex="handleSaveAndReindex"
+          />
         </el-tab-pane>
       </el-tabs>
     </div>
@@ -250,6 +271,19 @@ function handleConfigSave(config: typeof props.kb.config) {
 
 .kb-tabs {
   --el-tabs-header-height: 40px;
+}
+
+.kb-tabs :deep(.el-tabs__item) {
+  color: #94a3b8;
+  transition: color 0.2s;
+}
+
+.kb-tabs :deep(.el-tabs__item.is-active) {
+  color: #93c5fd;
+}
+
+.kb-tabs :deep(.el-tabs__item:hover:not(.is-active)) {
+  color: #cbd5e1;
 }
 
 .tab-icon {

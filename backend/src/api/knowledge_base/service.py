@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 
 from fastapi import HTTPException
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.knowledge_base.schemas import (
@@ -265,6 +265,86 @@ def compute_stages(status: str, progress: int) -> list[dict]:
         stages[failed_idx]["status"] = "failed"
 
     return stages
+
+
+async def reindex_kb(
+    db: AsyncSession,
+    kb_id: str,
+    user_id: str,
+    config: IndexConfigSchema | None = None,
+    vector_store: BaseVectorStore | None = None,
+    scheduler=None,
+) -> dict:
+    """保存索引配置并重新索引所有文档。
+
+    1. 更新 KB 配置
+    2. 清空向量库集合
+    3. 重置所有文档为 queued 状态
+    4. 重新入队所有文档
+    """
+    kb = await _get_kb_or_404(db, kb_id, user_id)
+
+    # Update config if provided
+    if config is not None:
+        kb.config = config.model_dump()
+        kb.updated_at = datetime.utcnow()
+
+    # Recreate vector collection
+    if vector_store:
+        try:
+            await vector_store.delete_collection(kb_id)
+        except Exception as e:
+            logger.warning("Failed to delete vector collection for reindex kb=%s: %s", kb_id, e)
+        try:
+            dim = (config.embedding_dim if config else kb.config.get("embedding_dim", 1024))
+            await vector_store.create_collection(kb_id, dim)
+        except Exception as e:
+            logger.error("Failed to create vector collection for reindex kb=%s: %s", kb_id, e)
+
+    # Reset all documents to queued
+    from db.models.knowledge_base_document import KnowledgeBaseDocument
+    from sqlalchemy import update
+
+    await db.execute(
+        update(KnowledgeBaseDocument)
+        .where(KnowledgeBaseDocument.kb_id == kb_id)
+        .values(status="queued", progress=0, error_message=None, indexed_at=None)
+    )
+
+    # Re-enqueue all documents
+    docs = (
+        await db.execute(
+            select(KnowledgeBaseDocument)
+            .where(KnowledgeBaseDocument.kb_id == kb_id)
+        )
+    ).scalars().all()
+
+    from api.knowledge_base.doc_service import IndexingTask
+
+    enqueued = 0
+    if scheduler:
+        for doc in docs:
+            await scheduler.enqueue(IndexingTask(
+                kb_id=kb_id,
+                doc_id=doc.id,
+                file_path=doc.storage_path,
+                file_type=doc.type,
+                config=kb.config,
+            ))
+            enqueued += 1
+
+    # Reset KB counters and set status to indexing
+    kb.status = "indexing"
+    kb.chunks_count = 0
+    kb.entities_count = 0
+    kb.relations_count = 0
+    kb.updated_at = datetime.utcnow()
+
+    logger.info(
+        "Reindex kb=%s: %d docs enqueued, config updated", kb_id, enqueued
+    )
+
+    return {"kb_id": kb_id, "docs_enqueued": enqueued, "status": "indexing"}
 
 
 async def _get_kb_or_404(db: AsyncSession, kb_id: str, user_id: str) -> KnowledgeBase:

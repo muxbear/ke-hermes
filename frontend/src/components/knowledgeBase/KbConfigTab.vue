@@ -21,6 +21,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   save: [config: IndexConfig]
+  saveAndReindex: [config: IndexConfig]
 }>()
 
 const draft = reactive<IndexConfig>({ ...props.config })
@@ -128,6 +129,12 @@ function onLlmProviderChange(pid: string) {
 
 function handleSave() {
   emit('save', { ...draft })
+  saved.value = true
+  setTimeout(() => (saved.value = false), 1800)
+}
+
+function handleSaveAndReindex() {
+  emit('saveAndReindex', { ...draft })
   saved.value = true
   setTimeout(() => (saved.value = false), 1800)
 }
@@ -365,7 +372,7 @@ function handleReset() {
           <KbConfigSummary :config="draft" />
           <div class="divider" />
           <div class="preview-actions">
-            <button class="btn-save" @click="handleSave">
+            <button class="btn-save" @click="handleSaveAndReindex">
               <Save :size="16" class="btn-icon" />保存并重新索引
             </button>
             <div v-if="saved" class="save-feedback">

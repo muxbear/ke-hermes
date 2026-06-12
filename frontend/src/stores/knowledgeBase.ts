@@ -4,6 +4,7 @@ import type {
   KB,
   KBDoc,
   DocType,
+  IndexConfig,
   SearchResult,
   SearchMode,
   ViewMode,
@@ -193,6 +194,28 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
     }
   }
 
+  async function reindexKb(kbId: string, config: IndexConfig) {
+    const result = await kbApi.reindexKnowledgeBase(kbId, config)
+    // Refresh KB detail to get updated status
+    if (selectedKb.value && selectedKb.value.id === kbId) {
+      selectedKb.value = {
+        ...selectedKb.value,
+        status: 'indexing',
+        config,
+      }
+    }
+    // Refresh stats
+    const s = await kbApi.fetchStats()
+    stats.value = {
+      totalKbs: s.totalKbs,
+      totalDocs: s.totalDocs,
+      totalChunks: s.totalChunks,
+      totalEntities: s.totalEntities,
+      indexing: s.indexing,
+    }
+    return result
+  }
+
   async function searchKb(
     kbId: string,
     query: string,
@@ -259,6 +282,7 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
     uploadDocs,
     deleteDoc,
     retryDoc,
+    reindexKb,
     searchKb,
     startIndexPolling,
     stopIndexPolling,

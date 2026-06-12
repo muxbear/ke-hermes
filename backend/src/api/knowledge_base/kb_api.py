@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_current_user_id, get_db
 from api.knowledge_base.schemas import (
+    IndexConfigSchema,
     KBCreateRequest,
     KBListResponse,
     KBResponse,
@@ -18,6 +19,7 @@ from api.knowledge_base.service import (
     get_kb,
     get_kb_stats,
     list_kbs,
+    reindex_kb,
     update_kb,
 )
 
@@ -214,4 +216,28 @@ async def get_index_activity(
 ):
     """获取最近索引活动。"""
     result = await get_indexing_activity(db, kb_id, user_id, limit)
+    return {"code": 0, "data": result, "message": "ok"}
+
+
+@router.post("/{kb_id}/reindex", response_model=dict)
+async def reindex_knowledge_base(
+    kb_id: str,
+    request: Request,
+    body: IndexConfigSchema,
+    db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
+):
+    """保存索引配置并重新索引知识库中的所有文档。"""
+    vector_store = _get_vector_store(request)
+
+    from api.knowledge_base.doc_service import IndexingScheduler
+    scheduler = IndexingScheduler.instance()
+
+    result = await reindex_kb(
+        db, kb_id, user_id,
+        config=body,
+        vector_store=vector_store,
+        scheduler=scheduler,
+    )
+    await db.commit()
     return {"code": 0, "data": result, "message": "ok"}

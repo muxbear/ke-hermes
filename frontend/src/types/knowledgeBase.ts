@@ -64,6 +64,7 @@ export interface KBDoc {
   entities: number
   relations: number
   uploadedAt: string
+  errorMessage: string | null
   stages: DocStage[]
 }
 

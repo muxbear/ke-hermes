@@ -104,6 +104,7 @@ function mapDoc(raw: RawDoc): KBDoc {
     entities: raw.entities_count,
     relations: raw.relations_count,
     uploadedAt: raw.uploaded_at?.split('T')[0] || '',
+    errorMessage: raw.error_message || null,
     stages: (raw.stages || []) as KBDoc['stages'],
   }
 }
@@ -298,6 +299,33 @@ export async function fetchAvailableProviders(
     params: { model_type: modelType },
   })
   return res.data.data as AvailableProvider[]
+}
+
+export async function reindexKnowledgeBase(
+  kbId: string,
+  config: IndexConfig,
+): Promise<{ kb_id: string; docs_enqueued: number; status: string }> {
+  const payload = {
+    chunk_strategy: config.chunkStrategy,
+    chunk_size: config.chunkSize,
+    chunk_overlap: config.chunkOverlap,
+    embedding_model: config.embeddingModel,
+    embedding_dim: config.embeddingDim,
+    sparse_algo: config.sparseAlgo,
+    bm25_k1: config.bm25K1,
+    bm25_b: config.bm25B,
+    entity_model: config.entityModel,
+    relation_model: config.relationModel,
+    enable_graph: config.enableGraph,
+    reranker_model: config.rerankerModel,
+    enable_reranker: config.enableReranker,
+    top_k: config.topK,
+    hybrid_alpha: config.hybridAlpha,
+  }
+  const res = await instance.post(`/knowledge-bases/${kbId}/reindex`, payload, {
+    timeout: 600000,
+  })
+  return res.data.data as { kb_id: string; docs_enqueued: number; status: string }
 }
 
 export async function searchKnowledgeBase(
