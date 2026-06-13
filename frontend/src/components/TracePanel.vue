@@ -19,14 +19,29 @@ const agentNames = computed(() => {
   return [...names]
 })
 
-function typeLabel(type: string): string {
-  switch (type) {
+// Track which tool names have been ended
+const endedTools = computed(() => {
+  const ended = new Set<string>()
+  for (const t of props.traces) {
+    if (t.type === 'tool_end') ended.add(t.name)
+  }
+  return ended
+})
+
+function typeLabel(entry: TraceEntry): string {
+  switch (entry.type) {
     case 'agent_start': return '开始处理'
     case 'agent_end': return '处理完成'
-    case 'tool_start': return '调用中...'
+    case 'tool_start':
+      if (!props.streaming && !endedTools.value.has(entry.name)) return '执行失败'
+      return '调用中...'
     case 'tool_end': return '已完成'
-    default: return type
+    default: return entry.type
   }
+}
+
+function isToolActive(entry: TraceEntry): boolean {
+  return entry.type === 'tool_start' && props.streaming && !endedTools.value.has(entry.name)
 }
 
 const expandedOutputs = ref<Set<number>>(new Set())
@@ -67,8 +82,8 @@ function truncate(s: string, maxLen = 200): string {
           <Bot v-if="entry.type === 'agent_start' || entry.type === 'agent_end'" :size="12" class="trace-icon agent-icon" />
           <Wrench v-else :size="12" class="trace-icon tool-icon" />
           <span class="trace-name">{{ entry.type.startsWith('agent') ? entry.name : `${entry.name}` }}</span>
-          <span class="trace-status" :class="entry.type">{{ typeLabel(entry.type) }}</span>
-          <Loader v-if="entry.type === 'tool_start' && streaming" :size="10" class="spin" />
+          <span class="trace-status" :class="entry.type">{{ typeLabel(entry) }}</span>
+          <Loader v-if="isToolActive(entry)" :size="10" class="spin" />
         </div>
 
         <div v-if="entry.input" class="trace-detail" @click="toggleOutput(entry.id)">

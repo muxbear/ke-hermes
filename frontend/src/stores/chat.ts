@@ -68,9 +68,11 @@ export const useChatStore = defineStore('chat', () => {
         onError(err: Error) {
           const idx = messages.value.findIndex(m => m.id === assistantId)
           if (idx !== -1) {
+            const msg = messages.value[idx]
+            const sep = msg.content ? '\n\n' : ''
             messages.value[idx] = {
-              ...messages.value[idx],
-              content: messages.value[idx].content + `\n\n[Error: ${err.message}]`,
+              ...msg,
+              content: msg.content + `${sep}${err.message}`,
               streaming: false,
             }
           }
@@ -78,12 +80,13 @@ export const useChatStore = defineStore('chat', () => {
         },
       })
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
       const idx = messages.value.findIndex(m => m.id === assistantId)
       if (idx !== -1) {
+        const msg = messages.value[idx]
+        const sep = msg.content ? '\n\n' : ''
         messages.value[idx] = {
-          ...messages.value[idx],
-          content: messages.value[idx].content + `\n\n[Connection failed: ${message}]`,
+          ...msg,
+          content: msg.content + `${sep}抱歉，网络连接失败，请检查网络后重试。`,
           streaming: false,
         }
       }

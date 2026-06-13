@@ -58,6 +58,12 @@ async def chat(
             response="抱歉，您的请求被模型安全审核拦截，请尝试换一种表述方式。",
             thread_id=thread_id,
         )
+    except Exception:
+        logger.exception("Agent encountered an unhandled error")
+        return ChatResponse(
+            response="抱歉，服务处理您的请求时发生了错误，请稍后重试。",
+            thread_id=thread_id,
+        )
 
     # 新对话自动创建记录
     if is_new:
@@ -121,11 +127,18 @@ async def chat_stream(
                     yield f"data: {json.dumps({'trace': {'type': 'tool_end', 'name': name, 'agent': parent_agent, 'output': output_str}})}\n\n"
         except BadRequestError as e:
             logger.warning("Model returned BadRequestError in stream: %s", e)
-            yield f"data: {json.dumps({'token': '抱歉，您的请求被模型安全审核拦截，请尝试换一种表述方式。'})}\n\n"
+            yield f"data: {json.dumps({'error': '抱歉，您的请求被模型安全审核拦截，请尝试换一种表述方式。'})}\n\n"
+        except Exception:
+            logger.exception("Agent stream encountered an unhandled error")
+            error_msg = "抱歉，服务处理您的请求时发生了错误，请稍后重试。"
+            yield f"data: {json.dumps({'error': error_msg})}\n\n"
 
         yield f"data: {json.dumps({'thread_id': thread_id})}\n\n"
 
         if is_new:
-            await create_conversation(db, user_id, thread_id, req.message)
+            try:
+                await create_conversation(db, user_id, thread_id, req.message)
+            except Exception:
+                logger.exception("Failed to create conversation record")
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")

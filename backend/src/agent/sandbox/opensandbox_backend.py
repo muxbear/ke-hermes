@@ -1,9 +1,8 @@
-from typing import cast
-from time import time
-
 from collections.abc import Callable
-from unittest import result
+from time import time
+from typing import cast
 from uuid import uuid4
+
 from deepagents.backends.protocol import (
     ExecuteResponse,
     FileDownloadResponse,
@@ -12,8 +11,6 @@ from deepagents.backends.protocol import (
 from deepagents.backends.sandbox import BaseSandbox
 from deepagents.graph import logger
 from opensandbox.sync import SandboxSync
-from urllib3 import response
-
 
 SyncPollingInterval = float | Callable[[float], float]
 PollingStrategy = Callable[[float], float]
@@ -56,6 +53,7 @@ class OpenSandBoxBackend(BaseSandbox):
         """返回底层 SandboxSync 实例，用于高级操作（如网络策略修改）。"""
         return self._sandbox
 
+    @property
     def id(self) -> str:
         """返回沙箱的唯一标识符。
 
@@ -153,7 +151,6 @@ class OpenSandBoxBackend(BaseSandbox):
 
             list: 下载结果列表
         """
-
         logger.info(f"开始下载 {len(paths)} 个文件: {paths}")
         responses: list[FileDownloadResponse] = []
 
@@ -161,7 +158,7 @@ class OpenSandBoxBackend(BaseSandbox):
             logger.debug(f"正在下载第 {i + 1}/{len(paths)} 个文件: {path}")
 
             if not path.startswith("/"):
-                logger.error(f"路径必须是绝对路径,以 / 开头")
+                logger.error("路径必须是绝对路径,以 / 开头")
                 responses.append(
                     FileDownloadResponse(path=path, content=None, error="无效的路径")
                 )
@@ -276,16 +273,16 @@ class OpenSandBoxBackend(BaseSandbox):
                     self._sandbox.files.write_files(upload_entries)
                     logger.info(f"成功上传 {len(upload_entries)} 个文件")
                 except Exception as e:
-                    logger.error(f"上传文件时出错：str(e)", exc_info=True)
+                    logger.error("上传文件时出错：str(e)", exc_info=True)
 
                     # 发生错误时，更新响应
                     for i, resp in enumerate(responses):
                         if resp.error is None:
-                            response[i] = FileUploadResponse(
+                            responses[i] = FileUploadResponse(
                                 path=resp.path, error=f"upload_failed：{str(e)}"
                             )
                         else:
-                            logger.warning(f"没有有效的文件需要上传")
+                            logger.warning("没有有效的文件需要上传")
 
             # 上传结果
             success_count = sum(1 for r in responses if r.error is None)

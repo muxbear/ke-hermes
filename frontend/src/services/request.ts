@@ -141,10 +141,15 @@ function parseSseDataLine(
   onToken: (token: string) => void,
   onThreadId?: (threadId: string) => void,
   onTrace?: (entry: Omit<TraceEntry, 'id'>) => void,
+  onError?: (err: Error) => void,
 ): void {
   if (!line.startsWith('data: ')) return
   try {
-    const json = JSON.parse(line.slice(6)) as { token?: string; thread_id?: string; trace?: Omit<TraceEntry, 'id'> }
+    const json = JSON.parse(line.slice(6)) as { token?: string; thread_id?: string; trace?: Omit<TraceEntry, 'id'>; error?: string }
+    if (json.error && onError) {
+      onError(new Error(json.error))
+      return
+    }
     if (json.token) {
       onToken(json.token)
     }
@@ -212,13 +217,13 @@ export async function sendStreamRequest(
       buffer = lines.pop() || ''
 
       for (const line of lines) {
-        parseSseDataLine(line, onToken, onThreadId, traceEnabled ? onTrace : undefined)
+        parseSseDataLine(line, onToken, onThreadId, traceEnabled ? onTrace : undefined, onError)
       }
     }
 
     if (buffer.trim()) {
       for (const line of buffer.split('\n')) {
-        parseSseDataLine(line, onToken, onThreadId, traceEnabled ? onTrace : undefined)
+        parseSseDataLine(line, onToken, onThreadId, traceEnabled ? onTrace : undefined, onError)
       }
     }
   } catch (err) {
