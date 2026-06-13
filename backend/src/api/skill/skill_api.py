@@ -1,5 +1,5 @@
 """Skill upload API endpoints."""
-from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_current_user_id, get_db
@@ -44,9 +44,10 @@ async def upload_skills(
     try:
         result = await process_skills_upload(file, db)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:        
         raise
 
 
@@ -63,9 +64,10 @@ async def skill_list(
     try:
         result = await list_skills(db, page, page_size, category, enabled)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:        
         raise
 
 
@@ -83,9 +85,10 @@ async def skill_search(
     try:
         result = await search_skills(db, name, page, page_size, category, enabled)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:        
         raise
 
 
@@ -99,9 +102,10 @@ async def skill_create(
     try:
         result = await create_skill(db, req)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:        
         raise
 
 
@@ -115,9 +119,10 @@ async def skill_get(
     try:
         result = await get_skill(db, skill_id)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:        
         raise
 
 
@@ -132,9 +137,10 @@ async def skill_update(
     try:
         result = await update_skill(db, skill_id, req)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:        
         raise
 
 
@@ -149,9 +155,10 @@ async def skill_toggle(
     try:
         result = await toggle_skill_enabled(db, skill_id, req.enabled)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:        
         raise
 
 
@@ -165,9 +172,10 @@ async def skill_batch_delete(
     try:
         result = await delete_skills_batch(db, req.ids)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:        
         raise
 
 
@@ -181,7 +189,8 @@ async def skill_delete(
     try:
         result = await delete_skill(db, skill_id)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:        
         raise

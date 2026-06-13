@@ -116,7 +116,7 @@ class MilvusVectorStore(BaseVectorStore):
             # 删除旧集合（可能由旧版 Schema 创建，与新版本不兼容）
             if utility.has_collection(collection_name):
                 logger.info("Dropping existing collection: %s", collection_name)
-                utility.drop_collection(collection_name)
+                await utility.drop_collection(collection_name)
 
             fields = [
                 FieldSchema(name="id", dtype=DataType.VARCHAR, is_primary=True, max_length=36),
@@ -135,7 +135,7 @@ class MilvusVectorStore(BaseVectorStore):
             collection = Collection(name=collection_name, schema=schema)
 
             # Dense vector index (COSINE)
-            collection.create_index(
+            await collection.create_index(
                 field_name="embedding",
                 index_params={
                     "metric_type": "COSINE",
@@ -146,7 +146,7 @@ class MilvusVectorStore(BaseVectorStore):
 
             # Scalar indices
             for field_name in ["doc_id", "kb_id"]:
-                collection.create_index(
+                await collection.create_index(
                     field_name=field_name,
                     index_params={"index_type": "INVERTED"},
                 )
@@ -164,7 +164,7 @@ class MilvusVectorStore(BaseVectorStore):
         collection_name = self._collection_name(kb_id)
         try:
             from pymilvus import utility
-            utility.drop_collection(collection_name)
+            await utility.drop_collection(collection_name)
             self._collections.pop(kb_id, None)
             logger.info("Milvus collection deleted: %s", collection_name)
         except Exception as e:

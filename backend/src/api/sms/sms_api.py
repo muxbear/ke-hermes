@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from api.deps import get_store
 from api.sms.service import SendSmsRequest, send_sms
@@ -16,7 +16,9 @@ async def send(
     try:
         result = await send_sms(req, store)
         return ok(result)
+    except HTTPException as e:
+        # 类型检查器知道这里的 e 是 HTTPException，拥有 status_code 和 detail
+        return error(e.status_code, e.detail)
     except Exception as e:
-        if hasattr(e, "status_code"):
-            return error(e.status_code, e.detail)
+        # 处理其他未知异常
         raise

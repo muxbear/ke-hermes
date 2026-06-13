@@ -1,5 +1,5 @@
 """Tool management API endpoints."""
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_current_user_id, get_db
@@ -38,9 +38,10 @@ async def tool_list(
     try:
         result = await list_tools(db, page, page_size, source, category, status, keyword)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:    
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:        
         raise
 
 
@@ -53,9 +54,10 @@ async def tools_by_agent(
     try:
         result = await get_tools_by_agent(db, agent_id)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:        
         raise
 
 
@@ -69,9 +71,10 @@ async def tool_create(
     try:
         result = await create_tool(db, req)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:        
         raise
 
 
@@ -84,9 +87,10 @@ async def tool_get(
     try:
         result = await get_tool(db, tool_id)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:        
         raise
 
 
@@ -101,9 +105,10 @@ async def tool_update(
     try:
         result = await update_tool(db, tool_id, req)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:        
         raise
 
 
@@ -118,9 +123,10 @@ async def tool_toggle(
     try:
         result = await toggle_tool_enabled(db, tool_id, req.enabled)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:        
         raise
 
 
@@ -134,9 +140,10 @@ async def tool_delete(
     try:
         result = await delete_tool(db, tool_id)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:        
         raise
 
 
