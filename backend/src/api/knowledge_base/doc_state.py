@@ -123,6 +123,23 @@ class BM25State(DocState):
         import logging
         _logger = logging.getLogger(__name__)
         try:
+            # Inject doc-level metadata into every chunk before storing
+            doc_name = ctx.file_path.replace("\\", "/").rsplit("/", 1)[-1]
+            header_keys = {"h1", "h2", "h3", "h4", "h5", "h6"}
+            for i, chunk in enumerate(ctx.chunks):
+                if not chunk.metadata.get("doc_id"):
+                    chunk.metadata["doc_id"] = ctx.doc_id
+                if not chunk.metadata.get("chunk_index"):
+                    chunk.metadata["chunk_index"] = i
+                chunk.metadata["doc_name"] = doc_name
+                chunk.metadata["doc_type"] = ctx.file_type
+                # Collect header/section info from splitter metadata
+                extra_meta = chunk.metadata.get("metadata_", {})
+                for k in header_keys:
+                    if k in chunk.metadata:
+                        extra_meta[k] = chunk.metadata[k]
+                chunk.metadata["metadata_"] = extra_meta
+
             await pipeline.vector_store.add_documents(ctx.kb_id, ctx.chunks, ctx.embeddings)
             await ctx.transition_to(ExtractingState(), "extracting", 70)
         except Exception as e:

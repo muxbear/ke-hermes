@@ -1,0 +1,3 @@
+This is a plain text test file.
+It has multiple lines.
+Testing the TextLoaderStrategy.

@@ -236,6 +236,19 @@ export interface CreateKBRequest {
   config: IndexConfig
 }
 
+// 文档切片
+export interface DocChunk {
+  id: string
+  index: number
+  content: string
+  tokenCount: number
+  charCount: number
+  pageRef: string
+  section: string
+  entities: string[]
+  edited?: boolean
+}
+
 // 上传文档请求
 export interface UploadDocRequest {
   name: string

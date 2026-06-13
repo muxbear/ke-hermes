@@ -54,7 +54,7 @@ def _get_file_type(filename: str) -> str:
     return ext if ext in ALLOWED_EXTENSIONS else "unknown"
 
 
-def compute_stages(status: str) -> list[dict]:
+def compute_stages(status: str, error_message: str | None = None) -> list[dict]:
     """根据状态计算 8 阶段状态。"""
     status_order = ["queued", "parsing", "chunking", "embedding", "bm25", "extracting", "indexed"]
     stages = []
@@ -69,11 +69,44 @@ def compute_stages(status: str) -> list[dict]:
             stages.append({"name": name, "status": "pending", "pct": 0})
 
     if status == "failed":
-        failed_idx = max(0, current_idx) if current_idx >= 0 else 1
+        failed_idx = _infer_failed_stage_index(error_message)
         if failed_idx < len(stages):
             stages[failed_idx]["status"] = "failed"
+            # Mark preceding stages as done (they succeeded before the failure)
+            for j in range(failed_idx):
+                stages[j]["status"] = "done"
+                stages[j]["pct"] = 100
 
     return stages
+
+
+def _infer_failed_stage_index(error_message: str | None) -> int:
+    """从错误信息中推断失败阶段索引。
+
+    映射关系（错误消息关键词 → STAGE_NAMES 索引）：
+    - "解析" → 1
+    - "切片" → 2
+    - "向量化" → 3
+    - "BM25" → 4
+    - "实体" → 5
+    - "关系" → 6
+    """
+    if not error_message:
+        return 1  # 兜底：无法推断时默认解析阶段
+    msg = error_message
+    if "向量化" in msg:
+        return 3
+    if "切片" in msg:
+        return 2
+    if "BM25" in msg:
+        return 4
+    if "实体" in msg:
+        return 5
+    if "关系" in msg:
+        return 6
+    if "解析" in msg:
+        return 1
+    return 1  # 兜底
 
 
 # ══════════════════════════════════════════════════════════════
@@ -389,7 +422,7 @@ async def list_documents(
             uploaded_at=r.uploaded_at,
             indexed_at=r.indexed_at,
             error_message=r.error_message,
-            stages=[DocStageInfo(**s) for s in compute_stages(r.status or "queued")],
+            stages=[DocStageInfo(**s) for s in compute_stages(r.status or "queued", r.error_message)],
         ))
 
     return {
@@ -428,7 +461,7 @@ async def get_document(
         uploaded_at=doc.uploaded_at,
         indexed_at=doc.indexed_at,
         error_message=doc.error_message,
-        stages=[DocStageInfo(**s) for s in compute_stages(doc.status or "queued")],
+        stages=[DocStageInfo(**s) for s in compute_stages(doc.status or "queued", doc.error_message)],
     )
 
 

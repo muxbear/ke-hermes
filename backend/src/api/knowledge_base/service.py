@@ -242,7 +242,7 @@ async def get_indexing_activity(
     ]
 
 
-def compute_stages(status: str, progress: int) -> list[dict]:
+def compute_stages(status: str, progress: int, error_message: str | None = None) -> list[dict]:
     """根据文档状态和进度计算 8 阶段状态。"""
     status_order = [
         "queued", "parsing", "chunking", "embedding", "bm25", "extracting", "indexed",
@@ -260,11 +260,34 @@ def compute_stages(status: str, progress: int) -> list[dict]:
             stages.append({"name": name, "status": "pending", "pct": 0})
 
     if status == "failed":
-        # Mark the current stage as failed
-        failed_idx = min(current_idx, len(stages) - 1) if current_idx >= 0 else 0
-        stages[failed_idx]["status"] = "failed"
+        failed_idx = _infer_failed_stage_index(error_message)
+        if failed_idx < len(stages):
+            stages[failed_idx]["status"] = "failed"
+            for j in range(failed_idx):
+                stages[j]["status"] = "done"
+                stages[j]["pct"] = 100
 
     return stages
+
+
+def _infer_failed_stage_index(error_message: str | None) -> int:
+    """从错误信息中推断失败阶段索引。"""
+    if not error_message:
+        return 1
+    msg = error_message
+    if "向量化" in msg:
+        return 3
+    if "切片" in msg:
+        return 2
+    if "BM25" in msg:
+        return 4
+    if "实体" in msg:
+        return 5
+    if "关系" in msg:
+        return 6
+    if "解析" in msg:
+        return 1
+    return 1
 
 
 async def reindex_kb(

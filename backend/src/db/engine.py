@@ -1,12 +1,13 @@
 import logging
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from agent.config import settings
 
 logger = logging.getLogger(__name__)
 
-async_engine = None
+async_engine: AsyncEngine | None = None
+
 if settings.DATABASE_BACKEND == "sqlite":
     async_engine = create_async_engine(settings.DATABASE_URL, echo=False)
 elif settings.DATABASE_BACKEND == "postgres":
@@ -16,7 +17,8 @@ elif settings.DATABASE_BACKEND == "postgres":
 else:
     raise Exception("DATABASE_BACKEND must be sqlite or postgres.")
 
-async_session = async_sessionmaker(async_engine, expire_on_commit=False)
+
+async_session = async_sessionmaker[AsyncSession](async_engine, expire_on_commit=False)
 
 
 async def get_db():
@@ -34,6 +36,9 @@ async def get_db():
 async def init_db():
     from db.base import Base
     from db.models.cron_job import CronJob  # noqa: F401  ensure table is registered
+
+    # 断言 async_engine 不为 None，类型检查器会据此收窄类型
+    assert async_engine is not None, "数据库引擎没有被初始化"
 
     logger.info("Initializing database...")
     async with async_engine.begin() as conn:

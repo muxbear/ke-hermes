@@ -90,7 +90,7 @@ async def create_store(redis_url: str = "") -> KeyValueStore:
         import redis.asyncio as aioredis
 
         r = aioredis.from_url(redis_url)
-        await r.ping()
+        r.ping()
         logger.info("Redis connected at %s", redis_url)
 
         class RedisStore(KeyValueStore):

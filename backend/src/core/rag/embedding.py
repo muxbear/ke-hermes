@@ -17,7 +17,10 @@ class _DashScopeEmbeddings:
     """DashScope Embedding 模型（兼容 OpenAI API 格式的文本向量化）。
 
     直接使用 httpx 发送原始文本，避免 OpenAIEmbeddings 的 tokenize 行为。
+    DashScope API 单次批量上限 10 条，自动分批。
     """
+
+    _BATCH_SIZE = 10  # DashScope 兼容模式 API 限制
 
     def __init__(self, model: str, api_base: str, api_key: str, dimensions: int | None = None):
         self.model = model
@@ -25,26 +28,41 @@ class _DashScopeEmbeddings:
         self._key = api_key
         self._dimensions = dimensions
 
-    async def aembed_documents(self, texts: list[str]) -> list[list[float]]:
-        """批量向量化文本。"""
+    async def _embed_batch(self, texts: list[str], client: httpx.AsyncClient) -> list[list[float]]:
+        """发送单次 embedding 请求（≤_BATCH_SIZE 条）。"""
         payload: dict = {"model": self.model, "input": texts}
         if self._dimensions:
             payload["dimensions"] = self._dimensions
 
-        async with httpx.AsyncClient(timeout=60) as client:
-            resp = await client.post(
-                f"{self._base}/embeddings",
-                headers={
-                    "Authorization": f"Bearer {self._key}",
-                    "Content-Type": "application/json",
-                },
-                json=payload,
-            )
+        resp = await client.post(
+            f"{self._base}/embeddings",
+            headers={
+                "Authorization": f"Bearer {self._key}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+        )
         resp.raise_for_status()
         data = resp.json()
         if "data" not in data:
             raise RuntimeError(f"Embedding API error: {data}")
         return [item["embedding"] for item in data["data"]]
+
+    async def aembed_documents(self, texts: list[str]) -> list[list[float]]:
+        """批量向量化文本，自动分片以符合 API 限制。"""
+        if len(texts) <= self._BATCH_SIZE:
+            async with httpx.AsyncClient(timeout=60) as client:
+                return await self._embed_batch(texts, client)
+
+        results: list[list[float]] = []
+        async with httpx.AsyncClient(timeout=120) as client:
+            for i in range(0, len(texts), self._BATCH_SIZE):
+                batch = texts[i:i + self._BATCH_SIZE]
+                batch_results = await self._embed_batch(batch, client)
+                results.extend(batch_results)
+                logger.debug("Embedded batch %d/%d", i // self._BATCH_SIZE + 1,
+                           (len(texts) + self._BATCH_SIZE - 1) // self._BATCH_SIZE)
+        return results
 
     async def aembed_query(self, text: str) -> list[float]:
         """单条文本向量化。"""

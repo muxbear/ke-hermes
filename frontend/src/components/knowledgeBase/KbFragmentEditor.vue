@@ -1,23 +1,12 @@
 <script setup lang="ts">
-import { ref, reactive, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   ChevronLeft, Search, Trash2, Save, X, Check,
   PencilLine, CheckCircle2, Layers,
 } from 'lucide-vue-next'
-import type { KBDoc } from '@/types/knowledgeBase'
-
-interface DocChunk {
-  id: string
-  index: number
-  content: string
-  tokenCount: number
-  charCount: number
-  pageRef: string
-  section: string
-  entities: string[]
-  edited?: boolean
-}
+import type { KBDoc, DocChunk } from '@/types/knowledgeBase'
+import { fetchDocumentChunks, updateChunkContent, deleteChunk, batchChunkOp } from '@/services/knowledgeBaseApi'
 
 const props = defineProps<{
   doc: KBDoc
@@ -28,51 +17,22 @@ const emit = defineEmits<{
   back: []
 }>()
 
-// ─── Mock data ────────────────────────────────────────────────────────────────
-const CHUNK_SAMPLE_CONTENTS = [
-  '本手册旨在规范公司员工的行为准则，明确各项管理制度，保障员工权益，促进公司健康有序发展。所有员工应认真阅读并严格遵守本手册中的各项规定。',
-  '员工工作时间为上午9:00至下午18:00，午休时间为12:00至13:00。弹性工作制员工须与直属上司协商确定具体时间安排，并报 HR 备案后执行。',
-  '公司实行标准工时制，每周工作5天，每天工作8小时。如需加班，须提前申请并经上级审批。法定节假日加班按国家规定执行三倍工资标准。',
-  '基本工资由职位级别、工作年限、个人能力等因素综合确定。绩效奖金根据季度考核结果发放，优秀员工可获得月薪的50%-100%作为额外奖励。',
-  '公司为全体员工提供五险一金，包括养老保险、医疗保险、失业保险、工伤保险、生育保险及住房公积金。具体缴纳比例按当地政策执行。',
-  '员工每年享有带薪年假，具体天数根据工作年限计算：满1年5天，满3年10天，满5年15天。年假须提前一周申请，由部门主管审批。',
-  '所有员工必须遵守公司的保密制度，不得泄露公司的商业秘密、技术资料、客户信息等。离职时需签署保密协议，并归还所有公司资产。',
-  '绩效考核采用KPI与OKR相结合的方式，每季度进行一次正式考核。考核结果分为优秀、良好、合格、待改进四个等级。',
-  '公司鼓励员工持续学习与发展，每年提供专业培训经费5000元/人。员工可申请参加外部培训、行业会议或学历提升课程。',
-]
-const CHUNK_SECTIONS = [
-  '第一章 总则', '第二章 工作制度', '第三章 薪酬福利',
-  '第四章 绩效考核', '第五章 行为规范', '第六章 保密制度',
-]
-const CHUNK_ENTITY_SETS = [
-  ['员工', '公司'], ['HR', '工作制度'], ['薪酬', '绩效'],
-  ['五险一金', '福利'], ['年假', '休假'], ['考核', 'KPI'],
-]
-
-function generateMockChunks(): DocChunk[] {
-  const count = Math.min(Math.max(props.doc.chunks || 12, 1), 20)
-  return Array.from({ length: count }, (_, i) => {
-    const content = CHUNK_SAMPLE_CONTENTS[i % CHUNK_SAMPLE_CONTENTS.length]
-    return {
-      id: `${props.doc.id}-ck${i + 1}`,
-      index: i + 1,
-      content,
-      tokenCount: Math.floor(content.length / 2.5 + (i % 3) * 15),
-      charCount: content.length,
-      pageRef: `第 ${Math.floor(i / 2) + 1} 页`,
-      section: CHUNK_SECTIONS[Math.floor(i / 2) % CHUNK_SECTIONS.length],
-      entities: [...CHUNK_ENTITY_SETS[i % CHUNK_ENTITY_SETS.length]],
-      edited: false,
-    }
-  })
-}
-
-const chunks = ref<DocChunk[]>(generateMockChunks())
+const chunks = ref<DocChunk[]>([])
 const search = ref('')
 const editingId = ref<string | null>(null)
 const editContent = ref('')
 const selected = ref<Set<string>>(new Set())
 const savedCount = ref(0)
+
+onMounted(async () => {
+  if (!props.kbId) return
+  try {
+    chunks.value = await fetchDocumentChunks(props.kbId, props.doc.id)
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : '加载切片失败'
+    ElMessage.error(msg)
+  }
+})
 
 const filtered = computed(() => {
   const q = search.value.trim().toLowerCase()
@@ -113,17 +73,29 @@ function cancelEdit() {
   editContent.value = ''
 }
 
-function deleteChunk(id: string) {
-  chunks.value = chunks.value.filter((c) => c.id !== id)
-  const sel = new Set(selected.value)
-  sel.delete(id)
-  selected.value = sel
+async function handleDeleteChunk(id: string) {
+  if (!props.kbId) return
+  try {
+    await deleteChunk(props.kbId, props.doc.id, id)
+    chunks.value = chunks.value.filter((c) => c.id !== id)
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : '删除失败'
+    ElMessage.error(msg)
+  }
 }
 
-function deleteSelected() {
-  const ids = new Set(selected.value)
-  chunks.value = chunks.value.filter((c) => !ids.has(c.id))
-  selected.value = new Set()
+async function deleteSelected() {
+  if (!props.kbId || selected.value.size === 0) return
+  try {
+    const ids = [...selected.value]
+    await batchChunkOp(props.kbId, props.doc.id, 'delete', { chunkIds: ids })
+    chunks.value = chunks.value.filter((c) => !selected.value.has(c.id))
+    selected.value = new Set()
+    ElMessage.success(`已删除 ${ids.length} 个切片`)
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : '批量删除失败'
+    ElMessage.error(msg)
+  }
 }
 
 function toggleSelect(id: string) {
@@ -144,12 +116,22 @@ function toggleSelectAll() {
   }
 }
 
-function saveAll() {
-  const count = dirtyCount.value
-  chunks.value = chunks.value.map((c) => ({ ...c, edited: false }))
-  savedCount.value = count
-  ElMessage.success(`已保存 ${count} 处分片修改`)
-  setTimeout(() => { savedCount.value = 0 }, 2500)
+async function saveAll() {
+  if (!props.kbId) return
+  const changed = chunks.value.filter((c) => c.edited)
+  if (changed.length === 0) return
+  try {
+    await batchChunkOp(props.kbId, props.doc.id, 'save_all', {
+      chunks: changed.map((c) => ({ id: c.id, content: c.content })),
+    })
+    chunks.value = chunks.value.map((c) => ({ ...c, edited: false }))
+    savedCount.value = changed.length
+    ElMessage.success(`已保存 ${changed.length} 处分片修改`)
+    setTimeout(() => { savedCount.value = 0 }, 2500)
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : '保存失败'
+    ElMessage.error(msg)
+  }
 }
 </script>
 
@@ -290,7 +272,7 @@ function saveAll() {
                 v-if="editingId !== chunk.id"
                 class="row-action-btn delete-action"
                 title="删除"
-                @click="deleteChunk(chunk.id)"
+                @click="handleDeleteChunk(chunk.id)"
               >
                 <Trash2 :size="14" />
               </button>

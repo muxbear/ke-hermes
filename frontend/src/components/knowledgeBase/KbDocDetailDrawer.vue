@@ -1,23 +1,12 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import {
   ChevronLeft, Search, Layers, Network, ChevronUp, ChevronDown,
   Copy, ScrollText, Activity, Check,
 } from 'lucide-vue-next'
-import type { KBDoc, DocType } from '@/types/knowledgeBase'
+import type { KBDoc, DocChunk } from '@/types/knowledgeBase'
+import { fetchDocumentChunks } from '@/services/knowledgeBaseApi'
 import KbDocStatusBadge from './KbDocStatusBadge.vue'
-
-interface DocChunk {
-  id: string
-  index: number
-  content: string
-  tokenCount: number
-  charCount: number
-  pageRef: string
-  section: string
-  entities: string[]
-  edited?: boolean
-}
 
 const props = defineProps<{
   doc: KBDoc
@@ -28,53 +17,23 @@ const emit = defineEmits<{
   back: []
 }>()
 
-// ─── Mock data ────────────────────────────────────────────────────────────────
-const CHUNK_SAMPLE_CONTENTS = [
-  '本手册旨在规范公司员工的行为准则，明确各项管理制度，保障员工权益，促进公司健康有序发展。所有员工应认真阅读并严格遵守本手册中的各项规定。',
-  '员工工作时间为上午9:00至下午18:00，午休时间为12:00至13:00。弹性工作制员工须与直属上司协商确定具体时间安排，并报 HR 备案后执行。',
-  '公司实行标准工时制，每周工作5天，每天工作8小时。如需加班，须提前申请并经上级审批。法定节假日加班按国家规定执行三倍工资标准。',
-  '基本工资由职位级别、工作年限、个人能力等因素综合确定。绩效奖金根据季度考核结果发放，优秀员工可获得月薪的50%-100%作为额外奖励。',
-  '公司为全体员工提供五险一金，包括养老保险、医疗保险、失业保险、工伤保险、生育保险及住房公积金。具体缴纳比例按当地政策执行。',
-  '员工每年享有带薪年假，具体天数根据工作年限计算：满1年5天，满3年10天，满5年15天。年假须提前一周申请，由部门主管审批。',
-  '所有员工必须遵守公司的保密制度，不得泄露公司的商业秘密、技术资料、客户信息等。离职时需签署保密协议，并归还所有公司资产。',
-  '绩效考核采用KPI与OKR相结合的方式，每季度进行一次正式考核。考核结果分为优秀、良好、合格、待改进四个等级。',
-  '公司鼓励员工持续学习与发展，每年提供专业培训经费5000元/人。员工可申请参加外部培训、行业会议或学历提升课程。',
-]
-const CHUNK_SECTIONS = [
-  '第一章 总则', '第二章 工作制度', '第三章 薪酬福利',
-  '第四章 绩效考核', '第五章 行为规范', '第六章 保密制度',
-]
-const CHUNK_ENTITY_SETS = [
-  ['员工', '公司'], ['HR', '工作制度'], ['薪酬', '绩效'],
-  ['五险一金', '福利'], ['年假', '休假'], ['考核', 'KPI'],
-]
-
-function generateMockChunks(): DocChunk[] {
-  const count = Math.min(Math.max(props.doc.chunks || 12, 1), 20)
-  return Array.from({ length: count }, (_, i) => {
-    const content = CHUNK_SAMPLE_CONTENTS[i % CHUNK_SAMPLE_CONTENTS.length]
-    return {
-      id: `${props.doc.id}-ck${i + 1}`,
-      index: i + 1,
-      content,
-      tokenCount: Math.floor(content.length / 2.5 + (i % 3) * 15),
-      charCount: content.length,
-      pageRef: `第 ${Math.floor(i / 2) + 1} 页`,
-      section: CHUNK_SECTIONS[Math.floor(i / 2) % CHUNK_SECTIONS.length],
-      entities: [...CHUNK_ENTITY_SETS[i % CHUNK_ENTITY_SETS.length]],
-      edited: false,
-    }
-  })
-}
-
-const docTypeIcons: Record<DocType, string> = {
-  pdf: 'pdf', md: 'md', docx: 'docx', csv: 'csv', image: 'image', html: 'html',
-}
-
-const chunks = ref<DocChunk[]>(generateMockChunks())
+const chunks = ref<DocChunk[]>([])
 const search = ref('')
-const selectedChunk = ref<DocChunk>(chunks.value[0])
+const selectedChunk = ref<DocChunk | null>(null)
 const copiedId = ref<string | null>(null)
+const loading = ref(true)
+
+onMounted(async () => {
+  if (!props.kbId) return
+  try {
+    chunks.value = await fetchDocumentChunks(props.kbId, props.doc.id)
+    if (chunks.value.length > 0) {
+      selectedChunk.value = chunks.value[0]
+    }
+  } finally {
+    loading.value = false
+  }
+})
 
 const filtered = computed(() => {
   const q = search.value.trim().toLowerCase()

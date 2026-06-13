@@ -33,6 +33,21 @@ class BaseVectorStore(ABC):
         """按文档 ID 删除所有相关向量。"""
 
     @abstractmethod
+    async def get_chunks_by_doc_id(self, kb_id: str, doc_id: str) -> list[dict]:
+        """按文档 ID 查询所有切片，按 chunk_index 排序。"""
+
+    @abstractmethod
+    async def delete_chunk_by_id(self, kb_id: str, chunk_id: str) -> None:
+        """按切片 ID 删除单个切片。"""
+
+    @abstractmethod
+    async def update_chunk(
+        self, kb_id: str, chunk_id: str, new_text: str,
+        new_embedding: list[float],
+    ) -> None:
+        """更新切片文本和向量。"""
+
+    @abstractmethod
     async def similarity_search(
         self, kb_id: str, query_embedding: list[float], top_k: int
     ) -> list[tuple[str, float]]:
@@ -205,6 +220,54 @@ class MilvusVectorStore(BaseVectorStore):
         collection.flush()
         logger.info("Milvus deleted chunks for doc=%s in kb=%s", doc_id, kb_id)
 
+    async def _get_collection(self, kb_id: str):
+        """获取或加载 Milvus Collection。"""
+        await self._ensure_connected()
+        collection = self._collections.get(kb_id)
+        if collection is None:
+            from pymilvus import Collection
+            collection = Collection(name=self._collection_name(kb_id))
+            collection.load()
+            self._collections[kb_id] = collection
+        return collection
+
+    _CHUNK_OUTPUT_FIELDS = [
+        "id", "doc_id", "kb_id", "chunk_index", "chunk_text",
+        "doc_name", "doc_type", "metadata_",
+    ]
+
+    async def get_chunks_by_doc_id(self, kb_id: str, doc_id: str) -> list[dict]:
+        collection = await self._get_collection(kb_id)
+        results = collection.query(
+            expr=f'doc_id == "{doc_id}"',
+            output_fields=self._CHUNK_OUTPUT_FIELDS,
+        )
+        results.sort(key=lambda r: r.get("chunk_index", 0))
+        logger.info("Milvus queried %d chunks for doc=%s", len(results), doc_id)
+        return results
+
+    async def delete_chunk_by_id(self, kb_id: str, chunk_id: str) -> None:
+        collection = await self._get_collection(kb_id)
+        collection.delete(f'id == "{chunk_id}"')
+        collection.flush()
+        logger.info("Milvus deleted chunk=%s in kb=%s", chunk_id, kb_id)
+
+    async def update_chunk(
+        self, kb_id: str, chunk_id: str, new_text: str,
+        new_embedding: list[float],
+    ) -> None:
+        import time
+        collection = await self._get_collection(kb_id)
+        now_ms = int(time.time() * 1000)
+        collection.upsert([{
+            "id": chunk_id,
+            "chunk_text": new_text[:65535],
+            "embedding": new_embedding,
+            "created_at": now_ms,
+        }])
+        collection.flush()
+        logger.info("Milvus updated chunk=%s in kb=%s", chunk_id, kb_id)
+
     async def similarity_search(
         self, kb_id: str, query_embedding: list[float], top_k: int
     ) -> list[tuple[str, float]]:
@@ -223,25 +286,99 @@ class MilvusVectorStore(BaseVectorStore):
 
 
 class NoopVectorStore(BaseVectorStore):
-    """空实现——开发/测试环境下的占位向量数据库。
+    """开发/测试环境下的进程内向量数据库。
 
-    所有操作静默成功，日志记录警告。
+    切片数据保存在进程内存中，进程重启后丢失。不支持向量搜索。
     """
 
+    def __init__(self):
+        # key: f"{kb_id}:{doc_id}" → list[dict]
+        self._chunks: dict[str, list[dict]] = {}
+
+    @staticmethod
+    def _make_key(kb_id: str, doc_id: str) -> str:
+        return f"{kb_id}:{doc_id}"
+
     async def create_collection(self, kb_id: str, dim: int, enable_bm25: bool = True) -> None:
-        logger.warning("NoopVectorStore: create_collection kb=%s dim=%d", kb_id, dim)
+        logger.info("NoopVectorStore: create_collection kb=%s dim=%d", kb_id, dim)
 
     async def delete_collection(self, kb_id: str) -> None:
-        logger.warning("NoopVectorStore: delete_collection kb=%s", kb_id)
+        prefix = f"{kb_id}:"
+        keys = [k for k in self._chunks if k.startswith(prefix)]
+        for k in keys:
+            del self._chunks[k]
+        logger.info("NoopVectorStore: delete_collection kb=%s removed=%d", kb_id, len(keys))
 
     async def add_documents(
         self, kb_id: str, documents: list[Document], embeddings: list[list[float]]
     ) -> list[str]:
-        logger.warning("NoopVectorStore: add_documents kb=%s count=%d", kb_id, len(documents))
-        return [f"chunk-{kb_id}-{i}" for i in range(len(documents))]
+        import uuid
+        chunk_ids: list[str] = []
+        by_doc: dict[str, list[dict]] = {}
+
+        for i, doc in enumerate(documents):
+            chunk_id = str(uuid.uuid4())
+            chunk_ids.append(chunk_id)
+            doc_id = doc.metadata.get("doc_id", "")
+            key = self._make_key(kb_id, doc_id)
+            record = {
+                "id": chunk_id,
+                "doc_id": doc_id,
+                "kb_id": kb_id,
+                "chunk_index": doc.metadata.get("chunk_index", i),
+                "chunk_text": doc.page_content[:65535],
+                "doc_name": doc.metadata.get("doc_name", ""),
+                "doc_type": doc.metadata.get("doc_type", ""),
+                "metadata_": doc.metadata.get("metadata_", {}),
+            }
+            if key not in by_doc:
+                by_doc[key] = []
+            by_doc[key].append(record)
+
+        for key, records in by_doc.items():
+            if key not in self._chunks:
+                self._chunks[key] = []
+            self._chunks[key].extend(records)
+
+        logger.info("NoopVectorStore: add_documents kb=%s total=%d", kb_id, len(chunk_ids))
+        return chunk_ids
 
     async def delete_by_doc_id(self, kb_id: str, doc_id: str) -> None:
-        logger.warning("NoopVectorStore: delete_by_doc_id kb=%s doc=%s", kb_id, doc_id)
+        key = self._make_key(kb_id, doc_id)
+        count = len(self._chunks.pop(key, []))
+        logger.info("NoopVectorStore: delete_by_doc_id kb=%s doc=%s removed=%d",
+                    kb_id, doc_id, count)
+
+    async def get_chunks_by_doc_id(self, kb_id: str, doc_id: str) -> list[dict]:
+        key = self._make_key(kb_id, doc_id)
+        chunks = list(self._chunks.get(key, []))
+        chunks.sort(key=lambda r: r.get("chunk_index", 0))
+        logger.info("NoopVectorStore: get_chunks_by_doc_id kb=%s doc=%s count=%d",
+                    kb_id, doc_id, len(chunks))
+        return chunks
+
+    async def delete_chunk_by_id(self, kb_id: str, chunk_id: str) -> None:
+        for key, records in self._chunks.items():
+            if key.startswith(f"{kb_id}:"):
+                before = len(records)
+                self._chunks[key] = [r for r in records if r.get("id") != chunk_id]
+                if len(self._chunks[key]) < before:
+                    logger.info("NoopVectorStore: delete_chunk_by_id kb=%s chunk=%s",
+                                kb_id, chunk_id)
+                    return
+
+    async def update_chunk(
+        self, kb_id: str, chunk_id: str, new_text: str,
+        new_embedding: list[float],
+    ) -> None:
+        for key, records in self._chunks.items():
+            if key.startswith(f"{kb_id}:"):
+                for r in records:
+                    if r.get("id") == chunk_id:
+                        r["chunk_text"] = new_text[:65535]
+                        logger.info("NoopVectorStore: update_chunk kb=%s chunk=%s",
+                                    kb_id, chunk_id)
+                        return
 
     async def similarity_search(
         self, kb_id: str, query_embedding: list[float], top_k: int

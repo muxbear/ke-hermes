@@ -6,7 +6,7 @@ from api.auth import router as auth_router
 from api.captcha import router as captcha_router
 from api.conversation import router as conversation_router
 from api.email import router as email_router
-from api.knowledge_base import kb_router, doc_router, graph_router
+from api.knowledge_base import chunk_router, doc_router, graph_router, kb_router
 from api.mcp import router as mcp_router
 from api.oauth import router as oauth_router
 from api.providers import router as providers_router
@@ -30,5 +30,6 @@ router.include_router(mcp_router)
 router.include_router(kb_router)
 router.include_router(doc_router)
 router.include_router(graph_router)
+router.include_router(chunk_router)
 
 __all__ = ["router"]

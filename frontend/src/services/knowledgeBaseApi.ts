@@ -3,6 +3,7 @@ import instance from './request'
 import type {
   KB,
   KBDoc,
+  DocChunk,
   CreateKBRequest,
   SearchResult,
   IndexConfig,
@@ -334,4 +335,107 @@ export async function searchKnowledgeBase(
   _mode: string,
 ): Promise<SearchResult[]> {
   return []
+}
+
+// ─── 切片管理 ─────────────────────────────────────────────────────────────
+
+interface RawChunk {
+  id: string
+  index: number
+  content: string
+  token_count: number
+  char_count: number
+  page_ref: string
+  section: string
+  entities: string[]
+}
+
+function mapChunk(raw: RawChunk): DocChunk {
+  return {
+    id: raw.id,
+    index: raw.index,
+    content: raw.content,
+    tokenCount: raw.token_count,
+    charCount: raw.char_count,
+    pageRef: raw.page_ref || '',
+    section: raw.section || '',
+    entities: raw.entities || [],
+    edited: false,
+  }
+}
+
+export async function fetchDocumentChunks(
+  kbId: string,
+  docId: string,
+  search?: string,
+): Promise<DocChunk[]> {
+  const res = await instance.get(
+    `/knowledge-bases/${kbId}/documents/${docId}/chunks`,
+    { params: search ? { search } : {} },
+  )
+  return (res.data.data as RawChunk[]).map(mapChunk)
+}
+
+export async function fetchChunkDetail(
+  kbId: string,
+  docId: string,
+  chunkId: string,
+): Promise<{ chunk: DocChunk; prevChunk: DocChunk | null; nextChunk: DocChunk | null }> {
+  const res = await instance.get(
+    `/knowledge-bases/${kbId}/documents/${docId}/chunks/${chunkId}`,
+  )
+  const d = res.data.data as {
+    chunk: RawChunk
+    prev_chunk: RawChunk | null
+    next_chunk: RawChunk | null
+  }
+  return {
+    chunk: mapChunk(d.chunk),
+    prevChunk: d.prev_chunk ? mapChunk(d.prev_chunk) : null,
+    nextChunk: d.next_chunk ? mapChunk(d.next_chunk) : null,
+  }
+}
+
+export async function updateChunkContent(
+  kbId: string,
+  docId: string,
+  chunkId: string,
+  content: string,
+): Promise<DocChunk> {
+  const res = await instance.put(
+    `/knowledge-bases/${kbId}/documents/${docId}/chunks/${chunkId}`,
+    { content },
+  )
+  return mapChunk(res.data.data as RawChunk)
+}
+
+export async function deleteChunk(
+  kbId: string,
+  docId: string,
+  chunkId: string,
+): Promise<boolean> {
+  const res = await instance.delete(
+    `/knowledge-bases/${kbId}/documents/${docId}/chunks/${chunkId}`,
+  )
+  return res.data.code === 0
+}
+
+export async function batchChunkOp(
+  kbId: string,
+  docId: string,
+  action: 'save_all' | 'delete',
+  params?: { chunks?: { id: string; content: string }[]; chunkIds?: string[] },
+): Promise<{ saved: number; deleted: number }> {
+  const body: Record<string, unknown> = { action }
+  if (action === 'save_all' && params?.chunks) {
+    body.chunks = params.chunks.map((c) => ({ id: c.id, content: c.content }))
+  }
+  if (action === 'delete' && params?.chunkIds) {
+    body.chunk_ids = params.chunkIds
+  }
+  const res = await instance.post(
+    `/knowledge-bases/${kbId}/documents/${docId}/chunks/batch`,
+    body,
+  )
+  return res.data.data as { saved: number; deleted: number }
 }

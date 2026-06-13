@@ -156,6 +156,40 @@ class GraphDataResponse(BaseModel):
     relations: list[RelationResponse]
 
 
+# ─── Chunk ───────────────────────────────────────────────────────────────────
+
+
+class ChunkResponse(BaseModel):
+    """切片响应（对应前端 DocChunk 接口）。"""
+    id: str
+    index: int
+    content: str
+    token_count: int
+    char_count: int
+    page_ref: str = ""
+    section: str = ""
+    entities: list[str] = []
+
+
+class ChunkDetailResponse(BaseModel):
+    """切片详情（含上下文）。"""
+    chunk: ChunkResponse
+    prev_chunk: ChunkResponse | None = None
+    next_chunk: ChunkResponse | None = None
+
+
+class ChunkUpdateRequest(BaseModel):
+    """更新切片请求。"""
+    content: str
+
+
+class BatchChunkRequest(BaseModel):
+    """批量操作请求。"""
+    action: str  # "save_all" | "delete"
+    chunks: list[dict] = []     # [{id, content}, ...]
+    chunk_ids: list[str] = []   # for delete action
+
+
 # ─── Core Response ──────────────────────────────────────────────────────────
 
 class ApiResponse(BaseModel):
