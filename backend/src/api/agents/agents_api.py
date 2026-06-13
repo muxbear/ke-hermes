@@ -1,5 +1,5 @@
 """Agent management API endpoints."""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.agents.schemas import (
@@ -48,9 +48,10 @@ async def agent_list(
     try:
         result = await list_agents(db)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise
 
 
@@ -63,9 +64,10 @@ async def agent_get(
     try:
         result = await get_agent(db, agent_id)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise
 
 
@@ -78,9 +80,10 @@ async def agent_create(
     try:
         result = await create_agent(db, req)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise
 
 
@@ -93,9 +96,10 @@ async def agent_delete(
     try:
         await delete_agent(db, agent_id)
         return ok(None, "Agent deleted successfully")
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise
 
 
@@ -108,9 +112,10 @@ async def agent_toggle_status(
     try:
         result = await toggle_agent_status(db, agent_id)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise
 
 
@@ -123,9 +128,10 @@ async def agent_clone(
     try:
         result = await clone_agent(db, agent_id)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise
 
 
@@ -139,9 +145,10 @@ async def agent_update(
     try:
         result = await update_agent(db, agent_id, req)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise
 
 
@@ -155,9 +162,10 @@ async def agent_add_config(
     try:
         result = await add_agent_config(db, agent_id, req)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise
 
 
@@ -171,9 +179,10 @@ async def agent_remove_config(
     try:
         result = await remove_agent_config(db, agent_id, req)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise
 
 
@@ -187,9 +196,10 @@ async def agent_update_config(
     try:
         result = await update_agent_config(db, agent_id, req)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise
 
 
@@ -202,9 +212,10 @@ async def agent_file_descriptions(
     try:
         result = await list_agent_file_descriptions(db, agent_id)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise
 
 
@@ -218,9 +229,10 @@ async def agent_get_file(
     try:
         result = await get_agent_file(db, agent_id, filename)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise
 
 
@@ -235,9 +247,10 @@ async def agent_save_file(
     try:
         result = await save_agent_file(db, agent_id, filename, req.content)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise
 
 
@@ -250,9 +263,10 @@ async def agent_skills_list(
     try:
         result = await get_agent_skills(db, agent_id)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise
 
 
@@ -266,9 +280,10 @@ async def agent_add_skill(
     try:
         result = await add_skill_to_agent(db, agent_id, req)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise
 
 
@@ -282,9 +297,10 @@ async def agent_remove_skill(
     try:
         await remove_skill_from_agent(db, agent_id, skill_id)
         return ok(None, "Skill removed from agent")
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise
 
 
@@ -297,7 +313,8 @@ async def agent_cron_jobs(
     try:
         result = await get_agent_cron_jobs(db, agent_id)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise

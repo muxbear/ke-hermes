@@ -2,7 +2,8 @@ import logging
 
 from agent.mainagents import create_main_agent
 from agent.sandbox.sandbox_manager import SandboxManager
-from psycopg.rows import dict_row
+from psycopg import AsyncConnection
+from psycopg.rows import DictRow, dict_row
 from psycopg_pool import AsyncConnectionPool
 
 import aiosqlite
@@ -17,7 +18,7 @@ from agent.config import settings
 logger = logging.getLogger(__name__)
 
 _graph = None
-_conn_pool = None
+_conn_pool: AsyncConnectionPool[AsyncConnection[DictRow]] | None = None
 _checkpointer = None
 _store = None
 _sandbox_manager = None
