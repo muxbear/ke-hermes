@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.auth.schemas import AuthResponse
@@ -19,9 +19,10 @@ async def auth_url(
     try:
         url = await get_auth_url(provider, store)
         return ok({"authUrl": url})
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise
 
 
@@ -34,7 +35,8 @@ async def callback(
     try:
         result = await handle_callback(req.provider, req.code, req.state, store, db)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.auth.schemas import (
@@ -42,9 +42,10 @@ async def login_account(
     try:
         result = await account_login(req, db, store, ip=get_client_ip(request))
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise
 
 
@@ -57,9 +58,10 @@ async def login_phone(
     try:
         result = await phone_login(req, db, store)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise
 
 
@@ -72,9 +74,10 @@ async def register_phone_route(
     try:
         result = await register_phone(req, db, store)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise
 
 
@@ -87,9 +90,10 @@ async def register_email_route(
     try:
         result = await register_email(req, db, store)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise
 
 
@@ -106,9 +110,10 @@ async def refresh(
     try:
         result = await refresh_token_svc(req, db)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise
 
 

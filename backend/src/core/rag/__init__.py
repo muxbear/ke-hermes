@@ -3,6 +3,20 @@
 NOTE: 为避免与 core.__init__ 的循环导入，各子模块在使用时按需导入。
 """
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .vector_store import BaseVectorStore, NoopVectorStore
+    from .bm25_index import BM25Indexer
+    from .splitters import ChunkStrategy, ChunkStrategyRegistry, create_chunk_registry
+    from .loaders import (
+        DocumentLoaderRegistry,
+        DocumentLoaderStrategy,
+        FallbackLoaderStrategy,
+        create_default_loader_registry,
+    )
+    from .embedding import get_embedding_model
+
 
 def _lazy_import(name: str):
     """延迟导入以避免循环依赖。"""

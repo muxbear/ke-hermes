@@ -1,6 +1,6 @@
 import time
 import uuid
-from typing import Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 from pydantic import BaseModel, Field
 
@@ -19,5 +19,5 @@ def ok(data: T = None, message: str = "ok") -> ApiResponse[T]:
     return ApiResponse(code=0, data=data, message=message)
 
 
-def error(code: int, message: str) -> ApiResponse[None]:
+def error(code: int, message: str) -> ApiResponse[Any]:
     return ApiResponse(code=code, data=None, message=message)

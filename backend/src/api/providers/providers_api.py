@@ -1,5 +1,5 @@
 """Provider and model management API endpoints."""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_current_user_id, get_db
@@ -36,9 +36,10 @@ async def provider_list(
     try:
         result = await list_providers(db, user_id)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise
 
 
@@ -52,9 +53,10 @@ async def provider_create(
     try:
         result = await create_provider(db, req, user_id)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise
 
 
@@ -69,9 +71,10 @@ async def provider_update(
     try:
         result = await update_provider(db, provider_id, req, user_id)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise
 
 
@@ -85,9 +88,10 @@ async def provider_delete(
     try:
         await delete_provider(db, provider_id, user_id)
         return ok(None, "Provider deleted successfully")
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise
 
 
@@ -102,9 +106,10 @@ async def model_create(
     try:
         result = await create_model(db, provider_id, req, user_id)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise
 
 
@@ -120,9 +125,10 @@ async def model_update(
     try:
         result = await update_model(db, provider_id, model_id, req, user_id)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise
 
 
@@ -137,9 +143,10 @@ async def model_delete(
     try:
         await delete_model(db, provider_id, model_id, user_id)
         return ok(None, "Model deleted successfully")
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise
 
 
@@ -154,9 +161,10 @@ async def model_clone(
     try:
         result = await clone_model(db, provider_id, model_id, user_id)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise
 
 
@@ -171,7 +179,8 @@ async def model_toggle_status(
     try:
         result = await toggle_model_status(db, provider_id, model_id, user_id)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise

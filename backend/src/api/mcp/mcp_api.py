@@ -1,6 +1,6 @@
 """MCP marketplace API endpoints."""
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_current_user_id, get_db
@@ -28,10 +28,8 @@ async def mcp_tool_list(
     try:
         result = await list_mcp_tools(db, user_id, category, search, sort)
         return ok(result)
-    except Exception as e:
-        if hasattr(e, "status_code"):
-            return error(e.status_code, e.detail)
-        raise
+    except HTTPException as e:
+        return error(e.status_code, e.detail)
 
 
 @router.get("/tools/{tool_id}", response_model=ApiResponse[McpToolResponse])
@@ -44,10 +42,8 @@ async def mcp_tool_detail(
     try:
         result = await get_mcp_tool(db, tool_id, user_id)
         return ok(result)
-    except Exception as e:
-        if hasattr(e, "status_code"):
-            return error(e.status_code, e.detail)
-        raise
+    except HTTPException as e:
+        return error(e.status_code, e.detail)
 
 
 @router.post("/tools/{mcp_id}/install", response_model=ApiResponse[None])
@@ -61,10 +57,8 @@ async def mcp_tool_install(
     try:
         await install_mcp_tool(db, user_id, mcp_id, body.config)
         return ok(message="installed")
-    except Exception as e:
-        if hasattr(e, "status_code"):
-            return error(e.status_code, e.detail)
-        raise
+    except HTTPException as e:
+        return error(e.status_code, e.detail)
 
 
 @router.delete("/tools/{tool_id}/uninstall", response_model=ApiResponse[None])
@@ -77,7 +71,5 @@ async def mcp_tool_uninstall(
     try:
         await uninstall_mcp_tool(db, user_id, tool_id)
         return ok(message="uninstalled")
-    except Exception as e:
-        if hasattr(e, "status_code"):
-            return error(e.status_code, e.detail)
-        raise
+    except HTTPException as e:
+        return error(e.status_code, e.detail)

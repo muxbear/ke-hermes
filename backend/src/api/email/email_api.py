@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from api.deps import get_store
 from api.email.service import SendEmailRequest, send_email_code
@@ -16,7 +16,8 @@ async def send(
     try:
         result = await send_email_code(req, store)
         return ok(result)
-    except Exception as e:
+    except HTTPException as e:
         if hasattr(e, "status_code"):
             return error(e.status_code, e.detail)
+    except Exception as e:
         raise
