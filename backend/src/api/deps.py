@@ -1,3 +1,5 @@
+from collections.abc import AsyncGenerator
+
 from fastapi import HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,7 +20,7 @@ async def get_store() -> KeyValueStore:
     return _store
 
 
-async def get_db() -> AsyncSession:
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async for session in _get_db():
         yield session
 

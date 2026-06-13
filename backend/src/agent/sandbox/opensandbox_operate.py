@@ -130,13 +130,8 @@ def _get_config():
         api_key=api_key,
         use_server_proxy=True,
         request_timeout=timedelta(seconds=60),
-        transport=httpx.HTTPTransport(limits=httpx.Limits(max_connections=20)),
+        transport=httpx.AsyncHTTPTransport(limits=httpx.Limits(max_connections=20)),
     )
-
-
-def main():
-    config = _get_config_sync()
-    sandbox = create_sandboxsync(config)
 
 
 async def main():
@@ -181,5 +176,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    main()
-    # asyncio.run(main())
+    asyncio.run(main())

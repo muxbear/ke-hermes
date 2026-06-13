@@ -96,10 +96,12 @@ def get_embedding_model(model_name: str, api_base: str, api_key: str,
         )
 
     from langchain_openai import OpenAIEmbeddings
+    from pydantic import SecretStr
+
     return OpenAIEmbeddings(
         model=model_name,
-        openai_api_base=api_base,
-        openai_api_key=api_key,
+        base_url=api_base,
+        api_key=SecretStr(api_key),
         dimensions=dimensions,
         **kwargs,
     )

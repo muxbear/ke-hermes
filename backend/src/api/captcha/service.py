@@ -5,6 +5,7 @@ import random
 import secrets
 import string
 import uuid
+from typing import cast
 
 from fastapi import HTTPException
 from PIL import Image, ImageDraw, ImageFont
@@ -114,7 +115,7 @@ def _draw_puzzle_bg(
                     if 0 <= px < width and 0 <= py < height:
                         alpha = max(0, int(180 * (1 - dr / cw)))
                         if alpha > 0:
-                            r, g, b, _a = img.getpixel((px, py))
+                            r, g, b, _a = cast(tuple[int, int, int, int], img.getpixel((px, py)))
                             blend_r = int(r + (255 - r) * alpha / 255 * 0.6)
                             blend_g = int(g + (255 - g) * alpha / 255 * 0.6)
                             blend_b = int(b + (255 - b) * alpha / 255 * 0.6)

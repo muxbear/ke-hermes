@@ -5,6 +5,7 @@ from db.models import Conversation
 from fastapi import APIRouter, Depends, HTTPException
 
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
+from langchain_core.runnables import RunnableConfig
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -102,8 +103,8 @@ async def list_conversations(
 
 @router.get("/conversations/{thread_id}")
 async def conversations(
+    thread_id: str,
     user_id: str = Depends(get_current_user_id),
-    thread_id: str = None,
     db: AsyncSession = Depends(get_db)
 ):
     """获取某个对话的消息列表"""
@@ -119,7 +120,7 @@ async def conversations(
         raise HTTPException(status_code=403, detail="Access denies")
 
     # 2. 从 graph state 获取消息（DeltaChannel 需 aget_state 重建）
-    config = {"configurable": {"thread_id": thread_id}}
+    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
     from agent import get_graph
     state = await get_graph().aget_state(config)
     raw_messages: list = state.values.get("messages", []) if (state and state.values) else []

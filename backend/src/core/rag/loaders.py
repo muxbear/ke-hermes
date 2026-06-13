@@ -7,6 +7,7 @@ import logging
 import os
 import shutil
 from abc import ABC, abstractmethod
+from typing import Any, cast
 
 from langchain_core.documents import Document
 
@@ -81,7 +82,8 @@ class PythonPPTXLoaderStrategy(DocumentLoaderStrategy):
             texts: list[str] = []
             for shape in slide.shapes:
                 if shape.has_text_frame:
-                    for para in shape.text_frame.paragraphs:
+                    tf = cast(Any, shape).text_frame
+                    for para in tf.paragraphs:
                         t = para.text.strip()
                         if t:
                             texts.append(t)

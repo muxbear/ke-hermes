@@ -44,6 +44,7 @@ def _ensure_keys():
 
 def get_public_key() -> str:
     _ensure_keys()
+    assert _public_key is not None
     return _public_key.public_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PublicFormat.SubjectPublicKeyInfo,
@@ -52,6 +53,7 @@ def get_public_key() -> str:
 
 def decrypt_password(encrypted_b64: str) -> str:
     _ensure_keys()
+    assert _private_key is not None
     try:
         ciphertext = base64.b64decode(encrypted_b64)
         plaintext = _private_key.decrypt(ciphertext, padding.PKCS1v15())

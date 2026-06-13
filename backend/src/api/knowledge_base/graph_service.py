@@ -114,7 +114,11 @@ class GraphExtractionService:
             from langchain_core.messages import HumanMessage
             prompt = ENTITY_RELATION_PROMPT.format(text=combined)
             response = await llm.ainvoke([HumanMessage(content=prompt)])
-            text = response.content if hasattr(response, "content") else str(response)
+            raw = response.content if hasattr(response, "content") else str(response)
+            if isinstance(raw, list):
+                text = "\n".join(str(item) for item in raw)
+            else:
+                text = raw
             parsed = self._parse_json(text)
         except Exception as e:
             logger.exception("LLM extraction failed for doc=%s", doc_id)
@@ -137,10 +141,12 @@ class GraphExtractionService:
         """获取 LLM 实例（优先用默认 DeepSeek）。"""
         try:
             from langchain_openai import ChatOpenAI
+            from pydantic import SecretStr
+
             return ChatOpenAI(
                 model=os.getenv("DEEPSEEK_MODEL", "deepseek-v4-pro"),
-                openai_api_base=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
-                openai_api_key=os.getenv("DEEPSEEK_API_KEY", ""),
+                base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+                api_key=SecretStr(os.getenv("DEEPSEEK_API_KEY", "")),
                 temperature=0.1,
             )
         except Exception as e:

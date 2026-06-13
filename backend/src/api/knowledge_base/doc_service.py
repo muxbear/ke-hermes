@@ -42,11 +42,12 @@ MAX_FILE_SIZE_MB = 100
 def _format_bytes(size_bytes: int) -> str:
     if size_bytes < 1024:
         return f"{size_bytes} B"
+    s: float = size_bytes
     for unit in ["KB", "MB", "GB", "TB"]:
-        size_bytes /= 1024
-        if size_bytes < 1024:
-            return f"{size_bytes:.1f} {unit}"
-    return f"{size_bytes:.1f} PB"
+        s /= 1024
+        if s < 1024:
+            return f"{s:.1f} {unit}"
+    return f"{s:.1f} PB"
 
 
 def _get_file_type(filename: str) -> str:
@@ -271,7 +272,7 @@ class IndexingScheduler:
         if not self._queue or len(self._running) >= self._max_concurrent:
             return
         task = self._queue.popleft()
-        async_task = asyncio.create_task(self._pipeline.execute(task))
+        async_task = asyncio.create_task(self._pipeline.execute(task))  # type: ignore[union-attr]
         self._running[task.doc_id] = async_task
         async_task.add_done_callback(lambda _: self._on_task_done(task.doc_id))
 

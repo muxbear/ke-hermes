@@ -54,14 +54,11 @@ class IndexingContext:
 class DocState(ABC):
     """文档索引状态抽象接口。"""
 
+    name: str
+
     @abstractmethod
     async def handle(self, ctx: IndexingContext, pipeline: IndexingPipeline) -> None:
         """执行当前状态的处理逻辑。"""
-        ...
-
-    @property
-    @abstractmethod
-    def name(self) -> str:
         ...
 
 

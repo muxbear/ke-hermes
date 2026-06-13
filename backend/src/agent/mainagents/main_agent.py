@@ -2,10 +2,12 @@
 
 import logging
 import os
+from typing import Any, cast
 
 from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, FilesystemBackend, StoreBackend
 from langchain_openai import ChatOpenAI
+from pydantic import SecretStr
 from sqlalchemy import select
 
 from agent import tools as agent_tools
@@ -74,7 +76,7 @@ async def _resolve_model(provider_id: str | None, model_id: str | None):
 
             return ChatOpenAI(
                 model=model.name,
-                api_key=decrypt_api_key(provider.api_key) or settings.DEEPSEEK_API_KEY,
+                api_key=SecretStr(decrypt_api_key(provider.api_key) or settings.DEEPSEEK_API_KEY),
                 base_url=provider.api_base,
             )
         except Exception:
@@ -163,7 +165,7 @@ async def create_main_agent(checkpointer=None, store=None, sandbox_manager=None)
         default=sandbox_backend,
         routes={
             "/memories/": StoreBackend(
-                namespace=lambda ctx: (ctx.runtime.context.user_id,),
+                namespace=lambda ctx: (cast(Any, ctx).runtime.context.user_id,),
             ),
             "/skills/": FilesystemBackend(root_dir=skills_root, virtual_mode=True),
         },
@@ -193,7 +195,7 @@ async def create_main_agent(checkpointer=None, store=None, sandbox_manager=None)
         skills=[f"/skills/{agent_info.id}/"],
         memory=memory,
         backend=backend,
-        subagents=subagents,
+        subagents=cast(Any, subagents),
         system_prompt=system_prompt,
         middleware=[skill_sync_middleware],  # type: ignore[list-item]
     )

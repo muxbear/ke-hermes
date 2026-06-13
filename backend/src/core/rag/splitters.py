@@ -64,7 +64,7 @@ class SemanticChunkStrategy(ChunkStrategy):
         self._embedding_model = embedding_model
 
     def split(self, documents: list[Document]) -> list[Document]:
-        from langchain_text_splitters import SemanticChunker
+        from langchain_experimental.text_splitter import SemanticChunker
         splitter = SemanticChunker(
             embeddings=self._embedding_model,
             breakpoint_threshold_type="percentile",

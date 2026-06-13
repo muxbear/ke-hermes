@@ -1,9 +1,11 @@
 import json
 import logging
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage
+from langchain_core.runnables import RunnableConfig
 from langchain_core.utils.uuid import uuid7
 from openai import BadRequestError
 from pydantic import BaseModel, Field
@@ -43,8 +45,8 @@ async def chat(
 ):
     is_new = not req.thread_id
     thread_id = req.thread_id or str(uuid7())
-    config = {"configurable": {"thread_id": thread_id}}
-    context = Context(server_info="ke_hermes_server", user_id=user_id) # 用 JWT 提取的 user_id 替换 req.user_id 
+    config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
+    context = Context(server_info="ke_hermes_server", user_id=user_id) # 用 JWT 提取的 user_id 替换 req.user_id
 
     try:
         result = await get_graph().ainvoke(
@@ -83,7 +85,7 @@ async def chat_stream(
     db: AsyncSession = Depends(get_db)):
     is_new = not req.thread_id
     thread_id = req.thread_id or str(uuid7())
-    config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 50}
+    config: RunnableConfig = {"configurable": {"thread_id": thread_id}, "recursion_limit": 50}
     context = Context(server_info="ke_hermes_server", user_id=user_id)
 
     async def event_generator():
@@ -100,7 +102,7 @@ async def chat_stream(
                 name = event.get("name", "")
 
                 if kind == "on_chat_model_stream":
-                    token = event["data"]["chunk"].text
+                    token = cast(Any, event["data"])["chunk"].text
                     if token:
                         yield f"data: {json.dumps({'token': token})}\n\n"
 

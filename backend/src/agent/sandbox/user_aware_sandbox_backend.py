@@ -30,6 +30,8 @@ class UserAwareSandboxBackend(BaseSandbox):
 
     def _get_user_backend(self) -> OpenSandBoxBackend:
         runtime = get_runtime()
+        assert runtime is not None
+        assert runtime.context is not None
         user_id: str = runtime.context.user_id
         return self._manager.get_or_create_backend(user_id)
 

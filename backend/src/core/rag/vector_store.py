@@ -5,6 +5,7 @@
 
 import logging
 from abc import ABC, abstractmethod
+from typing import Any
 
 from langchain_core.documents import Document
 
@@ -85,7 +86,7 @@ class MilvusVectorStore(BaseVectorStore):
         self._password = password
         self._db_name = db_name
         self._connected = False
-        self._collections: dict[str, object] = {}
+        self._collections: dict[str, Any] = {}
 
     async def _ensure_connected(self):
         if self._connected:
@@ -220,7 +221,7 @@ class MilvusVectorStore(BaseVectorStore):
         collection.flush()
         logger.info("Milvus deleted chunks for doc=%s in kb=%s", doc_id, kb_id)
 
-    async def _get_collection(self, kb_id: str):
+    async def _get_collection(self, kb_id: str) -> Any:
         """获取或加载 Milvus Collection。"""
         await self._ensure_connected()
         collection = self._collections.get(kb_id)

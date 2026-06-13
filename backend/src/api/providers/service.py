@@ -96,7 +96,7 @@ async def list_providers(db: AsyncSession, user_id: str) -> list[ProviderRespons
         models_result = await db.execute(
             select(AIModel).where(AIModel.provider_id == p.id).order_by(AIModel.created_at)
         )
-        models = models_result.scalars().all()
+        models = list(models_result.scalars().all())
         responses.append(_provider_to_response(p, models))
     return responses
 
@@ -136,7 +136,7 @@ async def update_provider(
     models_result = await db.execute(
         select(AIModel).where(AIModel.provider_id == provider.id).order_by(AIModel.created_at)
     )
-    models = models_result.scalars().all()
+    models = list(models_result.scalars().all())
     return _provider_to_response(provider, models)
 
 

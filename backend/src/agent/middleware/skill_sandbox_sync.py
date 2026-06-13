@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from typing import TYPE_CHECKING, Annotated, Any, NotRequired
+from typing import TYPE_CHECKING, Annotated, Any, NotRequired, cast
 
 import yaml
 from deepagents.backends.filesystem import FilesystemBackend
@@ -196,7 +196,7 @@ class SkillSandboxSyncMiddleware(AgentMiddleware[SkillSandboxSyncState, Any, Any
     @staticmethod
     async def _apply_network_rules(backend: object, domains: list[str]) -> None:
         """通过 EgressAdapter 向运行中沙盒添加网络放行规则。"""
-        sandbox = backend.sandbox
+        sandbox = cast(Any, backend).sandbox
         egress_endpoint = sandbox.get_endpoint(DEFAULT_EGRESS_PORT)
         egress = EgressAdapter(
             connection_config=sandbox.connection_config,

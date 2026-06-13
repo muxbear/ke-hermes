@@ -65,9 +65,11 @@ async def _resolve_model(provider_id: str | None, model_id: str | None):
                 )
                 return default_llm
 
+            from pydantic import SecretStr
+
             return ChatOpenAI(
                 model=model.name,
-                api_key=decrypted_key,
+                api_key=SecretStr(decrypted_key),
                 base_url=provider.api_base,
             )
         except Exception:

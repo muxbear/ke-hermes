@@ -1,6 +1,6 @@
 from collections.abc import Callable
 from time import time
-from typing import cast
+from typing import Any, cast
 from uuid import uuid4
 
 from deepagents.backends.protocol import (
@@ -38,15 +38,10 @@ class OpenSandBoxBackend(BaseSandbox):
         """
         self._sandbox = sandbox
         self._default_timeout = timeout
-        polling_strategy: PollingStrategy
         if callable(sync_polling_interval):
-            polling_strategy = cast("PollingStrategy", sync_polling_interval)
+            self._sync_polling_strategy = cast(PollingStrategy, sync_polling_interval)
         else:
-
-            def polling_strategy(_elapsed: float) -> float:
-                return sync_polling_interval
-
-        self._sync_polling_strategy = polling_strategy
+            self._sync_polling_strategy = cast(PollingStrategy, lambda e: sync_polling_interval)
 
     @property
     def sandbox(self) -> SandboxSync:
@@ -119,6 +114,7 @@ class OpenSandBoxBackend(BaseSandbox):
                     output=f"命令在 {timeout} 秒后超时", exit_code=124, truncated=False
                 )
 
+            raise
     def _execute_via_session_logs(
         self, command: str, *, timeout: int
     ) -> ExecuteResponse:
@@ -132,16 +128,19 @@ class OpenSandBoxBackend(BaseSandbox):
             ExecuteResponse: 执行命令的结果。
         """
         session_id = str(uuid4())
-        self._sandbox.process.create_session(session_id)
+        sb = cast(Any, self._sandbox)
+        sb.process.create_session(session_id)
         try:
             start_at = time.monotonic()
-            result = self._sandbox.process.execute_session_command(
+            result = sb.process.execute_session_command(
                 session_id,
                 # SessionExecuteRequest(command=command, run_async=True),
                 timeout=timeout,
             )
         finally:
-            self._sandbox.process.delete_session(session_id)
+            sb.process.delete_session(session_id)
+
+        return result
 
     def download_files(self, paths: list[str]) -> list[FileDownloadResponse]:
         """从 OpenSandbox 中下载文件
@@ -160,7 +159,7 @@ class OpenSandBoxBackend(BaseSandbox):
             if not path.startswith("/"):
                 logger.error("路径必须是绝对路径,以 / 开头")
                 responses.append(
-                    FileDownloadResponse(path=path, content=None, error="无效的路径")
+                    FileDownloadResponse(path=path, content=None, error="invalid_path")
                 )
                 continue
 
@@ -201,7 +200,9 @@ class OpenSandBoxBackend(BaseSandbox):
                     else:
                         logger.error(f"文件 {path} 存在，但读取失败，错误：{str(e)}")
                         responses.append(
-                            path=path, content=None, error=f"read_error: {str(e)}"
+                            FileDownloadResponse(
+                                path=path, content=None, error=cast(Any, f"read_error: {str(e)}")
+                            )
                         )
                 except Exception as check_error:
                     logger.error(
@@ -211,7 +212,7 @@ class OpenSandBoxBackend(BaseSandbox):
                         FileDownloadResponse(
                             path=path,
                             content=None,
-                            error=f"check_error: {str(check_error)}",
+                            error=cast(Any, f"check_error: {str(check_error)}"),
                         )
                     )
 
@@ -264,7 +265,7 @@ class OpenSandBoxBackend(BaseSandbox):
                 logger.debug(f"文件 {path} 已加入到上传队列")
             except Exception as e:
                 logger.error(f"准备上传文件 {path} 出错：{str(e)}", exc_info=True)
-                responses.append(FileUploadResponse(path=path, error=str(e)))
+                responses.append(FileUploadResponse(path=path, error=cast(Any, str(e))))
 
             # 如果有文件需要上传
             if upload_entries:
@@ -279,7 +280,7 @@ class OpenSandBoxBackend(BaseSandbox):
                     for i, resp in enumerate(responses):
                         if resp.error is None:
                             responses[i] = FileUploadResponse(
-                                path=resp.path, error=f"upload_failed：{str(e)}"
+                                path=resp.path, error=cast(Any, f"upload_failed：{str(e)}")
                             )
                         else:
                             logger.warning("没有有效的文件需要上传")
@@ -288,3 +289,5 @@ class OpenSandBoxBackend(BaseSandbox):
             success_count = sum(1 for r in responses if r.error is None)
             error_count = len(responses) - success_count
             return responses
+
+        return responses

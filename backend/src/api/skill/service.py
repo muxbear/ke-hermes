@@ -128,6 +128,8 @@ def validate_skill_directory(
         errors.append(SkillValidationError(field="SKILL.md", message=err))
         return SkillResult(name=name, valid=False, errors=errors)
 
+    assert fm is not None
+
     # 4. Required fields
     fm_name = fm.get("name")
     if not fm_name or not isinstance(fm_name, str):
@@ -438,7 +440,7 @@ async def list_skills(
     rows = (await db.execute(stmt)).scalars().all()
 
     return SkillListResponse(
-        items=list(rows),
+        items=[SkillInfo.model_validate(r) for r in rows],
         total=total,
         page=page,
         page_size=page_size,
@@ -460,7 +462,7 @@ async def search_skills(
     page_size = max(1, min(page_size, 100))
     pattern = f"%{name}%"
 
-    conditions = [Skill.name.like(pattern)]
+    conditions: list = [Skill.name.like(pattern)]
     if category:
         conditions.append(Skill.category == category)
     if enabled is not None:
@@ -479,7 +481,7 @@ async def search_skills(
     rows = (await db.execute(stmt)).scalars().all()
 
     return SkillListResponse(
-        items=list(rows),
+        items=[SkillInfo.model_validate(r) for r in rows],
         total=total,
         page=page,
         page_size=page_size,

@@ -27,11 +27,12 @@ def _format_bytes(size_bytes: int) -> str:
     """将字节数格式化为人类可读字符串。"""
     if size_bytes < 1024:
         return f"{size_bytes} B"
+    s: float = size_bytes
     for unit in ["KB", "MB", "GB", "TB"]:
-        size_bytes /= 1024
-        if size_bytes < 1024:
-            return f"{size_bytes:.1f} {unit}"
-    return f"{size_bytes:.1f} PB"
+        s /= 1024
+        if s < 1024:
+            return f"{s:.1f} {unit}"
+    return f"{s:.1f} PB"
 
 
 def _kb_to_response(kb: KnowledgeBase) -> KBResponse:
@@ -66,7 +67,7 @@ async def list_kbs(
     page_size = max(1, min(page_size, 100))
     offset = (page - 1) * page_size
 
-    conditions = [KnowledgeBase.user_id == user_id]
+    conditions: list = [KnowledgeBase.user_id == user_id]
     if search:
         pattern = f"%{search}%"
         conditions.append(
