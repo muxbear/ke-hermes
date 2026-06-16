@@ -267,27 +267,22 @@ class OpenSandBoxBackend(BaseSandbox):
                 logger.error(f"准备上传文件 {path} 出错：{str(e)}", exc_info=True)
                 responses.append(FileUploadResponse(path=path, error=cast(Any, str(e))))
 
-            # 如果有文件需要上传
-            if upload_entries:
-                logger.info(f"正在向沙盒上传文件，总共 {len(upload_entries)} 个文件")
-                try:
-                    self._sandbox.files.write_files(upload_entries)
-                    logger.info(f"成功上传 {len(upload_entries)} 个文件")
-                except Exception as e:
-                    logger.error("上传文件时出错：str(e)", exc_info=True)
+        # 批量上传所有已准备好的文件
+        if upload_entries:
+            logger.info(f"正在向沙盒上传文件，总共 {len(upload_entries)} 个文件")
+            try:
+                self._sandbox.files.write_files(upload_entries)
+                logger.info(f"成功上传 {len(upload_entries)} 个文件")
+            except Exception as e:
+                logger.error("上传文件时出错：%s", str(e), exc_info=True)
+                # 发生错误时，更新响应
+                for i, resp in enumerate(responses):
+                    if resp.error is None:
+                        responses[i] = FileUploadResponse(
+                            path=resp.path, error=cast(Any, f"upload_failed：{str(e)}")
+                        )
 
-                    # 发生错误时，更新响应
-                    for i, resp in enumerate(responses):
-                        if resp.error is None:
-                            responses[i] = FileUploadResponse(
-                                path=resp.path, error=cast(Any, f"upload_failed：{str(e)}")
-                            )
-                        else:
-                            logger.warning("没有有效的文件需要上传")
-
-            # 上传结果
-            success_count = sum(1 for r in responses if r.error is None)
-            error_count = len(responses) - success_count
-            return responses
-
+        # 上传结果
+        success_count = sum(1 for r in responses if r.error is None)
+        logger.info(f"文件上传完成，成功 {success_count}/{len(files)} 个文件")
         return responses

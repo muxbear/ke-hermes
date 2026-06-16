@@ -26,20 +26,43 @@ def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode(), hashed.encode())
 
 
-# ---- RSA key pair (lazy generation) ----
+# ---- RSA key pair (lazy generation, persisted to .rsa_key) ----
 _private_key: rsa.RSAPrivateKey | None = None
 _public_key: rsa.RSAPublicKey | None = None
+_RSA_KEY_FILE = ".rsa_key"
 
 
 def _ensure_keys():
     global _private_key, _public_key
-    if _private_key is None:
+    if _private_key is not None:
+        return
+
+    import os
+    key_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    key_path = os.path.join(key_dir, _RSA_KEY_FILE)
+
+    try:
+        with open(key_path, "rb") as f:
+            loaded_key = serialization.load_pem_private_key(f.read(), password=None)
+        if not isinstance(loaded_key, rsa.RSAPrivateKey):
+            raise ValueError("Loaded key is not an RSA private key")
+        _private_key = loaded_key
+        _public_key = _private_key.public_key()
+        logger.info("Loaded persistent RSA key from %s", _RSA_KEY_FILE)
+    except (FileNotFoundError, ValueError):
         _private_key = rsa.generate_private_key(
             public_exponent=65537,
             key_size=settings.RSA_KEY_SIZE,
         )
         _public_key = _private_key.public_key()
-        logger.info("RSA %d-bit key pair generated", settings.RSA_KEY_SIZE)
+        pem = _private_key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.PKCS8,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+        with open(key_path, "wb") as f:
+            f.write(pem)
+        logger.info("Generated persistent RSA key → %s (%d-bit)", _RSA_KEY_FILE, settings.RSA_KEY_SIZE)
 
 
 def get_public_key() -> str:

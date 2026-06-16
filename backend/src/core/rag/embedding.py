@@ -70,14 +70,35 @@ class _DashScopeEmbeddings:
         return results[0]
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        """同步向量化（内部调用异步版）。"""
+        """同步向量化（内部调用异步版）。
+
+        安全处理已在运行的事件循环的情况。
+        """
         import asyncio
-        return asyncio.run(self.aembed_documents(texts))
+        import concurrent.futures
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(self.aembed_documents(texts))
+        else:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(asyncio.run, self.aembed_documents(texts))
+                return future.result()
 
     def embed_query(self, text: str) -> list[float]:
         """同步单条向量化。"""
         import asyncio
-        return asyncio.run(self.aembed_query(text))
+        import concurrent.futures
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(self.aembed_query(text))
+        else:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(asyncio.run, self.aembed_query(text))
+                return future.result()
 
 
 def get_embedding_model(model_name: str, api_base: str, api_key: str,

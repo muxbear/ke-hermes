@@ -1,204 +1,38 @@
-"""主智能体工厂 — 根据数据库配置创建主智能体。"""
+"""主智能体工厂 — 使用建造者模式根据数据库配置创建主智能体。"""
 
 import logging
-import os
-from typing import Any, cast
 
-from deepagents import create_deep_agent
-from deepagents.backends import CompositeBackend, FilesystemBackend, StoreBackend
-from langchain_openai import ChatOpenAI
-from pydantic import SecretStr
-from sqlalchemy import select
-
-from agent import tools as agent_tools
-from agent.config import settings
-from agent.context.context import Context
-from agent.middleware.skill_sandbox_sync import SkillSandboxSyncMiddleware
-from agent.models.llm import llm as default_llm
-from agent.sandbox.sandbox_manager import SandboxManager
-from agent.sandbox.user_aware_sandbox_backend import UserAwareSandboxBackend
-from agent.subagents.subagents_operate import create_subagents
-from api.agents.service import list_agents
-from core.security import decrypt_api_key
-from db.engine import async_session
-from db.models.ai_model import AIModel
-from db.models.provider import Provider
+from agent.common import get_tool_registry, resolve_model  # noqa: F401  re-export for callers
 
 logger = logging.getLogger(__name__)
 
 
-def _get_tool_registry() -> dict[str, object]:
-    """构建工具名称字符串到可调用工具函数的映射。"""
-    registry: dict[str, object] = {}
-    for name in agent_tools.__all__:
-        tool = getattr(agent_tools, name, None)
-        if callable(tool):
-            registry[name] = tool
-    return registry
-
-
-async def _resolve_model(provider_id: str | None, model_id: str | None):
-    """根据 provider_id 和 model_id 解析 LLM 实例。
-
-    解析失败时回退到 settings 中配置的默认 DeepSeek LLM。
-    """
-    if not provider_id or not model_id:
-        logger.info("未配置提供商/模型，使用默认 LLM")
-        return default_llm
-
-    async with async_session() as session:
-        try:
-            provider = (
-                await session.execute(
-                    select(Provider).where(Provider.id == provider_id)
-                )
-            ).scalar_one_or_none()
-
-            if provider is None:
-                logger.warning("提供商 '%s' 未找到，使用默认 LLM", provider_id)
-                return default_llm
-
-            model = (
-                await session.execute(
-                    select(AIModel).where(
-                        AIModel.id == model_id, AIModel.provider_id == provider_id
-                    )
-                )
-            ).scalar_one_or_none()
-
-            if model is None:
-                logger.warning(
-                    "模型 '%s' 在提供商 '%s' 中未找到，使用默认 LLM",
-                    model_id,
-                    provider_id,
-                )
-                return default_llm
-
-            return ChatOpenAI(
-                model=model.name,
-                api_key=SecretStr(decrypt_api_key(provider.api_key) or settings.DEEPSEEK_API_KEY),
-                base_url=provider.api_base,
-            )
-        except Exception:
-            logger.exception("解析模型失败，使用默认 LLM")
-            return default_llm
-
-
 async def create_main_agent(checkpointer=None, store=None, sandbox_manager=None):
-    """从数据库配置创建主智能体。
+    """从数据库配置创建主智能体——内部委托给 AgentBuilder。
 
-    从 agents 表中查询活跃的主智能体（type == 'main'），解析其模型、工具、
-    system_prompt、子智能体等配置，然后通过 create_deep_agent() 组装出完整的
-    主智能体。
+    保持与旧版本的签名兼容，内部使用建造者模式逐步构建。
 
     Args:
-        checkpointer: LangGraph 检查点实例（AsyncSqliteSaver 或 AsyncPostgresSaver），生产环境必须传入。
-        store: LangGraph 存储实例（InMemoryStore 或 AsyncPostgresStore），生产环境必须传入。
-        sandbox_manager: 可选，SandboxManager 实例。传入时由调用方管理生命周期（启动/关闭）；未传入时内部创建。
+        checkpointer: LangGraph 检查点实例。
+        store: LangGraph 存储实例。
+        sandbox_manager: 可选 SandboxManager 实例。
 
     Returns:
         配置完成的 deep agent 实例。
-
-    Raises:
-        RuntimeError: 数据库中不存在活跃的主智能体时抛出。
     """
-    # 1. 从数据库查询主智能体
+    from agent.builders.agent_builder import AgentBuilder
+    from db.engine import async_session
+
     async with async_session() as session:
-        try:
-            result = await list_agents(session)
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
+        builder = AgentBuilder()
+        await builder.with_agent_from_db(session)
 
-    main_agents = [
-        a for a in result.agents if a.type == "main" and a.status == "active"
-    ]
-    if not main_agents:
-        raise RuntimeError("数据库中不存在活跃的主智能体")
-
-    agent_info = main_agents[0]
-    logger.info(
-        "正在创建主智能体 '%s'（id=%s, 工具=%d, 文件=%d）",
-        agent_info.name,
-        agent_info.id,
-        len(agent_info.tools),
-        len(agent_info.files),
-    )
-
-    # 2. 解析 LLM 模型
-    model = await _resolve_model(agent_info.provider_id, agent_info.model_id)
-
-    # 3. 将工具名称字符串解析为可调用函数
-    tool_registry = _get_tool_registry()
-    tools = []
-    for name in agent_info.tools:
-        fn = tool_registry.get(name)
-        if fn is not None:
-            tools.append(fn)
-        else:
-            logger.warning("工具 '%s' 在注册表中未找到，已跳过", name)
-
-    skills_root = os.path.join(settings.WORKSPACE, "skills")
-
-    # 4. 根据智能体提示词构建 system_prompt
-    if agent_info.system_prompt:
-        system_prompt = agent_info.system_prompt
-    else:
-        system_prompt = (
-            "你是 ke-hermes 通用智能体，请根据用户的需求委派对应的子智能体进行处理。"
-        )
-
-    # 5. 从数据库加载子智能体
-    subagents = await create_subagents()
-
-    # 6. 创建沙箱后端（每个用户独立沙箱，带 TTL 管理）
-    if sandbox_manager is None:
-        sandbox_manager = SandboxManager(
-            extra_domains=settings.sandbox_allowed_domains_list,
-        )
-        sandbox_manager.start_cleanup()
-
-    sandbox_backend = UserAwareSandboxBackend(sandbox_manager=sandbox_manager)
-
-    backend = CompositeBackend(
-        default=sandbox_backend,
-        routes={
-            "/memories/": StoreBackend(
-                namespace=lambda ctx: (cast(Any, ctx).runtime.context.user_id,),
-            ),
-            "/skills/": FilesystemBackend(root_dir=skills_root, virtual_mode=True),
-        },
-    )
-
-    # 7. 根据智能体文件名称构建记忆路径
-    if agent_info.files:
-        memory = [f"/memories/{f}" for f in agent_info.files]
-    else:
-        memory = ["/memories/AGENT.md"]
-
-    # 8. 创建技能沙盒同步中间件
-    skill_sync_middleware = SkillSandboxSyncMiddleware(
-        sandbox_manager=sandbox_manager,
-        skills_root=skills_root,
-        agent_id=agent_info.id,
-    )
-
-    # 9. 创建 deep agent
-    agent = create_deep_agent(
-        name=agent_info.name,
-        model=model,
-        tools=tools,
-        checkpointer=checkpointer,
-        store=store,
-        context_schema=Context,
-        skills=[f"/skills/{agent_info.id}/"],
-        memory=memory,
-        backend=backend,
-        subagents=cast(Any, subagents),
-        system_prompt=system_prompt,
-        middleware=[skill_sync_middleware],  # type: ignore[list-item]
-    )
-
-    logger.info("主智能体 '%s' 创建成功", agent_info.name)
-    return agent
+    await builder.with_model()
+    await builder.with_tools()
+    builder.with_system_prompt()
+    await builder.with_subagents()
+    builder.with_sandbox(sandbox_manager=sandbox_manager)
+    builder.with_backend()
+    builder.with_memory()
+    builder.with_middleware()
+    return builder.build(checkpointer=checkpointer, store=store)

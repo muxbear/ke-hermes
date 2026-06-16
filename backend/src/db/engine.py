@@ -70,9 +70,7 @@ async def _migrate_agents_drop_user_id(conn) -> None:
     if settings.DATABASE_BACKEND == "postgres":
         await conn.execute(text("ALTER TABLE agents DROP COLUMN IF EXISTS user_id"))
     else:
-        # SQLite: recreate table (drop FK table first to avoid constraint errors)
-        await conn.execute(text("DROP TABLE IF EXISTS agent_files"))
-        await conn.execute(text("DROP TABLE IF EXISTS agents"))
+        await conn.execute(text("ALTER TABLE agents DROP COLUMN user_id"))
 
 
 async def _migrate_agents_drop_skills(conn) -> None:
@@ -93,10 +91,7 @@ async def _migrate_agents_drop_skills(conn) -> None:
     if settings.DATABASE_BACKEND == "postgres":
         await conn.execute(text("ALTER TABLE agents DROP COLUMN IF EXISTS skills"))
     else:
-        # SQLite: drop agent_skills and recreate agents (FK constraint)
-        await conn.execute(text("DROP TABLE IF EXISTS agent_skills"))
-        await conn.execute(text("DROP TABLE IF EXISTS agent_files"))
-        await conn.execute(text("DROP TABLE IF EXISTS agents"))
+        await conn.execute(text("ALTER TABLE agents DROP COLUMN skills"))
 
 
 async def _migrate_skills_drop_user_id(conn) -> None:
@@ -117,9 +112,7 @@ async def _migrate_skills_drop_user_id(conn) -> None:
     if settings.DATABASE_BACKEND == "postgres":
         await conn.execute(text("ALTER TABLE skills DROP COLUMN IF EXISTS user_id"))
     else:
-        # SQLite: drop agent_skills and recreate skills (FK constraint)
-        await conn.execute(text("DROP TABLE IF EXISTS agent_skills"))
-        await conn.execute(text("DROP TABLE IF EXISTS skills"))
+        await conn.execute(text("ALTER TABLE skills DROP COLUMN user_id"))
 
 
 async def _migrate_agents_add_provider_model(conn) -> None:
@@ -185,7 +178,4 @@ async def _migrate_agents_drop_tools_column(conn) -> None:
     if settings.DATABASE_BACKEND == "postgres":
         await conn.execute(text("ALTER TABLE agents DROP COLUMN IF EXISTS tools"))
     else:
-        # SQLite: drop dependent tables and recreate agents
-        await conn.execute(text("DROP TABLE IF EXISTS agent_tools"))
-        await conn.execute(text("DROP TABLE IF EXISTS agent_files"))
-        await conn.execute(text("DROP TABLE IF EXISTS agents"))
+        await conn.execute(text("ALTER TABLE agents DROP COLUMN tools"))

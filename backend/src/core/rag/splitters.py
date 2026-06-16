@@ -79,7 +79,7 @@ class MarkdownChunkStrategy(ChunkStrategy):
         from langchain_text_splitters import MarkdownHeaderTextSplitter
         splitter = MarkdownHeaderTextSplitter(
             headers_to_split_on=[
-                ("#", "h1"), ("##", "h2"), ("###", "h3"), ("###", "h4"),
+                ("#", "h1"), ("##", "h2"), ("###", "h3"), ("####", "h4"),
             ],
             strip_headers=True,
         )

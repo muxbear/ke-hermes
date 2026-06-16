@@ -87,17 +87,8 @@ class ChunkingState(DocState):
 
     async def handle(self, ctx: IndexingContext, pipeline: IndexingPipeline) -> None:
         try:
-            from core.rag.splitters import create_chunk_registry
-
             strategy_name = ctx.config.get("chunk_strategy", "recursive")
-            chunk_size = ctx.config.get("chunk_size", 512)
-            chunk_overlap = ctx.config.get("chunk_overlap", 64)
-
-            doc_registry = create_chunk_registry(
-                {"chunk_size": chunk_size, "chunk_overlap": chunk_overlap},
-                embedding_model=pipeline.embedding_model,
-            )
-            ctx.chunks = doc_registry.split(strategy_name, ctx.documents)
+            ctx.chunks = pipeline.chunk_registry.split(strategy_name, ctx.documents)
             await ctx.transition_to(EmbeddingState(), "embedding", 30)
         except Exception as e:
             await ctx.fail(f"文本切片失败: {e}")
