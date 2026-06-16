@@ -60,6 +60,8 @@ declare module 'vue' {
     KbDocsTab: typeof import('./src/components/knowledgeBase/KbDocsTab.vue')['default']
     KbDocStatusBadge: typeof import('./src/components/knowledgeBase/KbDocStatusBadge.vue')['default']
     KbFragmentEditor: typeof import('./src/components/knowledgeBase/KbFragmentEditor.vue')['default']
+    KbGraphEdge: typeof import('./src/components/knowledgeBase/KbGraphEdge.vue')['default']
+    KbGraphNode: typeof import('./src/components/knowledgeBase/KbGraphNode.vue')['default']
     KbGraphTab: typeof import('./src/components/knowledgeBase/KbGraphTab.vue')['default']
     KbIndexingPipeline: typeof import('./src/components/knowledgeBase/KbIndexingPipeline.vue')['default']
     KbOverviewTab: typeof import('./src/components/knowledgeBase/KbOverviewTab.vue')['default']

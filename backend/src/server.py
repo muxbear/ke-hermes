@@ -85,7 +85,7 @@ def _init_knowledge_base(app: FastAPI) -> None:
     chunk_registry = create_chunk_registry({}, embedding_model=embedding_model)
 
     # 图谱抽取服务
-    graph_service = GraphExtractionService(backend=settings.GRAPH_STORE_BACKEND)
+    graph_service = GraphExtractionService()
 
     # 索引流水线
     pipeline = IndexingPipeline(

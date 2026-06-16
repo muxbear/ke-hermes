@@ -22,6 +22,7 @@
     "@vue-flow/minimap": "^1.5.4",
     "@vueuse/motion": "^2.2.6",
     "axios": "^1.7",
+    "d3-force": "^3.0.0",
     "dagre": "^0.8.5",
     "echarts": "^6.1.0",
     "element-plus": "^2.8",
@@ -35,6 +36,7 @@
     "vue-router": "^4.4"
   },
   "devDependencies": {
+    "@types/d3-force": "^3.0.10",
     "@types/dagre": "^0.7.54",
     "@types/node": "^25.8.0",
     "@vitejs/plugin-vue": "^5.0",

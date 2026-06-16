@@ -42,6 +42,7 @@ dependencies = [
     "jq>=1.11.0",
     "docx2txt>=0.9",
     "langchain-experimental>=0.1.0",
+    "langextract>=1.5.0",
 ]
 
 

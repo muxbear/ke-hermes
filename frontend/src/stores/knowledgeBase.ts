@@ -85,15 +85,22 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
         // 拉取文档列表和实体/关系数据
         const docData = await kbApi.fetchDocuments(id, { page_size: 100 })
         const graphData = await kbApi.fetchGraphData(id)
+
+        const nameToId = new Map(graphData.entities.map((e) => [e.name, e.id]))
+
         selectedKb.value = {
           ...kb,
           documents: docData.items,
-          entitiesData: graphData.entities.map((e, i) => ({
+          entitiesData: graphData.entities.map((e) => ({
             ...e,
-            x: 100 + (i % 5) * 120,
-            y: 100 + Math.floor(i / 5) * 100,
+            x: 0,
+            y: 0,
           })),
-          relationsData: graphData.relations,
+          relationsData: graphData.relations.map((r) => ({
+            ...r,
+            from: nameToId.get(r.from) || r.from,
+            to: nameToId.get(r.to) || r.to,
+          })),
         }
         selectedDoc.value = null
         startIndexPolling()

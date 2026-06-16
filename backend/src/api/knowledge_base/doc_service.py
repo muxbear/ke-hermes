@@ -139,10 +139,38 @@ class DatabaseProgressObserver(ProgressObserver):
                         progress=ctx.progress,
                         error_message=ctx.error_message,
                         chunks_count=len(ctx.chunks),
+                        entities_count=ctx.entities_count,
+                        relations_count=ctx.relations_count,
                         indexed_at=datetime.utcnow() if ctx.status == "indexed" else None,
                     )
                 )
                 await db.execute(stmt)
+
+                # 更新 KB 级实体/关系计数（从 DB 中重新统计，避免重复计数）
+                if ctx.entities_count or ctx.relations_count:
+                    from db.models.knowledge_base import KnowledgeBase
+                    from db.models.knowledge_base_entity import KnowledgeBaseEntity
+                    from db.models.knowledge_base_relation import KnowledgeBaseRelation
+
+                    entity_total = await db.scalar(
+                        select(func.count()).select_from(KnowledgeBaseEntity).where(
+                            KnowledgeBaseEntity.kb_id == ctx.kb_id,
+                        )
+                    )
+                    relation_total = await db.scalar(
+                        select(func.count()).select_from(KnowledgeBaseRelation).where(
+                            KnowledgeBaseRelation.kb_id == ctx.kb_id,
+                        )
+                    )
+                    await db.execute(
+                        update(KnowledgeBase)
+                        .where(KnowledgeBase.id == ctx.kb_id)
+                        .values(
+                            entities_count=entity_total or 0,
+                            relations_count=relation_total or 0,
+                        )
+                    )
+
                 await db.commit()
         except Exception as e:
             logger.error("DatabaseProgressObserver 写入失败: %s", e)

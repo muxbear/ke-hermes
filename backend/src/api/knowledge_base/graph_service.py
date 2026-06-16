@@ -1,9 +1,9 @@
-"""知识图谱服务——LLM Prompt-based 实体/关系抽取 & 查询。"""
+"""知识图谱服务——基于 LangExtract 的实体/关系抽取 & 查询."""
 
-import json
+import asyncio
 import logging
 import os
-import re
+import textwrap
 import uuid
 
 from sqlalchemy import select
@@ -14,23 +14,150 @@ from db.models.knowledge_base_relation import KnowledgeBaseRelation
 
 logger = logging.getLogger(__name__)
 
-ENTITY_RELATION_PROMPT = """你是一个知识图谱抽取助手。请从以下文本中提取实体和实体之间的关系。
+_EXTRACTION_PROMPT = textwrap.dedent("""\
+    从文本中提取实体和实体之间的关系。仅提取文本中明确出现的实体和关系，不要虚构。
+    实体类型必须是: 人物、组织、产品、概念、算法、地点、时间、事件。
+    每个 entity 的 extraction_text 必须是原文中的精确文本片段。
+    每个 relation 的 extraction_text 描述两个实体的关系，attributes 中写明 from/to/label.""")
 
-输出 JSON 格式:
-{{
-  "entities": [{{"name": "实体名", "type": "类型"}}],
-  "relations": [{{"from": "实体A", "to": "实体B", "label": "关系"}}]
-}}
+_EXTRACTION_EXAMPLES = [
+    {
+        "text": (
+            "2024年3月，张明加入阿里巴巴达摩院，担任NLP研究科学家。"
+            "他主导开发了大规模语言模型「通义千问」，该模型在多项基准测试中表现优异。"
+            "阿里巴巴总部位于杭州，由马云于1999年创立。"
+        ),
+        "extractions": [
+            {
+                "extraction_class": "entity",
+                "extraction_text": "张明",
+                "attributes": {"type": "人物"},
+            },
+            {
+                "extraction_class": "entity",
+                "extraction_text": "阿里巴巴达摩院",
+                "attributes": {"type": "组织"},
+            },
+            {
+                "extraction_class": "entity",
+                "extraction_text": "NLP研究科学家",
+                "attributes": {"type": "概念"},
+            },
+            {
+                "extraction_class": "entity",
+                "extraction_text": "通义千问",
+                "attributes": {"type": "产品"},
+            },
+            {
+                "extraction_class": "entity",
+                "extraction_text": "大规模语言模型",
+                "attributes": {"type": "概念"},
+            },
+            {
+                "extraction_class": "entity",
+                "extraction_text": "杭州",
+                "attributes": {"type": "地点"},
+            },
+            {
+                "extraction_class": "entity",
+                "extraction_text": "马云",
+                "attributes": {"type": "人物"},
+            },
+            {
+                "extraction_class": "entity",
+                "extraction_text": "1999年",
+                "attributes": {"type": "时间"},
+            },
+            {
+                "extraction_class": "entity",
+                "extraction_text": "2024年3月",
+                "attributes": {"type": "时间"},
+            },
+            {
+                "extraction_class": "relation",
+                "extraction_text": "张明加入阿里巴巴达摩院",
+                "attributes": {
+                    "from": "张明",
+                    "to": "阿里巴巴达摩院",
+                    "label": "任职于",
+                },
+            },
+            {
+                "extraction_class": "relation",
+                "extraction_text": "张明主导开发通义千问",
+                "attributes": {"from": "张明", "to": "通义千问", "label": "开发"},
+            },
+            {
+                "extraction_class": "relation",
+                "extraction_text": "阿里巴巴总部位于杭州",
+                "attributes": {"from": "阿里巴巴达摩院", "to": "杭州", "label": "位于"},
+            },
+            {
+                "extraction_class": "relation",
+                "extraction_text": "马云创立阿里巴巴",
+                "attributes": {"from": "马云", "to": "阿里巴巴达摩院", "label": "创立"},
+            },
+        ],
+    },
+]
 
-实体类型必须是: 人物, 组织, 产品, 概念, 算法, 地点, 时间, 事件
-只提取有明确关系的实体，不要虚构关系。每个关系中的 from/to 必须出现在 entities 列表中。
-文本:
-{text}"""
+
+def _build_example_data():
+    """从字典列表构建 langextract ExampleData 对象。."""
+    import langextract as lx
+
+    examples = []
+    for ex in _EXTRACTION_EXAMPLES:
+        extractions = [
+            lx.data.Extraction(
+                extraction_class=e["extraction_class"],
+                extraction_text=e["extraction_text"],
+                attributes=e.get("attributes"),
+            )
+            for e in ex["extractions"]
+        ]
+        examples.append(lx.data.ExampleData(text=ex["text"], extractions=extractions))
+    return examples
+
+
+def _convert_extractions(extractions: list) -> tuple[list[dict], list[dict]]:
+    """将 langextract 结果转为内部 entity/relation 列表。."""
+    entities: list[dict] = []
+    relations: list[dict] = []
+
+    for e in extractions:
+        if e.char_interval is None:
+            continue
+        if e.extraction_class == "entity":
+            entities.append(
+                {
+                    "name": e.extraction_text,
+                    "type": (e.attributes or {}).get("type", "概念"),
+                }
+            )
+        elif e.extraction_class == "relation":
+            attrs = e.attributes or {}
+            from_ent = attrs.get("from", "")
+            to_ent = attrs.get("to", "")
+            label = attrs.get("label", e.extraction_text)
+            if from_ent and to_ent and label:
+                relations.append(
+                    {
+                        "from": from_ent,
+                        "to": to_ent,
+                        "label": label,
+                    }
+                )
+
+    return entities, relations
 
 
 async def get_graph_data(
-    db: AsyncSession, kb_id: str, entity_type: str | None = None,
+    db: AsyncSession,
+    kb_id: str,
+    entity_type: str | None = None,
 ) -> dict:
+    """获取知识图谱数据（实体 + 关系）."""
     entity_stmt = select(KnowledgeBaseEntity).where(KnowledgeBaseEntity.kb_id == kb_id)
     if entity_type:
         entity_stmt = entity_stmt.where(KnowledgeBaseEntity.type == entity_type)
@@ -47,141 +174,169 @@ async def get_graph_data(
             for e in entity_rows
         ],
         "relations": [
-            {"id": r.id, "from": r.from_entity, "to": r.to_entity,
-             "label": r.label, "weight": r.weight}
+            {
+                "id": r.id,
+                "from": r.from_entity,
+                "to": r.to_entity,
+                "label": r.label,
+                "weight": r.weight,
+            }
             for r in relation_rows
         ],
     }
 
 
-async def get_entity_detail(db: AsyncSession, kb_id: str, entity_id: str) -> dict | None:
-    entity = (await db.execute(
-        select(KnowledgeBaseEntity).where(
-            KnowledgeBaseEntity.id == entity_id, KnowledgeBaseEntity.kb_id == kb_id,
+async def get_entity_detail(
+    db: AsyncSession, kb_id: str, entity_id: str
+) -> dict | None:
+    """获取实体详情及关联关系."""
+    entity = (
+        await db.execute(
+            select(KnowledgeBaseEntity).where(
+                KnowledgeBaseEntity.id == entity_id,
+                KnowledgeBaseEntity.kb_id == kb_id,
+            )
         )
-    )).scalar_one_or_none()
+    ).scalar_one_or_none()
     if entity is None:
         return None
 
-    relations = (await db.execute(
-        select(KnowledgeBaseRelation).where(
-            KnowledgeBaseRelation.kb_id == kb_id,
-            (KnowledgeBaseRelation.from_entity == entity.name)
-            | (KnowledgeBaseRelation.to_entity == entity.name),
+    relations = (
+        (
+            await db.execute(
+                select(KnowledgeBaseRelation).where(
+                    KnowledgeBaseRelation.kb_id == kb_id,
+                    (KnowledgeBaseRelation.from_entity == entity.name)
+                    | (KnowledgeBaseRelation.to_entity == entity.name),
+                )
+            )
         )
-    )).scalars().all()
+        .scalars()
+        .all()
+    )
 
     return {
-        "id": entity.id, "name": entity.name, "type": entity.type,
-        "mentions": entity.mentions, "metadata_": entity.metadata_,
+        "id": entity.id,
+        "name": entity.name,
+        "type": entity.type,
+        "mentions": entity.mentions,
+        "metadata_": entity.metadata_,
         "relations": [
-            {"id": r.id, "from": r.from_entity, "to": r.to_entity,
-             "label": r.label, "weight": r.weight}
+            {
+                "id": r.id,
+                "from": r.from_entity,
+                "to": r.to_entity,
+                "label": r.label,
+                "weight": r.weight,
+            }
             for r in relations
         ],
     }
 
 
 class GraphExtractionService:
-    """实体/关系抽取服务——使用 LLM Prompt-based 抽取。"""
+    """实体/关系抽取服务——使用 LangExtract 框架。."""
 
-    def __init__(self, backend: str = "langextract"):
-        self._backend = backend
+    def __init__(self) -> None:
+        """初始化抽取服务，构建 few-shot 示例."""
+        self._examples = _build_example_data()
+
+    def _build_model_config(self):
+        """构建连接 DeepSeek 的 ModelConfig（OpenAI 兼容模式）。.
+
+        DeepSeek 不支持 response_format 参数，通过 format_type=YAML 阻止
+        OpenAI Provider 发送该参数。实际输出仍由 lx.extract 的 format_type
+        控制为 JSON。
+        """
+        from langextract.core.data import FormatType
+        from langextract.factory import ModelConfig
+
+        return ModelConfig(
+            model_id=os.getenv("DEEPSEEK_MODEL", "deepseek-v4-pro"),
+            provider="openai",
+            provider_kwargs={
+                "api_key": os.getenv("DEEPSEEK_API_KEY", ""),
+                "base_url": os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+                "format_type": FormatType.YAML,
+            },
+        )
 
     async def extract_entities_and_relations(
-        self, kb_id: str, doc_id: str, chunks: list,
+        self,
+        kb_id: str,
+        doc_id: str,
+        chunks: list,
     ) -> tuple[list[dict], list[dict]]:
-        """从文档分片中抽取实体和关系。
+        """使用 LangExtract 从文档分片中抽取实体和关系。.
 
-        使用 LLM prompt-based 抽取。合并所有 chunks 做一次全量抽取，
-        避免多次 LLM 调用产生的碎片化和高成本。
+        合并 chunks 文本，通过 lx.extract() 调用 LLM 进行结构化抽取，
+        再利用 asyncio.to_thread 避免阻塞事件循环。
         """
-        # 合并前 8 个 chunk 用于抽取（限制 token 用量）
-        max_chunks = min(len(chunks), 8)
+        import langextract as lx
+
         combined = "\n\n".join(
-            c.page_content if hasattr(c, "page_content") else str(c)
-            for c in chunks[:max_chunks]
+            c.page_content if hasattr(c, "page_content") else str(c) for c in chunks
         )
         if not combined.strip():
             return [], []
 
-        llm = await self._get_llm()
-        if llm is None:
-            logger.warning("No LLM available for graph extraction")
+        api_key = os.getenv("DEEPSEEK_API_KEY", "")
+        if not api_key:
+            logger.warning("DEEPSEEK_API_KEY not set, skipping graph extraction")
             return [], []
+
+        config = self._build_model_config()
 
         try:
-            from langchain_core.messages import HumanMessage
-            prompt = ENTITY_RELATION_PROMPT.format(text=combined)
-            response = await llm.ainvoke([HumanMessage(content=prompt)])
-            raw = response.content if hasattr(response, "content") else str(response)
-            if isinstance(raw, list):
-                text = "\n".join(str(item) for item in raw)
-            else:
-                text = raw
-            parsed = self._parse_json(text)
-        except Exception as e:
-            logger.exception("LLM extraction failed for doc=%s", doc_id)
+            result = await asyncio.to_thread(
+                lx.extract,
+                text_or_documents=combined,
+                prompt_description=_EXTRACTION_PROMPT,
+                examples=self._examples,
+                config=config,
+                use_schema_constraints=False,
+                fence_output=True,
+                max_char_buffer=2000,
+                max_workers=5,
+                extraction_passes=1,
+                show_progress=False,
+            )
+        except Exception:
+            logger.exception("LangExtract extraction failed for doc=%s", doc_id)
             return [], []
 
-        if not parsed:
+        if isinstance(result, list):
+            result = result[0] if result else None
+        if not result or not result.extractions:
             return [], []
 
-        entities = parsed.get("entities", [])
-        relations = parsed.get("relations", [])
+        entities, relations = _convert_extractions(result.extractions)
 
-        # Persist to DB
+        grounded = sum(1 for e in result.extractions if e.char_interval is not None)
+        logger.info(
+            "Extracted %d entities, %d relations for doc=%s (%d/%d grounded)",
+            len(entities),
+            len(relations),
+            doc_id,
+            grounded,
+            len(result.extractions),
+        )
+
         await self._persist(kb_id, entities, relations)
-
-        logger.info("Extracted %d entities, %d relations for doc=%s",
-                     len(entities), len(relations), doc_id)
         return entities, relations
 
-    async def _get_llm(self):
-        """获取 LLM 实例（优先用默认 DeepSeek）。"""
-        try:
-            from langchain_openai import ChatOpenAI
-            from pydantic import SecretStr
-
-            return ChatOpenAI(
-                model=os.getenv("DEEPSEEK_MODEL", "deepseek-v4-pro"),
-                base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
-                api_key=SecretStr(os.getenv("DEEPSEEK_API_KEY", "")),
-                temperature=0.1,
-            )
-        except Exception as e:
-            logger.error("Failed to create LLM: %s", e)
-            return None
-
-    def _parse_json(self, text: str) -> dict | None:
-        """从 LLM 响应中解析 JSON。支持 ```json 代码块包裹。"""
-        # 提取 ```json ... ``` 中的内容
-        match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
-        if match:
-            text = match.group(1)
-        try:
-            return json.loads(text)
-        except json.JSONDecodeError:
-            # 尝试匹配裸 JSON 对象
-            match = re.search(r"\{.*\}", text, re.DOTALL)
-            if match:
-                try:
-                    return json.loads(match.group())
-                except json.JSONDecodeError:
-                    pass
-            logger.warning("Failed to parse LLM JSON response: %s", text[:200])
-            return None
-
     async def _persist(
-        self, kb_id: str, entities: list[dict], relations: list[dict],
+        self,
+        kb_id: str,
+        entities: list[dict],
+        relations: list[dict],
     ) -> None:
-        """将实体和关系写入数据库。"""
+        """将实体和关系写入数据库。."""
         from db.engine import async_session
 
         async with async_session() as db:
             try:
-                # Upsert entities
-                entity_map: dict[str, str] = {}  # name → entity_id
+                entity_map: dict[str, str] = {}
                 for e in entities:
                     name = e.get("name", "").strip()
                     etype = e.get("type", "概念")
@@ -190,24 +345,31 @@ class GraphExtractionService:
                     if name in entity_map:
                         continue
 
-                    existing = (await db.execute(
-                        select(KnowledgeBaseEntity).where(
-                            KnowledgeBaseEntity.kb_id == kb_id,
-                            KnowledgeBaseEntity.name == name,
+                    existing = (
+                        await db.execute(
+                            select(KnowledgeBaseEntity).where(
+                                KnowledgeBaseEntity.kb_id == kb_id,
+                                KnowledgeBaseEntity.name == name,
+                            )
                         )
-                    )).scalar_one_or_none()
+                    ).scalar_one_or_none()
 
                     if existing:
                         existing.mentions = (existing.mentions or 0) + 1
                         entity_map[name] = existing.id
                     else:
                         ent_id = str(uuid.uuid4())
-                        db.add(KnowledgeBaseEntity(
-                            id=ent_id, kb_id=kb_id, name=name, type=etype, mentions=1,
-                        ))
+                        db.add(
+                            KnowledgeBaseEntity(
+                                id=ent_id,
+                                kb_id=kb_id,
+                                name=name,
+                                type=etype,
+                                mentions=1,
+                            )
+                        )
                         entity_map[name] = ent_id
 
-                # Insert relations
                 for r in relations:
                     from_name = r.get("from", "").strip()
                     to_name = r.get("to", "").strip()
@@ -215,23 +377,32 @@ class GraphExtractionService:
                     if not from_name or not to_name or not label:
                         continue
 
-                    existing_rel = (await db.execute(
-                        select(KnowledgeBaseRelation).where(
-                            KnowledgeBaseRelation.kb_id == kb_id,
-                            KnowledgeBaseRelation.from_entity == from_name,
-                            KnowledgeBaseRelation.to_entity == to_name,
-                            KnowledgeBaseRelation.label == label,
+                    existing_rel = (
+                        await db.execute(
+                            select(KnowledgeBaseRelation).where(
+                                KnowledgeBaseRelation.kb_id == kb_id,
+                                KnowledgeBaseRelation.from_entity == from_name,
+                                KnowledgeBaseRelation.to_entity == to_name,
+                                KnowledgeBaseRelation.label == label,
+                            )
                         )
-                    )).scalar_one_or_none()
+                    ).scalar_one_or_none()
 
                     if not existing_rel:
-                        db.add(KnowledgeBaseRelation(
-                            id=str(uuid.uuid4()), kb_id=kb_id,
-                            from_entity=from_name, to_entity=to_name,
-                            label=label, weight=1.0,
-                        ))
+                        db.add(
+                            KnowledgeBaseRelation(
+                                id=str(uuid.uuid4()),
+                                kb_id=kb_id,
+                                from_entity=from_name,
+                                to_entity=to_name,
+                                label=label,
+                                weight=1.0,
+                            )
+                        )
 
                 await db.commit()
             except Exception as e:
                 await db.rollback()
-                logger.exception("Failed to persist entities/relations for kb=%s", kb_id)
+                logger.exception(
+                    "Failed to persist entities/relations for kb=%s", kb_id
+                )

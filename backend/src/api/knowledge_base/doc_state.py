@@ -36,6 +36,8 @@ class IndexingContext:
     documents: list = field(default_factory=list)
     chunks: list = field(default_factory=list)
     embeddings: list = field(default_factory=list)
+    entities_count: int = 0
+    relations_count: int = 0
 
     on_status_change: Callable[["IndexingContext"], Awaitable[None]] | None = None
 
@@ -158,11 +160,13 @@ class ExtractingState(DocState):
             )
             if enable_graph is not False:  # 默认开启
                 _logger.info("Running graph extraction for doc=%s", ctx.doc_id)
-                await pipeline.graph_service.extract_entities_and_relations(
+                entities, relations = await pipeline.graph_service.extract_entities_and_relations(
                     ctx.kb_id, ctx.doc_id, ctx.chunks,
                 )
+                ctx.entities_count = len(entities)
+                ctx.relations_count = len(relations)
             await ctx.transition_to(IndexedState(), "indexed", 100)
-        except Exception as e:
+        except Exception:
             _logger.exception("Entity extraction failed for doc=%s", ctx.doc_id)
             # 抽取失败不阻塞索引——文档仍然标记为已索引
             await ctx.transition_to(IndexedState(), "indexed", 100)
