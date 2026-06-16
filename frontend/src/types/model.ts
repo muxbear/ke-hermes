@@ -1,5 +1,5 @@
 /** 模型类型 */
-export type ModelType = 'llm' | 'vision' | 'audio' | 'video' | 'embedding' | 'image-gen' | 'speech'
+export type ModelType = 'llm' | 'vision' | 'audio' | 'video' | 'embedding' | 'image-gen' | 'speech' | 'multimodal'
 
 /** 模型状态 */
 export type ModelStatus = 'active' | 'beta' | 'deprecated' | 'inactive'
@@ -56,6 +56,7 @@ export const MODEL_TYPE_META: Record<ModelType, { label: string; color: string; 
   embedding:  { label: '向量模型',   color: '#67e8f9', bg: 'rgba(6,182,212,0.1)',   border: 'rgba(6,182,212,0.25)',   emoji: '🔢' },
   'image-gen':{ label: '图像生成',   color: '#fbbf24', bg: 'rgba(245,158,11,0.1)',  border: 'rgba(245,158,11,0.25)',  emoji: '🎨' },
   speech:     { label: '语音合成',   color: '#5eead4', bg: 'rgba(20,184,166,0.1)',  border: 'rgba(20,184,166,0.25)',  emoji: '🗣️' },
+  multimodal: { label: '多模态',     color: '#fdba74', bg: 'rgba(251,146,60,0.1)',  border: 'rgba(251,146,60,0.25)',  emoji: '🧠' },
 }
 
 /** 提供商状态元数据 */

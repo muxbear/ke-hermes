@@ -1634,6 +1634,11 @@ onMounted(() => {
   cursor: pointer;
 }
 
+.form-select option {
+  background: #1a1d2e;
+  color: var(--foreground-primary);
+}
+
 .form-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
 .form-row-2 .form-group--sm + .form-group { flex: 1; }
 .form-row-2:has(.form-group--sm) { grid-template-columns: 80px 1fr; }

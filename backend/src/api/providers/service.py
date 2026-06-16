@@ -114,6 +114,7 @@ async def create_provider(
         website=req.website,
         user_id=user_id,
     )
+    db.add(provider)
     await db.commit()
     await db.refresh(provider)
     return _provider_to_response(provider, [])
