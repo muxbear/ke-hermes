@@ -286,113 +286,266 @@ class MilvusVectorStore(BaseVectorStore):
         return []
 
 
-class NoopVectorStore(BaseVectorStore):
-    """开发/测试环境下的进程内向量数据库。
+class ChromaVectorStore(BaseVectorStore):
+    """基于 Chroma 的向量数据库实现。
 
-    切片数据保存在进程内存中，进程重启后丢失。不支持向量搜索。
+    Collection 命名规则: kb_{kb_id}
+    文档文本存储为 Chroma documents 字段以支持全文检索。
+    BM25 通过 Chroma 内置 where_document 全文搜索 + TF 打分实现。
     """
 
-    def __init__(self):
-        # key: f"{kb_id}:{doc_id}" → list[dict]
-        self._chunks: dict[str, list[dict]] = {}
-
     @staticmethod
-    def _make_key(kb_id: str, doc_id: str) -> str:
-        return f"{kb_id}:{doc_id}"
+    def _collection_name(kb_id: str) -> str:
+        return f"kb_{kb_id.replace('-', '_')}"
+
+    def __init__(
+        self,
+        host: str = "",
+        port: int = 8001,
+        persist_dir: str = "./chroma_data",
+    ):
+        self._host = host
+        self._port = port
+        self._persist_dir = persist_dir
+        self._client: Any = None
+
+    def _get_client(self) -> Any:
+        """获取或初始化 Chroma 客户端。"""
+        if self._client is None:
+            import chromadb
+            if self._host:
+                self._client = chromadb.HttpClient(host=self._host, port=self._port)
+            else:
+                self._client = chromadb.PersistentClient(path=self._persist_dir)
+        return self._client
+
+    def _get_collection(self, kb_id: str) -> Any:
+        """获取 Collection，不存在时抛出异常。"""
+        client = self._get_client()
+        return client.get_collection(self._collection_name(kb_id))
 
     async def create_collection(self, kb_id: str, dim: int, enable_bm25: bool = True) -> None:
-        logger.info("NoopVectorStore: create_collection kb=%s dim=%d", kb_id, dim)
+        client = self._get_client()
+        collection_name = self._collection_name(kb_id)
+
+        try:
+            client.delete_collection(collection_name)
+            logger.info("Dropped existing Chroma collection: %s", collection_name)
+        except Exception:
+            pass
+
+        client.create_collection(
+            name=collection_name,
+            metadata={"hnsw:space": "cosine", "dim": dim},
+        )
+        logger.info("Chroma collection created: %s (dim=%d)", collection_name, dim)
 
     async def delete_collection(self, kb_id: str) -> None:
-        prefix = f"{kb_id}:"
-        keys = [k for k in self._chunks if k.startswith(prefix)]
-        for k in keys:
-            del self._chunks[k]
-        logger.info("NoopVectorStore: delete_collection kb=%s removed=%d", kb_id, len(keys))
+        client = self._get_client()
+        collection_name = self._collection_name(kb_id)
+        try:
+            client.delete_collection(collection_name)
+            logger.info("Chroma collection deleted: %s", collection_name)
+        except Exception as e:
+            logger.error("Failed to delete Chroma collection %s: %s", collection_name, e)
 
     async def add_documents(
-        self, kb_id: str, documents: list[Document], embeddings: list[list[float]]
+        self, kb_id: str, documents: list[Document], embeddings: list[list[float]],
     ) -> list[str]:
+        import json
         import uuid
-        chunk_ids: list[str] = []
-        by_doc: dict[str, list[dict]] = {}
+
+        collection = self._get_collection(kb_id)
+
+        chunk_ids = [str(uuid.uuid4()) for _ in documents]
+        chroma_docs: list[str] = []
+        metadatas: list[dict[str, Any]] = []
 
         for i, doc in enumerate(documents):
-            chunk_id = str(uuid.uuid4())
-            chunk_ids.append(chunk_id)
-            doc_id = doc.metadata.get("doc_id", "")
-            key = self._make_key(kb_id, doc_id)
-            record = {
-                "id": chunk_id,
-                "doc_id": doc_id,
+            chroma_docs.append(doc.page_content)
+            metadatas.append({
+                "doc_id": doc.metadata.get("doc_id", ""),
                 "kb_id": kb_id,
                 "chunk_index": doc.metadata.get("chunk_index", i),
-                "chunk_text": doc.page_content[:65535],
                 "doc_name": doc.metadata.get("doc_name", ""),
                 "doc_type": doc.metadata.get("doc_type", ""),
-                "metadata_": doc.metadata.get("metadata_", {}),
-            }
-            if key not in by_doc:
-                by_doc[key] = []
-            by_doc[key].append(record)
+                "metadata_": json.dumps(doc.metadata.get("metadata_", {})),
+                "created_at": doc.metadata.get("created_at", 0),
+            })
 
-        for key, records in by_doc.items():
-            if key not in self._chunks:
-                self._chunks[key] = []
-            self._chunks[key].extend(records)
-
-        logger.info("NoopVectorStore: add_documents kb=%s total=%d", kb_id, len(chunk_ids))
+        collection.add(
+            ids=chunk_ids,
+            documents=chroma_docs,
+            embeddings=embeddings,
+            metadatas=metadatas,
+        )
+        logger.info("Chroma inserted %d chunks for kb=%s", len(chunk_ids), kb_id)
         return chunk_ids
 
     async def delete_by_doc_id(self, kb_id: str, doc_id: str) -> None:
-        key = self._make_key(kb_id, doc_id)
-        count = len(self._chunks.pop(key, []))
-        logger.info("NoopVectorStore: delete_by_doc_id kb=%s doc=%s removed=%d",
-                    kb_id, doc_id, count)
+        collection = self._get_collection(kb_id)
+        # Find all chunk IDs for this doc
+        result = collection.get(
+            where={"doc_id": doc_id},
+            include=[],
+        )
+        if result["ids"]:
+            collection.delete(ids=result["ids"])
+            logger.info("Chroma deleted %d chunks for doc=%s in kb=%s", len(result["ids"]), doc_id, kb_id)
 
     async def get_chunks_by_doc_id(self, kb_id: str, doc_id: str) -> list[dict]:
-        key = self._make_key(kb_id, doc_id)
-        chunks = list(self._chunks.get(key, []))
+        import json
+
+        collection = self._get_collection(kb_id)
+        result = collection.get(
+            where={"doc_id": doc_id},
+            include=["documents", "metadatas"],
+        )
+
+        chunks: list[dict] = []
+        if not result["ids"]:
+            return chunks
+
+        for i, cid in enumerate(result["ids"]):
+            meta = (result["metadatas"] or [{}])[i] if i < len(result["metadatas"] or []) else {}
+            metadata_str = meta.get("metadata_", "{}")
+            try:
+                metadata_obj = json.loads(metadata_str) if isinstance(metadata_str, str) else metadata_str
+            except (json.JSONDecodeError, TypeError):
+                metadata_obj = {}
+
+            chunks.append({
+                "id": cid,
+                "doc_id": meta.get("doc_id", ""),
+                "kb_id": meta.get("kb_id", kb_id),
+                "chunk_index": meta.get("chunk_index", i),
+                "chunk_text": (result["documents"] or [""])[i] if i < len(result["documents"] or []) else "",
+                "doc_name": meta.get("doc_name", ""),
+                "doc_type": meta.get("doc_type", ""),
+                "metadata_": metadata_obj,
+            })
+
         chunks.sort(key=lambda r: r.get("chunk_index", 0))
-        logger.info("NoopVectorStore: get_chunks_by_doc_id kb=%s doc=%s count=%d",
-                    kb_id, doc_id, len(chunks))
+        logger.info("Chroma queried %d chunks for doc=%s", len(chunks), doc_id)
         return chunks
 
     async def delete_chunk_by_id(self, kb_id: str, chunk_id: str) -> None:
-        for key, records in self._chunks.items():
-            if key.startswith(f"{kb_id}:"):
-                before = len(records)
-                self._chunks[key] = [r for r in records if r.get("id") != chunk_id]
-                if len(self._chunks[key]) < before:
-                    logger.info("NoopVectorStore: delete_chunk_by_id kb=%s chunk=%s",
-                                kb_id, chunk_id)
-                    return
+        collection = self._get_collection(kb_id)
+        collection.delete(ids=[chunk_id])
+        logger.info("Chroma deleted chunk=%s in kb=%s", chunk_id, kb_id)
 
     async def update_chunk(
         self, kb_id: str, chunk_id: str, new_text: str,
         new_embedding: list[float],
     ) -> None:
-        for key, records in self._chunks.items():
-            if key.startswith(f"{kb_id}:"):
-                for r in records:
-                    if r.get("id") == chunk_id:
-                        r["chunk_text"] = new_text[:65535]
-                        logger.info("NoopVectorStore: update_chunk kb=%s chunk=%s",
-                                    kb_id, chunk_id)
-                        return
+        import time
+
+        collection = self._get_collection(kb_id)
+        now_ms = int(time.time() * 1000)
+        collection.update(
+            ids=[chunk_id],
+            documents=[new_text],
+            embeddings=[new_embedding],
+            metadatas=[{"created_at": now_ms}],
+        )
+        logger.info("Chroma updated chunk=%s in kb=%s", chunk_id, kb_id)
 
     async def similarity_search(
-        self, kb_id: str, query_embedding: list[float], top_k: int
+        self, kb_id: str, query_embedding: list[float], top_k: int,
     ) -> list[tuple[str, float]]:
-        return []
+        collection = self._get_collection(kb_id)
+        result = collection.query(
+            query_embeddings=[query_embedding],
+            n_results=top_k,
+            include=[],
+        )
+
+        pairs: list[tuple[str, float]] = []
+        if not result["ids"] or not result["ids"][0]:
+            return pairs
+
+        for i, cid in enumerate(result["ids"][0]):
+            distance = (result["distances"] or [[]])[0][i] if result.get("distances") else 0.0
+            pairs.append((cid, distance))
+
+        logger.info("Chroma similarity search kb=%s top_k=%d returned=%d", kb_id, top_k, len(pairs))
+        return pairs
 
     async def bm25_search(
-        self, kb_id: str, query: str, top_k: int
+        self, kb_id: str, query: str, top_k: int,
     ) -> list[tuple[str, float]]:
-        return []
+        """BM25 全文搜索——通过 Chroma where_document 过滤 + TF 打分。
+
+        Chroma 的全文搜索能力有限，用 $contains 过滤候选文档后按词频排序。
+        """
+        import re
+
+        collection = self._get_collection(kb_id)
+        query_terms = re.findall(r"\w+", query.lower())
+        if not query_terms:
+            return []
+
+        # Use the longest query term for Chroma full-text filtering
+        longest_term = max(query_terms, key=len)
+        try:
+            result = collection.get(
+                where_document={"$contains": longest_term},
+                include=["documents"],
+            )
+        except Exception:
+            logger.warning("Chroma BM25 get failed for kb=%s, term=%s", kb_id, longest_term)
+            return []
+
+        if not result["ids"]:
+            return []
+
+        scores: list[tuple[str, float]] = []
+        for i, cid in enumerate(result["ids"]):
+            doc_text = ((result["documents"] or [""])[i] or "").lower()
+            tf = sum(doc_text.count(term) for term in query_terms if term)
+            if tf > 0:
+                scores.append((cid, float(tf)))
+
+        scores.sort(key=lambda x: x[1], reverse=True)
+        logger.info("Chroma BM25 kb=%s top_k=%d candidates=%d returned=%d", kb_id, top_k, len(result["ids"]), len(scores[:top_k]))
+        return scores[:top_k]
 
     async def hybrid_search(
         self, kb_id: str, query: str, query_embedding: list[float],
         top_k: int, alpha: float = 0.7,
     ) -> list[tuple[str, float]]:
-        return []
+        """混合搜索——向量相似度 + BM25 加权融合。
+
+        alpha: 向量权重 (0=纯BM25, 1=纯向量)
+        """
+        vec_results = await self.similarity_search(kb_id, query_embedding, top_k * 2)
+        bm25_results = await self.bm25_search(kb_id, query, top_k * 2)
+
+        # Build score maps, normalize to [0, 1]
+        vec_scores: dict[str, float] = {}
+        bm25_scores: dict[str, float] = {}
+
+        if vec_results:
+            max_vec = max(s for _, s in vec_results)
+            min_vec = min(s for _, s in vec_results)
+            vec_range = max_vec - min_vec if max_vec != min_vec else 1.0
+            for cid, s in vec_results:
+                vec_scores[cid] = 1.0 - (s - min_vec) / vec_range
+
+        if bm25_results:
+            max_bm25 = max(s for _, s in bm25_results)
+            min_bm25 = min(s for _, s in bm25_results)
+            bm25_range = max_bm25 - min_bm25 if max_bm25 != min_bm25 else 1.0
+            for cid, s in bm25_results:
+                bm25_scores[cid] = (s - min_bm25) / bm25_range
+
+        # Fuse scores
+        fused: dict[str, float] = {}
+        for cid in set(vec_scores) | set(bm25_scores):
+            v = vec_scores.get(cid, 0.0)
+            b = bm25_scores.get(cid, 0.0)
+            fused[cid] = alpha * v + (1 - alpha) * b
+
+        ranked = sorted(fused.items(), key=lambda x: x[1], reverse=True)[:top_k]
+        logger.info("Chroma hybrid kb=%s top_k=%d alpha=%.2f returned=%d", kb_id, top_k, alpha, len(ranked))
+        return ranked

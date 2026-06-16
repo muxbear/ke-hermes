@@ -23,7 +23,7 @@ class ChunkStrategy(ABC):
 class FixedChunkStrategy(ChunkStrategy):
     """固定长度切片。"""
 
-    def __init__(self, chunk_size: int = 512, chunk_overlap: int = 64):
+    def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 200):
         self._chunk_size = chunk_size
         self._chunk_overlap = chunk_overlap
 
@@ -39,7 +39,7 @@ class FixedChunkStrategy(ChunkStrategy):
 class RecursiveChunkStrategy(ChunkStrategy):
     """递归分隔符切片——按段落→换行→句号→空格递归切分。"""
 
-    def __init__(self, chunk_size: int = 512, chunk_overlap: int = 64):
+    def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 200):
         self._chunk_size = chunk_size
         self._chunk_overlap = chunk_overlap
 
@@ -55,10 +55,10 @@ class RecursiveChunkStrategy(ChunkStrategy):
 class SemanticChunkStrategy(ChunkStrategy):
     """语义切片——基于 embedding 向量相似度自动确定主题边界。"""
 
-    def __init__(self, chunk_size: int = 512, chunk_overlap: int = 64,
+    def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 200,
                  embedding_model=None):
         if embedding_model is None:
-            raise ValueError("SemanticChunkStrategy requires an embedding model")
+            raise ValueError("语义切分策略需要一个嵌入模型。")
         self._chunk_size = chunk_size
         self._chunk_overlap = chunk_overlap
         self._embedding_model = embedding_model
@@ -79,7 +79,7 @@ class MarkdownChunkStrategy(ChunkStrategy):
         from langchain_text_splitters import MarkdownHeaderTextSplitter
         splitter = MarkdownHeaderTextSplitter(
             headers_to_split_on=[
-                ("#", "h1"), ("##", "h2"), ("###", "h3"),
+                ("#", "h1"), ("##", "h2"), ("###", "h3"), ("###", "h4"),
             ],
             strip_headers=True,
         )
@@ -128,8 +128,8 @@ def create_chunk_registry(config: dict, embedding_model=None, llm=None) -> Chunk
 
     仅注册 embedding_model 可用的策略（semantic 需要 embedding，agentic 需要 llm）。
     """
-    chunk_size = config.get("chunk_size", 512)
-    chunk_overlap = config.get("chunk_overlap", 64)
+    chunk_size = config.get("chunk_size", 1000)
+    chunk_overlap = config.get("chunk_overlap", 200)
 
     registry = ChunkStrategyRegistry()
     registry.register("fixed", FixedChunkStrategy(chunk_size, chunk_overlap))

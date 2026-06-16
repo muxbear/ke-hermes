@@ -118,7 +118,7 @@ class Settings(BaseSettings):
     SLIDE_THRESHOLD: int = int(os.getenv("SLIDE_THRESHOLD") or 8)
 
     # ---- Redis ----
-    REDIS_URL: str = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+    REDIS_URL: str = os.getenv("REDIS_URL", "")
 
     # ---- OAuth ----
     OAUTH_GITHUB_CLIENT_ID: str = os.getenv("OAUTH_GITHUB_CLIENT_ID", "")

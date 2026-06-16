@@ -6,7 +6,7 @@ NOTE: 为避免与 core.__init__ 的循环导入，各子模块在使用时按�
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from .vector_store import BaseVectorStore, NoopVectorStore
+    from .vector_store import BaseVectorStore
     from .bm25_index import BM25Indexer
     from .splitters import ChunkStrategy, ChunkStrategyRegistry, create_chunk_registry
     from .loaders import (
@@ -28,6 +28,8 @@ def __getattr__(name: str):
     _exports = {
         "BaseVectorStore": ".vector_store",
         "NoopVectorStore": ".vector_store",
+        "MilvusVectorStore": ".vector_store",
+        "ChromaVectorStore": ".vector_store",
         "BM25Indexer": ".bm25_index",
         "ChunkStrategy": ".splitters",
         "ChunkStrategyRegistry": ".splitters",
@@ -57,5 +59,4 @@ __all__ = [
     "DocumentLoaderStrategy",
     "FallbackLoaderStrategy",
     "get_embedding_model",
-    "NoopVectorStore",
 ]

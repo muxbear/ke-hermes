@@ -23,20 +23,12 @@ class DocumentLoaderStrategy(ABC):
         ...
 
 
-class PyPDFLoaderStrategy(DocumentLoaderStrategy):
-    """PDF 加载——langchain_community PyPDFLoader（备选策略）。"""
-
-    def load(self, file_path: str) -> list[Document]:
-        from langchain_community.document_loaders import PyPDFLoader
-        return PyPDFLoader(file_path).load()
-
-
 class OpenDataLoaderPDFStrategy(DocumentLoaderStrategy):
     """PDF 加载——langchain-opendataloader-pdf（优先策略）。"""
 
     def load(self, file_path: str) -> list[Document]:
         if not os.path.isfile(file_path):
-            raise FileNotFoundError(f"PDF file not found: {file_path}")
+            raise FileNotFoundError(f"PDF 文件未找到: {file_path}")
         from langchain_opendataloader_pdf import OpenDataLoaderPDFLoader
         docs = OpenDataLoaderPDFLoader(
                     file_path=str(file_path),
@@ -49,9 +41,17 @@ class OpenDataLoaderPDFStrategy(DocumentLoaderStrategy):
                 ).load()
         if not docs:
             raise RuntimeError(
-                f"OpenDataLoaderPDF returned empty result for {file_path}"
+                f"OpenDataLoaderPDFLoader 加载文件 {file_path} 返回空的 Documents。"
             )
         return docs
+
+
+class PyPDFLoaderStrategy(DocumentLoaderStrategy):
+    """PDF 加载——langchain_community PyPDFLoader（备选策略）。"""
+
+    def load(self, file_path: str) -> list[Document]:
+        from langchain_community.document_loaders import PyPDFLoader
+        return PyPDFLoader(file_path).load()
 
 
 class DocxLoaderStrategy(DocumentLoaderStrategy):
@@ -178,7 +178,7 @@ class FallbackLoaderStrategy(DocumentLoaderStrategy):
             except Exception as e:
                 errors.append(f"{type(strategy).__name__}: {e}")
                 logger.debug("Loader %s failed: %s", type(strategy).__name__, e)
-        raise ValueError(f"All loaders failed: {'; '.join(errors)}")
+        raise ValueError(f"所有加载器出现异常: {'; '.join(errors)}")
 
 
 class DocumentLoaderRegistry:

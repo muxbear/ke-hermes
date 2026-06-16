@@ -73,7 +73,7 @@ def compute_stages(status: str, error_message: str | None = None) -> list[dict]:
         failed_idx = _infer_failed_stage_index(error_message)
         if failed_idx < len(stages):
             stages[failed_idx]["status"] = "failed"
-            # Mark preceding stages as done (they succeeded before the failure)
+            # 将失败阶段之前的阶段标记为完成（失败前已成功执行）
             for j in range(failed_idx):
                 stages[j]["status"] = "done"
                 stages[j]["pct"] = 100
@@ -111,7 +111,7 @@ def _infer_failed_stage_index(error_message: str | None) -> int:
 
 
 # ══════════════════════════════════════════════════════════════
-# 观察者 (Observer Pattern)
+# 观察者模式
 # ══════════════════════════════════════════════════════════════
 
 class ProgressObserver(ABC):
@@ -145,7 +145,7 @@ class DatabaseProgressObserver(ProgressObserver):
                 await db.execute(stmt)
                 await db.commit()
         except Exception as e:
-            logger.error("DatabaseProgressObserver failed: %s", e)
+            logger.error("DatabaseProgressObserver 写入失败: %s", e)
 
 
 class LoggingProgressObserver(ProgressObserver):
@@ -153,11 +153,11 @@ class LoggingProgressObserver(ProgressObserver):
 
     async def on_progress(self, ctx: IndexingContext) -> None:
         stage = ctx.current_state.name if ctx.current_state else "unknown"
-        logger.info("Doc %s: status=%s progress=%d%% stage=%s", ctx.doc_id, ctx.status, ctx.progress, stage)
+        logger.info("文档 %s: 状态=%s 进度=%d%% 阶段=%s", ctx.doc_id, ctx.status, ctx.progress, stage)
 
 
 # ══════════════════════════════════════════════════════════════
-# 模板方法——IndexingPipeline (Template Method Pattern)
+# 模板方法模式——IndexingPipeline
 # ══════════════════════════════════════════════════════════════
 
 class IndexingPipeline:
@@ -186,7 +186,7 @@ class IndexingPipeline:
             try:
                 await observer.on_progress(ctx)
             except Exception as e:
-                logger.error("Observer %s failed: %s", type(observer).__name__, e)
+                logger.error("观察者 %s 执行失败: %s", type(observer).__name__, e)
 
     async def execute(self, task: IndexingTask) -> None:
         """模板方法：定义 8 阶段索引骨架。"""
@@ -209,7 +209,7 @@ class IndexingPipeline:
         try:
             await self._run_state_machine(ctx)
         except Exception as e:
-            logger.exception("Pipeline failed for doc %s", task.doc_id)
+            logger.exception("流水线处理文档 %s 失败", task.doc_id)
             await ctx.fail(str(e))
             await self._notify(ctx)
 
@@ -223,7 +223,7 @@ class IndexingPipeline:
 
 
 # ══════════════════════════════════════════════════════════════
-# 调度器——单例模式 (Singleton Pattern)
+# 调度器——单例模式
 # ══════════════════════════════════════════════════════════════
 
 @dataclass
@@ -265,7 +265,7 @@ class IndexingScheduler:
 
     async def enqueue(self, task: IndexingTask) -> None:
         self._queue.append(task)
-        logger.info("Task enqueued: doc=%s, queue_size=%d", task.doc_id, len(self._queue))
+        logger.info("任务已入队: 文档=%s, 队列长度=%d", task.doc_id, len(self._queue))
         await self._try_start_next()
 
     async def _try_start_next(self) -> None:
@@ -294,7 +294,7 @@ async def upload_documents(
     scheduler: IndexingScheduler | None = None,
 ) -> list[KBDocUploadResponse]:
     """上传文档并触发索引流水线。"""
-    # Validate KB
+    # 校验知识库
     kb = (
         await db.execute(
             select(KnowledgeBase).where(
@@ -313,13 +313,13 @@ async def upload_documents(
     total_new_bytes = 0
 
     for file in files:
-        # Validate filename
+        # 校验文件名
         filename = file.filename or "unknown"
         file_type = _get_file_type(filename)
         if file_type == "unknown":
             raise HTTPException(status_code=400, detail=f"不支持的文件类型: {filename}")
 
-        # Read and validate size
+        # 读取并校验大小
         content = await file.read()
         if len(content) > MAX_FILE_SIZE_MB * 1024 * 1024:
             raise HTTPException(
@@ -355,14 +355,14 @@ async def upload_documents(
             status="queued", uploaded_at=now,
         ))
 
-        # Enqueue indexing
+        # 入队索引任务
         if scheduler:
             await scheduler.enqueue(IndexingTask(
                 kb_id=kb_id, doc_id=doc_id, file_path=storage_path,
                 file_type=file_type, config=kb.config,
             ))
 
-    # Update KB counts
+    # 更新知识库统计
     kb.docs_count = (kb.docs_count or 0) + len(files)
     kb.size_bytes = (kb.size_bytes or 0) + total_new_bytes
     if kb.status == "draft":
@@ -485,19 +485,19 @@ async def delete_document(
     if doc is None:
         raise HTTPException(status_code=404, detail="文档不存在")
 
-    # Delete from vector DB
+    # 从向量数据库删除
     if vector_store:
         try:
             await vector_store.delete_by_doc_id(kb_id, doc_id)
         except Exception as e:
-            logger.error("Failed to delete vectors for doc=%s: %s", doc_id, e)
+            logger.error("删除文档 %s 向量数据失败: %s", doc_id, e)
 
-    # Delete source file
+    # 删除源文件
     storage_dir = os.path.dirname(doc.storage_path)
     if os.path.isdir(storage_dir):
         shutil.rmtree(storage_dir, ignore_errors=True)
 
-    # Update KB counts
+    # 更新知识库统计
     kb = (
         await db.execute(
             select(KnowledgeBase).where(KnowledgeBase.id == kb_id)

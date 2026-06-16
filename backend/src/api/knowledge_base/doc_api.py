@@ -31,7 +31,7 @@ async def upload_docs(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(get_current_user_id),
 ):
-    """上传文档。"""
+    """向指定知识库批量上传文档（最多 20 个），落盘、写库，并异步触发索引流水线。"""
     if not files:
         return {"code": 400, "data": None, "message": "请选择文件"}
 

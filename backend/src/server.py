@@ -4,8 +4,8 @@ import sys
 from contextlib import asynccontextmanager
 
 if sys.platform == "win32":
-    # uvicorn hardcodes ProactorEventLoop on Windows, bypassing the
-    # event loop policy.  Monkeypatch it so psycopg can work.
+    # uvicorn 在 Windows 上硬编码了 ProactorEventLoop，绕过了事件循环策略。
+    # 通过 monkeypatch 修复以兼容 psycopg。
     import uvicorn.loops.asyncio as _uvicorn_loops
 
     _uvicorn_loops.asyncio_loop_factory = lambda use_subprocess=False: asyncio.SelectorEventLoop
@@ -27,9 +27,9 @@ from agent.graph import init_graph, shutdown_graph
 
 
 def _init_knowledge_base(app: FastAPI) -> None:
-    """Initialize KB vector store and indexing scheduler on app state."""
+    """初始化知识库向量存储和索引调度器，挂载到 app.state。"""
     from agent.config import settings
-    from core.rag.vector_store import MilvusVectorStore, NoopVectorStore
+    from core.rag.vector_store import BaseVectorStore, MilvusVectorStore
     from core.rag.loaders import create_default_loader_registry
     from core.rag.splitters import create_chunk_registry
     from core.rag.embedding import get_embedding_model
@@ -43,15 +43,15 @@ def _init_knowledge_base(app: FastAPI) -> None:
 
     kb_logger = logging.getLogger(__name__)
 
-    # Embedding model (from env config)
+    # 嵌入模型（从环境变量配置读取）
     embedding_model = get_embedding_model(
         model_name=settings.DEFAULT_EMBEDDING_MODEL,
         api_base=settings.DASHSCOPE_BASE_URL,
         api_key=settings.DASHSCOPE_API_KEY,
     )
 
-    # Vector store — Milvus with fallback to Noop
-    vector_store = None
+    # 向量数据库 —— 支持 milvus / chroma
+    vector_store: BaseVectorStore | None = None
     if settings.VECTOR_DB_BACKEND == "milvus":
         try:
             vector_store = MilvusVectorStore(
@@ -60,28 +60,34 @@ def _init_knowledge_base(app: FastAPI) -> None:
                 password=settings.MILVUS_PASSWORD,
                 db_name=settings.MILVUS_DEFAULT_DB,
             )
-            kb_logger.info("Vector store: Milvus (%s, db=%s)",
+            kb_logger.info("向量数据库: Milvus (%s, db=%s)",
                          settings.MILVUS_URI, settings.MILVUS_DEFAULT_DB)
         except Exception as e:
-            kb_logger.error("Milvus init failed, falling back to NoopVectorStore: %s", e)
-            vector_store = NoopVectorStore()
+            kb_logger.error("Milvus 初始化失败: %s", e)
+            raise
+    elif settings.VECTOR_DB_BACKEND == "chroma":
+        from core.rag.vector_store import ChromaVectorStore
+        vector_store = ChromaVectorStore(
+            host=settings.CHROMA_HOST,
+            port=settings.CHROMA_PORT,
+            persist_dir=settings.CHROMA_PERSIST_DIR,
+        )
+        kb_logger.info("向量数据库: Chroma (persist_dir=%s)", settings.CHROMA_PERSIST_DIR)
     else:
-        vector_store = NoopVectorStore()
-        kb_logger.info("Vector store: NoopVectorStore (VECTOR_DB_BACKEND=%s)",
-                     settings.VECTOR_DB_BACKEND)
+        raise RuntimeError(f"不支持的向量数据库后端: {settings.VECTOR_DB_BACKEND}")
 
     app.state.vector_store = vector_store
 
-    # Document loader registry
+    # 文档加载器注册表
     loader_registry = create_default_loader_registry()
 
-    # Chunk strategy registry (with embedding model for semantic strategy)
+    # 切片策略注册表（语义策略需要嵌入模型）
     chunk_registry = create_chunk_registry({}, embedding_model=embedding_model)
 
-    # Graph extraction service
+    # 图谱抽取服务
     graph_service = GraphExtractionService(backend=settings.GRAPH_STORE_BACKEND)
 
-    # Pipeline
+    # 索引流水线
     pipeline = IndexingPipeline(
         loader_registry=loader_registry,
         chunk_registry=chunk_registry,
@@ -90,19 +96,19 @@ def _init_knowledge_base(app: FastAPI) -> None:
         graph_service=graph_service,
     )
 
-    # Observers
+    # 进度观察者
     from db.engine import async_session
     pipeline.attach(DatabaseProgressObserver(async_session))
     pipeline.attach(LoggingProgressObserver())
 
-    # Scheduler (singleton)
+    # 索引调度器（单例）
     scheduler = IndexingScheduler(
         pipeline=pipeline,
         max_concurrent=settings.INDEXING_MAX_CONCURRENT,
     )
     app.state.scheduler = scheduler
     kb_logger.info(
-        "IndexingScheduler initialized (max_concurrent=%d)", settings.INDEXING_MAX_CONCURRENT
+        "索引调度器已初始化 (max_concurrent=%d)", settings.INDEXING_MAX_CONCURRENT
     )
 
 
@@ -110,7 +116,7 @@ def _init_knowledge_base(app: FastAPI) -> None:
 async def lifespan(app: FastAPI):
     await init_db()
 
-    # Seed MCP tools and builtin skills on first run
+    # 首次启动时种子化 MCP 工具和内置技能
     from api.mcp.service import seed_mcp_tools
     from api.skill.service import seed_builtin_skills
     from api.tools.service import seed_builtin_tools
@@ -122,7 +128,7 @@ async def lifespan(app: FastAPI):
         await seed_builtin_tools(session)
         await session.commit()
 
-    # Migrate any plaintext api_key values to encrypted
+    # 迁移明文 api_key 为加密存储
     from api.providers.service import migrate_plaintext_api_keys
     async with async_session() as session:
         await migrate_plaintext_api_keys(session)
@@ -134,7 +140,7 @@ async def lifespan(app: FastAPI):
     from core.security import _get_jwt_secret as init_jwt
     init_jwt()
 
-    # Initialize knowledge base subsystem
+    # 初始化知识库子系统
     _init_knowledge_base(app)
 
     yield
