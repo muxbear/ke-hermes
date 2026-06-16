@@ -24,7 +24,7 @@ const ENTITY_COLORS: Record<string, string> = {
 }
 
 const nodeColor = computed(() => ENTITY_COLORS[props.data.type] || '#94a3b8')
-const circleSize = computed(() => Math.min(56, 40 + props.data.mentions * 2))
+const circleSize = computed(() => Math.min(72, 48 + props.data.mentions * 3))
 </script>
 
 <template>

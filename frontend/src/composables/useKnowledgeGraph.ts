@@ -188,15 +188,15 @@ export function useKnowledgeGraph() {
         'link',
         forceLink(links)
           .id((d: any) => d.id)
-          .distance(160)
-          .strength(0.4),
+          .distance(120)
+          .strength(0.5),
       )
-      .force('charge', forceManyBody().strength(-600))
+      .force('charge', forceManyBody().strength(-400))
       .force('center', forceCenter(0, 0))
-      .force('collide', forceCollide(55))
+      .force('collide', forceCollide(45))
       .stop()
 
-    for (let i = 0; i < 300; i++) {
+    for (let i = 0; i < 350; i++) {
       sim.tick()
     }
 

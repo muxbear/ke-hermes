@@ -5,7 +5,7 @@ import { Background } from '@vue-flow/background'
 import { Controls, ControlButton } from '@vue-flow/controls'
 import { MiniMap } from '@vue-flow/minimap'
 import {
-  Network, RefreshCw, ZoomIn, ZoomOut, Maximize2, Search,
+  Network, RefreshCw, Search,
   Lock, Unlock, ChevronRight, X,
 } from 'lucide-vue-next'
 import { ElMessage } from 'element-plus'
@@ -147,7 +147,7 @@ function handlePaneClick() {
 }
 
 function handlePaneReady() {
-  setTimeout(() => fitView({ duration: 500, padding: 0.2 }), 200)
+  setTimeout(() => fitView({ duration: 400, padding: 0.12, maxZoom: 1.8 }), 300)
 }
 
 function handleSearchEnter() {
@@ -199,7 +199,7 @@ function handleExportPng() {
 function handleResetLayout() {
   applyForceLayout()
   nextTick(() => {
-    setTimeout(() => fitView({ duration: 400, padding: 0.2 }), 100)
+    setTimeout(() => fitView({ duration: 400, padding: 0.12, maxZoom: 1.8 }), 100)
   })
 }
 
@@ -245,16 +245,16 @@ function minimapNodeColor(node: { data?: { color?: string } }) {
           <el-option v-for="t in entityTypes" :key="t" :label="t" :value="t" />
         </el-select>
 
-        <button class="toolbar-btn" :title="isLocked ? '解锁布局' : '锁定布局'" @click="isLocked = !isLocked">
+        <button class="toolbar-btn" :title="isLocked ? '解锁布局（允许拖拽节点）' : '锁定布局（禁止拖拽节点）'" @click="isLocked = !isLocked">
           <Lock v-if="isLocked" :size="16" />
           <Unlock v-else :size="16" />
         </button>
 
-        <button class="toolbar-btn" title="力导向布局" :disabled="loadingLayout" @click="handleResetLayout">
+        <button class="toolbar-btn" title="重新计算力导向布局" :disabled="loadingLayout" @click="handleResetLayout">
           <RefreshCw :size="16" :class="{ 'spin': loadingLayout }" />
         </button>
 
-        <button class="toolbar-btn" title="导出PNG" @click="handleExportPng">
+        <button class="toolbar-btn" title="导出为 PNG 图片" @click="handleExportPng">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         </button>
 
@@ -276,10 +276,9 @@ function minimapNodeColor(node: { data?: { color?: string } }) {
           :nodes-draggable="!isLocked"
           :pan-on-drag="!isLocked ? [0, 1, 2] : []"
           :zoom-on-scroll="!isLocked"
-          :default-viewport="{ x: 300, y: 100, zoom: 1 }"
-          :min-zoom="0.1"
+          :default-viewport="{ x: 0, y: 0, zoom: 1 }"
+          :min-zoom="0.05"
           :max-zoom="4"
-          fit-view-on-init
           class="graph-flow"
           @node-click="handleNodeClick"
           @node-double-click="handleNodeDoubleClick"
@@ -287,15 +286,28 @@ function minimapNodeColor(node: { data?: { color?: string } }) {
           @pane-ready="handlePaneReady"
         >
           <Background :gap="20" :size="1" pattern-color="#1e293b" />
-          <Controls position="bottom-right" :show-interactive="false">
+          <Controls position="bottom-right" :show-interactive="false" :show-zoom="false" :show-fit-view="false">
             <ControlButton title="放大" @click="zoomIn({ duration: 200 })">
-              <ZoomIn :size="16" />
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="7"/>
+                <path d="M21 21l-4-4"/>
+                <path d="M11 8v6M8 11h6"/>
+              </svg>
             </ControlButton>
             <ControlButton title="缩小" @click="zoomOut({ duration: 200 })">
-              <ZoomOut :size="16" />
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="7"/>
+                <path d="M21 21l-4-4"/>
+                <path d="M8 11h6"/>
+              </svg>
             </ControlButton>
-            <ControlButton title="适应视图" @click="fitView({ duration: 300, padding: 0.2 })">
-              <Maximize2 :size="16" />
+            <ControlButton title="适应视图（显示全部节点）" @click="fitView({ duration: 300, padding: 0.12, maxZoom: 1.8 })">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 3H5a2 2 0 0 0-2 2v3"/>
+                <path d="M21 8V5a2 2 0 0 0-2-2h-3"/>
+                <path d="M3 16v3a2 2 0 0 0 2 2h3"/>
+                <path d="M16 21h3a2 2 0 0 0 2-2v-3"/>
+              </svg>
             </ControlButton>
           </Controls>
           <MiniMap
@@ -861,19 +873,29 @@ function minimapNodeColor(node: { data?: { color?: string } }) {
 .vue-flow__controls {
   border-radius: 8px !important;
   overflow: hidden;
+  border: 1px solid #475569 !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4) !important;
 }
 
 .vue-flow__controls-button {
-  background: rgba(15, 23, 42, 0.9) !important;
-  border-color: #334155 !important;
-  color: #94a3b8 !important;
-  width: 32px !important;
-  height: 32px !important;
+  background: #1e293b !important;
+  border-color: #475569 !important;
+  color: #e2e8f0 !important;
+  width: 40px !important;
+  height: 40px !important;
 }
 
 .vue-flow__controls-button:hover {
-  background: rgba(30, 41, 59, 0.9) !important;
-  color: #e2e8f0 !important;
+  background: #3b82f6 !important;
+  border-color: #3b82f6 !important;
+  color: #fff !important;
+}
+
+.vue-flow__controls-button svg {
+  fill: none !important;
+  stroke: currentColor !important;
+  width: 26px !important;
+  height: 26px !important;
 }
 
 .vue-flow__edge.selected .vue-flow__edge-path {
