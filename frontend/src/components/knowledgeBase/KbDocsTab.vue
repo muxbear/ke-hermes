@@ -69,6 +69,14 @@ async function handleRetry(docId: string) {
   }
 }
 
+function toggleDocPanel(doc: KBDoc) {
+  if (selectedDoc.value?.id === doc.id) {
+    selectedDoc.value = null
+  } else {
+    selectedDoc.value = doc
+  }
+}
+
 function handleViewDetail(doc: KBDoc) {
   detailDoc.value = doc
 }
@@ -134,7 +142,6 @@ function handleEditFragment(doc: KBDoc) {
                   v-for="doc in filteredDocs"
                   :key="doc.id"
                   :class="['doc-row', { 'doc-row--sel': selectedDoc?.id === doc.id }]"
-                  @click="selectedDoc = doc"
                 >
                   <td>
                     <div class="doc-cell">
@@ -148,7 +155,7 @@ function handleEditFragment(doc: KBDoc) {
                   <td class="cell-text">{{ doc.size }}</td>
                   <td class="cell-text">{{ doc.chunks || '-' }}</td>
                   <td class="cell-text">{{ doc.entities || '-' }} / {{ doc.relations || '-' }}</td>
-                  <td>
+                  <td class="col-status" @click.stop="toggleDocPanel(doc)">
                     <div class="status-cell">
                       <el-tooltip
                         v-if="doc.status === 'failed' && doc.errorMessage"
@@ -378,7 +385,8 @@ function handleEditFragment(doc: KBDoc) {
 .col-size { width: 90px; }
 .col-chunks { width: 70px; }
 .col-er { width: 100px; }
-.col-status { width: 180px; }
+.col-status { width: 180px; cursor: pointer; }
+.col-status:hover { background: rgba(255, 255, 255, 0.02); }
 .col-action { width: 150px; text-align: right; }
 
 .action-row {

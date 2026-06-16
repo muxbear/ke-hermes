@@ -87,7 +87,6 @@ async function loadProviders() {
       llmProviderId.value = lp[0].id
       if (lp[0].models.length > 0 && !config.value.entityModel) {
         config.value.entityModel = lp[0].models[0].name
-        config.value.relationModel = lp[0].models[0].name
       }
     }
   } catch {
@@ -128,7 +127,6 @@ function onLlmProviderChange(pid: string) {
   const p = llmProviders.value.find(x => x.id === pid)
   if (p && p.models.length > 0) {
     config.value.entityModel = p.models[0].name
-    config.value.relationModel = p.models[0].name
   }
 }
 
@@ -148,6 +146,7 @@ function handleClose() {
 
 function handleCreate() {
   if (!name.value.trim()) return
+  config.value.relationModel = config.value.entityModel
   emit('create', {
     name: name.value.trim(),
     description: description.value.trim(),
@@ -240,14 +239,14 @@ function handleCreate() {
       <!-- 实体抽取 —— 提供商 + 模型 -->
       <div class="form-row-2">
         <div class="field">
-          <label class="field-label">实体抽取模型</label>
+          <label class="field-label">LLM 提供商</label>
           <el-select :model-value="llmProviderId" @update:model-value="onLlmProviderChange" style="width: 100%" popper-class="dialog-select-popper">
             <el-option v-for="p in llmProviders" :key="p.id" :label="p.name" :value="p.id" />
           </el-select>
         </div>
         <div class="field">
-          <label class="field-label">关系抽取模型</label>
-          <el-select v-model="config.relationModel" style="width: 100%" popper-class="dialog-select-popper">
+          <label class="field-label">抽取模型</label>
+          <el-select v-model="config.entityModel" style="width: 100%" popper-class="dialog-select-popper">
             <el-option v-for="m in llmProviderModels" :key="m.id" :label="m.display_name || m.name" :value="m.name" />
           </el-select>
         </div>
@@ -311,11 +310,54 @@ function handleCreate() {
 .create-kb-dialog .el-dialog__header { padding: 24px 28px 0; }
 .create-kb-dialog .el-dialog__body { padding: 20px 28px; }
 .create-kb-dialog .el-dialog__footer { padding: 0 28px 24px; }
-.create-kb-dialog .el-select .el-input__wrapper { background: rgba(15, 23, 46, 0.6) !important; border-color: rgba(255, 255, 255, 0.1) !important; border-radius: 10px !important; box-shadow: none !important; }
-.create-kb-dialog .el-select .el-input__inner { color: #e2e8f0 !important; }
+
+/* Select 触发器 */
+.create-kb-dialog .el-select .el-input__wrapper {
+  background: var(--color-bg-input) !important;
+  border: 1px solid var(--border-medium) !important;
+  border-radius: var(--radius-input) !important;
+  box-shadow: none !important;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast) !important;
+}
+.create-kb-dialog .el-select .el-input__wrapper:hover {
+  border-color: rgba(255, 255, 255, 0.18) !important;
+}
+.create-kb-dialog .el-select .el-input__wrapper.is-focus {
+  border-color: var(--color-accent) !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+}
+.create-kb-dialog .el-select .el-input__inner {
+  color: var(--foreground-primary) !important;
+  font-size: var(--font-size-sm) !important;
+}
+.create-kb-dialog .el-select .el-input__inner::placeholder {
+  color: var(--foreground-muted) !important;
+}
+
+/* Select 下拉面板 */
+.dialog-select-popper {
+  background: var(--color-bg-input) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: var(--radius-input) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55) !important;
+  padding: 4px !important;
+}
+.dialog-select-popper .el-select-dropdown__item {
+  color: var(--foreground-primary) !important;
+  padding: 8px 12px !important;
+  font-size: var(--font-size-sm) !important;
+  border-radius: 6px !important;
+  margin: 2px 0 !important;
+  transition: background var(--transition-fast) !important;
+}
+.dialog-select-popper .el-select-dropdown__item:hover {
+  background: rgba(59, 130, 246, 0.12) !important;
+}
+.dialog-select-popper .el-select-dropdown__item.is-selected {
+  color: #93c5fd !important;
+  font-weight: var(--font-weight-medium) !important;
+  background: rgba(59, 130, 246, 0.08) !important;
+}
+
 .create-kb-dialog .el-switch.is-checked .el-switch__core { background: #3b82f6 !important; border-color: #3b82f6 !important; }
-.dialog-select-popper { background: #0f172e !important; border: 1px solid rgba(255, 255, 255, 0.1) !important; border-radius: 10px !important; }
-.dialog-select-popper .el-select-dropdown__item { color: #e2e8f0 !important; padding: 8px 12px !important; font-size: 13px !important; }
-.dialog-select-popper .el-select-dropdown__item:hover { background: rgba(59, 130, 246, 0.12) !important; }
-.dialog-select-popper .el-select-dropdown__item.is-selected { color: #93c5fd !important; }
 </style>

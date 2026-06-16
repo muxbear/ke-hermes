@@ -270,7 +270,9 @@ class IndexingScheduler:
 
     async def _try_start_next(self) -> None:
         if not self._queue or len(self._running) >= self._max_concurrent:
+            logger.warning(f"当前队列长度：{len(self._running)}，当队列长度为空或大于已允许的最大长度时无法再加入队列！")
             return
+        
         task = self._queue.popleft()
         async_task = asyncio.create_task(self._pipeline.execute(task))  # type: ignore[union-attr]
         self._running[task.doc_id] = async_task

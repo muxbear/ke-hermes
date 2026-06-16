@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import {
-  Scissors, Sparkle, Hash, Brain, GitBranch, Target, Gauge,
+  Scissors, Sparkle, Hash, Brain, Target, Gauge,
 } from 'lucide-vue-next'
 import type { IndexConfig } from '@/types/knowledgeBase'
 import { CHUNK_STRATEGY_OPTIONS } from '@/types/knowledgeBase'
@@ -19,8 +19,7 @@ const rows = computed(() => [
   { icon: Scissors, label: '切片', value: chunkLabel.value },
   { icon: Sparkle, label: 'Embedding', value: `${props.config.embeddingModel} · ${props.config.embeddingDim}d` },
   { icon: Hash, label: '稀疏检索', value: props.config.sparseAlgo === 'none' ? '未启用' : props.config.sparseAlgo.toUpperCase() },
-  { icon: Brain, label: '实体抽取', value: props.config.entityModel },
-  { icon: GitBranch, label: '关系抽取', value: props.config.relationModel },
+  { icon: Brain, label: '抽取模型', value: props.config.entityModel },
   { icon: Target, label: 'Reranker', value: props.config.enableReranker ? props.config.rerankerModel : '未启用' },
   { icon: Gauge, label: 'Top-K / α', value: `${props.config.topK} / ${props.config.hybridAlpha}` },
 ])

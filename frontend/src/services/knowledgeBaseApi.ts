@@ -129,7 +129,8 @@ export async function fetchKnowledgeBase(id: string): Promise<KB | null> {
 }
 
 export async function createKnowledgeBase(data: CreateKBRequest): Promise<KB> {
-  const res = await instance.post('/knowledge-bases', data)
+  const payload = { ...data, config: configToSnake(data.config) }
+  const res = await instance.post('/knowledge-bases', payload)
   return mapKB(res.data.data as RawKB)
 }
 
@@ -137,7 +138,11 @@ export async function updateKnowledgeBase(
   id: string,
   patch: Partial<KB>,
 ): Promise<KB> {
-  const res = await instance.put(`/knowledge-bases/${id}`, patch)
+  const payload: Record<string, unknown> = { ...patch }
+  if (payload.config) {
+    payload.config = configToSnake(payload.config as IndexConfig)
+  }
+  const res = await instance.put(`/knowledge-bases/${id}`, payload)
   return mapKB(res.data.data as RawKB)
 }
 
@@ -302,11 +307,8 @@ export async function fetchAvailableProviders(
   return res.data.data as AvailableProvider[]
 }
 
-export async function reindexKnowledgeBase(
-  kbId: string,
-  config: IndexConfig,
-): Promise<{ kb_id: string; docs_enqueued: number; status: string }> {
-  const payload = {
+function configToSnake(config: IndexConfig): Record<string, unknown> {
+  return {
     chunk_strategy: config.chunkStrategy,
     chunk_size: config.chunkSize,
     chunk_overlap: config.chunkOverlap,
@@ -323,7 +325,13 @@ export async function reindexKnowledgeBase(
     top_k: config.topK,
     hybrid_alpha: config.hybridAlpha,
   }
-  const res = await instance.post(`/knowledge-bases/${kbId}/reindex`, payload, {
+}
+
+export async function reindexKnowledgeBase(
+  kbId: string,
+  config: IndexConfig,
+): Promise<{ kb_id: string; docs_enqueued: number; status: string }> {
+  const res = await instance.post(`/knowledge-bases/${kbId}/reindex`, configToSnake(config), {
     timeout: 600000,
   })
   return res.data.data as { kb_id: string; docs_enqueued: number; status: string }

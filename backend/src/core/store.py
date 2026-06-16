@@ -67,7 +67,7 @@ class MemoryStore(KeyValueStore):
             self._clean(key)
             entry = self._data.get(key)
             if entry:
-                val = int(entry[0]) + 1
+                val = int(entry[0].split(":")[0]) + 1
             else:
                 val = 1
             self._data[key] = (str(val), entry[1] if entry else self._now() + 86400)

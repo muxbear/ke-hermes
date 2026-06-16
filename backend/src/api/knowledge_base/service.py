@@ -185,8 +185,6 @@ async def update_kb(
     kb = await _get_kb_or_404(db, kb_id, user_id)
 
     update_data = req.model_dump(exclude_none=True)
-    if "config" in update_data and update_data["config"] is not None:
-        update_data["config"] = update_data["config"].model_dump()
 
     for key, value in update_data.items():
         if value is not None:

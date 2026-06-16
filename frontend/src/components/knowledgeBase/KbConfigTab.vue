@@ -123,25 +123,24 @@ function onLlmProviderChange(pid: string) {
   const p = llmProviders.value.find(x => x.id === pid)
   if (p && p.models.length > 0) {
     draft.entityModel = p.models[0].name
-    draft.relationModel = p.models[0].name
   }
 }
 
 function handleSave() {
+  draft.relationModel = draft.entityModel
   emit('save', { ...draft })
   saved.value = true
   setTimeout(() => (saved.value = false), 1800)
 }
 
 function handleSaveAndReindex() {
+  draft.relationModel = draft.entityModel
   emit('saveAndReindex', { ...draft })
   saved.value = true
   setTimeout(() => (saved.value = false), 1800)
 }
 
-function handleReset() {
-  Object.assign(draft, props.config)
-}
+
 </script>
 
 <template>
@@ -290,23 +289,10 @@ function handleReset() {
               </el-select>
             </div>
             <div class="field flex-1">
-              <label class="field-label">实体抽取模型</label>
+              <label class="field-label">抽取模型</label>
               <el-select
                 :model-value="draft.entityModel"
                 @update:model-value="(v: string) => set('entityModel', v)"
-                style="width: 100%"
-                popper-class="config-select-popper"
-              >
-                <el-option v-for="m in llmProviderModels" :key="m.id" :label="m.display_name || m.name" :value="m.name" />
-              </el-select>
-            </div>
-          </div>
-          <div v-if="draft.enableGraph" class="field-row" style="margin-top: 12px;">
-            <div class="field flex-1">
-              <label class="field-label">关系抽取模型</label>
-              <el-select
-                :model-value="draft.relationModel"
-                @update:model-value="(v: string) => set('relationModel', v)"
                 style="width: 100%"
                 popper-class="config-select-popper"
               >
@@ -372,15 +358,15 @@ function handleReset() {
           <KbConfigSummary :config="draft" />
           <div class="divider" />
           <div class="preview-actions">
-            <button class="btn-save" @click="handleSaveAndReindex">
-              <Save :size="16" class="btn-icon" />保存并重新索引
+            <button class="btn-save" @click="handleSave">
+              <Save :size="16" class="btn-icon" />保存配置
+            </button>
+            <button class="btn-reindex" @click="handleSaveAndReindex">
+              重新索引
             </button>
             <div v-if="saved" class="save-feedback">
               <CheckCircle2 :size="14" />已保存
             </div>
-            <button class="btn-reset" @click="handleReset">
-              恢复
-            </button>
           </div>
         </div>
       </div>
@@ -507,7 +493,7 @@ function handleReset() {
 
 .preview-panel {
   position: sticky;
-  top: 100px;
+  top: 0;
   padding: 20px;
   background: var(--surface-card);
   border: 1px solid var(--border-subtle);
@@ -565,6 +551,28 @@ function handleReset() {
   opacity: 0.9;
 }
 
+.btn-reindex {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 10px 16px;
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  border-radius: var(--radius-input);
+  color: #93c5fd;
+  font-size: var(--font-size-base);
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-reindex:hover {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.4);
+  color: #bfdbfe;
+}
+
 .save-feedback {
   display: flex;
   align-items: center;
@@ -572,26 +580,6 @@ function handleReset() {
   justify-content: center;
   font-size: var(--font-size-xs);
   color: #6ee7b7;
-}
-
-.btn-reset {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  padding: 10px 16px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: var(--radius-input);
-  color: var(--foreground-primary);
-  font-size: var(--font-size-base);
-  font-family: inherit;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.btn-reset:hover {
-  background: rgba(255, 255, 255, 0.08);
 }
 
 .btn-icon {
@@ -603,31 +591,49 @@ function handleReset() {
 <style>
 /* Select 触发器 */
 .config-tab .el-select .el-input__wrapper {
-  background: rgba(15, 23, 46, 0.6) !important;
-  border-color: rgba(255, 255, 255, 0.1) !important;
-  border-radius: 10px !important;
+  background: var(--color-bg-input) !important;
+  border: 1px solid var(--border-medium) !important;
+  border-radius: var(--radius-input) !important;
   box-shadow: none !important;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast) !important;
+  padding-left: 12px !important;
+  padding-right: 12px !important;
 }
 
 .config-tab .el-select .el-input__wrapper:hover {
   border-color: rgba(255, 255, 255, 0.18) !important;
 }
 
+.config-tab .el-select .el-input__wrapper.is-focus {
+  border-color: var(--color-accent) !important;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1) !important;
+}
+
 .config-tab .el-select .el-input__inner {
-  color: #e2e8f0 !important;
+  color: var(--foreground-primary) !important;
+  font-size: var(--font-size-sm) !important;
+}
+
+.config-tab .el-select .el-input__inner::placeholder {
+  color: var(--foreground-muted) !important;
 }
 
 /* Select 下拉面板 */
 .config-select-popper {
-  background: #0f172e !important;
+  background: var(--color-bg-input) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  border-radius: 10px !important;
+  border-radius: var(--radius-input) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.55) !important;
+  padding: 4px !important;
 }
 
 .config-select-popper .el-select-dropdown__item {
-  color: #e2e8f0 !important;
+  color: var(--foreground-primary) !important;
   padding: 8px 12px !important;
-  font-size: 13px !important;
+  font-size: var(--font-size-sm) !important;
+  border-radius: 6px !important;
+  margin: 2px 0 !important;
+  transition: background var(--transition-fast) !important;
 }
 
 .config-select-popper .el-select-dropdown__item.is-hovering,
@@ -637,7 +643,8 @@ function handleReset() {
 
 .config-select-popper .el-select-dropdown__item.is-selected {
   color: #93c5fd !important;
-  font-weight: 500 !important;
+  font-weight: var(--font-weight-medium) !important;
+  background: rgba(59, 130, 246, 0.08) !important;
 }
 
 /* Slider 轨道 */
