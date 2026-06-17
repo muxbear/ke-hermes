@@ -154,8 +154,8 @@ def _convert_extractions(extractions: list) -> tuple[list[dict], list[dict]]:
                     "name": e.extraction_text,
                     "type": (e.attributes or {}).get("type", "概念"),
                     "source_text": e.extraction_text,
-                    "char_start": e.char_interval.start,
-                    "char_end": e.char_interval.end,
+                    "char_start": e.char_interval.start_pos,
+                    "char_end": e.char_interval.end_pos,
                 }
             )
         elif e.extraction_class == "relation":
