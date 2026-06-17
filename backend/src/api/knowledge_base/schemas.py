@@ -135,6 +135,7 @@ class EntityResponse(BaseModel):
     name: str
     type: str
     mentions: int
+    source_text: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -146,6 +147,8 @@ class RelationResponse(BaseModel):
     to_entity: str
     label: str
     weight: float
+    source_entity_id: str | None = None
+    target_entity_id: str | None = None
 
     model_config = {"from_attributes": True}
 

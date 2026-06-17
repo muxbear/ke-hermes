@@ -1,4 +1,4 @@
-# Ke-Hermes 后端详细设计说明书 — v1.6.0
+# Ke-Hermes 后端详细设计说明书 — v1.7.0
 
 
 | 版本  | 日期       | 作者 | 变更说明                                                     |
@@ -11,6 +11,7 @@
 | 1.4.0 | 2026-05-28 | -    | 新增 MCP 广场模块（4 接口 + 种子数据 + 安装/卸载）；新增 Skills 技能管理模块（9 接口 + 上传校验 + 批量操作）；新增 Email 邮箱验证码模块；新增 ORM 模型（McpTool/McpInstallation/Skill）；新增预装 Workspace 技能（github/self-improvement）；更新路由注册链（6→9 子模块）、API 接口总数（21→30）、环境变量数量（38→39+） |
 | 1.5.0 | 2026-06-05 | -    | 文档对照实际代码更新：新增智能体管理模块（Agents API，12 接口 + CRUD + 配置管理 + 文件操作）；新增模型管理模块（Providers API，9 接口 + 提供商/模型 CRUD + 克隆 + 状态切换）；新增 OpenSandbox 沙盒后端模块（代码执行 + 文件上下传）；新增 ORM 模型（Agent/AgentFile/AIModel/Provider）；Agent 图默认后端切换为 OpenSandboxBackend；更新路由注册链（9→11 子模块）、API 接口总数（30→51）、ORM 模型（7→11）、环境变量数量（39→41） |
 | 1.6.0 | 2026-06-11 | -    | 新增 Tools API 模块（7 接口 + 11 个预置工具）；新增 AgentSkill/AgentTool/Tool/CronJob 4 个 ORM 模型；新增 SandboxManager 沙盒管理器（每用户独立沙盒 + TTL + 健康检查）；新增 UserAwareSandboxBackend（运行时用户感知）；新增 SkillSandboxSyncMiddleware 智能体中间件（技能同步 + 网络策略）；新增 main_agent.py Agent 工厂（数据库驱动动态构建）；新增 subagents_operate.py 动态子智能体加载；Agents API 新增 4 个接口（更新/技能管理/CronJob 查询）；Provider api_key 加密存储 + 明文迁移；扩展沙盒配置项（TTL/CLEANUP/IMAGE/CPU/MEMORY/IDLE_TIMEOUT/ALLOWED_DOMAINS）；更新 Agent 模型（system_prompt 替代 prompts、provider_id/model_id 关联、移除 user_id、工具/技能改为关联表）；更新路由注册链（11→12 子模块）、API 接口总数（51→63+）、ORM 模型（11→15）、环境变量数量（41→50） |
+| 1.7.0 | 2026-06-16 | -    | 新增知识库（Knowledge Base）完整 RAG 子系统（20+ 接口 + 4 个 ORM 模型 + 文档索引 8 状态机 + 知识图谱实体关系提取）；新增核心工具层（decorators.py 4 个装饰器、pagination.py PageIterator 分页迭代器）；新增 AgentBuilder 建造者模式重构 Agent 构建（9 步链式构建）；新增 Agent 共享工具模块（common.py：resolve_model / get_tool_registry）；Agent 模型简化为单一 DeepSeek 默认模型（移除 qwen_llm）；新增 RAG 基础设施（Milvus/Chroma 双向量库、13 种文档加载器、5 种切片策略、BM25 关键词索引）；引入设计模式重构（Builder/State/Observer/Strategy/Template Method/Iterator/Decorator 7 种模式正式应用）；扩展配置项（Milvus/Chroma/文档存储/图存储/索引参数共 16 个）；更新路由注册（12→16 子模块）、API 接口总数（67→87+）、ORM 模型（15→19）、环境变量数量（50→66） |
 
 
 ---
@@ -26,23 +27,27 @@
   - 4.3 [模型模块 — agent/models](#43-模型模块--agentmodels)
   - 4.4 [上下文模块 — agent/context](#44-上下文模块--agentcontext)
   - 4.5 [智能体图 — agent/graph.py](#45-智能体图--agentgraphpy)
-  - 4.6 [主智能体工厂 — agent/mainagents](#46-主智能体工厂--agentmainagents)
-  - 4.7 [子智能体模块 — agent/subagents](#47-子智能体模块--agentsubagents)
-  - 4.8 [Agent 工具集 — agent/tools](#48-agent-工具集--agenttools)
-  - 4.9 [Chat API — 对话与流式接口](#49-chat-api--对话与流式接口)
-  - 4.10 [Conversation API — 对话历史 CRUD](#410-conversation-api--对话历史-crud)
-  - 4.11 [Auth API — 认证授权模块](#411-auth-api--认证授权模块)
-  - 4.12 [Captcha API — 验证码模块](#412-captcha-api--验证码模块)
-  - 4.13 [OAuth API — 第三方登录模块](#413-oauth-api--第三方登录模块)
-  - 4.14 [SMS API — 短信服务模块](#414-sms-api--短信服务模块)
-  - 4.15 [Email API — 邮箱验证码模块](#415-email-api--邮箱验证码模块)
-  - 4.16 [MCP API — MCP 广场模块](#416-mcp-api--mcp-广场模块)
-  - 4.17 [Skills API — 技能管理模块](#417-skills-api--技能管理模块)
-  - 4.18 [Agents API — 智能体管理模块](#418-agents-api--智能体管理模块)
-  - 4.19 [Providers API — 模型管理模块](#419-providers-api--模型管理模块)
-  - 4.20 [Tools API — 工具管理模块](#420-tools-api--工具管理模块)
-  - 4.21 [Sandbox — 沙盒代码执行模块](#421-sandbox--沙盒代码执行模块)
-  - 4.22 [Middleware — 智能体中间件](#422-middleware--智能体中间件)
+  - 4.6 [Agent 共享工具 — agent/common.py](#46-agent-共享工具--agentcommonpy)
+  - 4.7 [主智能体工厂 — agent/mainagents](#47-主智能体工厂--agentmainagents)
+  - 4.8 [Agent 建造者 — agent/builders](#48-agent-建造者--agentbuilders)
+  - 4.9 [子智能体模块 — agent/subagents](#49-子智能体模块--agentsubagents)
+  - 4.10 [Agent 工具集 — agent/tools](#410-agent-工具集--agenttools)
+  - 4.11 [Chat API — 对话与流式接口](#411-chat-api--对话与流式接口)
+  - 4.12 [Conversation API — 对话历史 CRUD](#412-conversation-api--对话历史-crud)
+  - 4.13 [Auth API — 认证授权模块](#413-auth-api--认证授权模块)
+  - 4.14 [Captcha API — 验证码模块](#414-captcha-api--验证码模块)
+  - 4.15 [OAuth API — 第三方登录模块](#415-oauth-api--第三方登录模块)
+  - 4.16 [SMS API — 短信服务模块](#416-sms-api--短信服务模块)
+  - 4.17 [Email API — 邮箱验证码模块](#417-email-api--邮箱验证码模块)
+  - 4.18 [MCP API — MCP 广场模块](#418-mcp-api--mcp-广场模块)
+  - 4.19 [Skills API — 技能管理模块](#419-skills-api--技能管理模块)
+  - 4.20 [Agents API — 智能体管理模块](#420-agents-api--智能体管理模块)
+  - 4.21 [Providers API — 模型管理模块](#421-providers-api--模型管理模块)
+  - 4.22 [Tools API — 工具管理模块](#422-tools-api--工具管理模块)
+  - 4.23 [Knowledge Base API — 知识库管理模块](#423-knowledge-base-api--知识库管理模块)
+  - 4.24 [Sandbox — 沙盒代码执行模块](#424-sandbox--沙盒代码执行模块)
+  - 4.25 [Middleware — 智能体中间件](#425-middleware--智能体中间件)
+  - 4.26 [核心工具层 — core/ 模块](#426-核心工具层--core-模块)
 5. [数据存储设计](#5-数据存储设计)
 6. [安全设计](#6-安全设计)
 7. [API 接口总览与前后端对照](#7-api-接口总览与前后端对照)
@@ -59,10 +64,10 @@
 
 ### 1.1 文档目的
 
-本文档为 Ke-Hermes 后端的详细设计说明书 v1.6.0，对照实际代码实现编写。文档覆盖：
+本文档为 Ke-Hermes 后端的详细设计说明书 v1.7.0，对照实际代码实现编写。文档覆盖：
 
-- **已实现模块**：智能体框架（含数据库驱动的主智能体工厂 + 动态子智能体加载 + Agent 工具集 + OpenSandboxBackend 代码执行后端 + SandboxManager 每用户沙盒管理 + UserAwareSandboxBackend 用户感知 + SkillSandboxSyncMiddleware 技能同步中间件）、Chat API（普通对话 + SSE 流式 + thread_id 上下文管理）、Conversation API（对话历史 CRUD）、Agents API（智能体 CRUD + 配置管理 + 文件操作 + 技能关联 + CronJob 查询，16 接口）、Providers API（提供商/模型 CRUD + 克隆 + 状态切换，9 接口 + api_key 加密）、Tools API（工具 CRUD + 列表 + 切换，7 接口 + 11 个预置工具）、MCP 广场 API（工具列表/详情/安装/卸载 + 12 个种子数据）、Skills 技能管理 API（CRUD + 上传校验 + 批量删除 + 5 个预置技能）、认证授权、验证码、OAuth 第三方登录、短信服务、邮箱验证码
-- **基础设施**：KeyValueStore 存储抽象层（Redis + 内存降级）、RSA + JWT + bcrypt + Fernet 安全体系、SQLAlchemy 异步 ORM（SQLite + PostgreSQL 双后端，15 个 ORM 模型）、LangGraph 检查点双后端（SQLite + PostgreSQL）+ LangGraph Store（Memory + PostgreSQL）、OpenSandbox 沙盒代码执行环境（每用户独立沙盒 + TTL 生命周期 + 健康检查 + 后台清理）
+- **已实现模块**：智能体框架（含数据库驱动的主智能体工厂 + AgentBuilder 建造者模式 + 动态子智能体加载 + Agent 共享工具模块 + Agent 工具集 + OpenSandboxBackend 代码执行后端 + SandboxManager 每用户沙盒管理 + UserAwareSandboxBackend 用户感知 + SkillSandboxSyncMiddleware 技能同步中间件）、Chat API（普通对话 + SSE 流式 + thread_id 上下文管理）、Conversation API（对话历史 CRUD）、Agents API（智能体 CRUD + 配置管理 + 文件操作 + 技能关联 + CronJob 查询，17 接口）、Providers API（提供商/模型 CRUD + 克隆 + 状态切换，9 接口 + api_key 加密）、Tools API（工具 CRUD + 列表 + 切换，7 接口 + 11 个预置工具）、Knowledge Base API（知识库 CRUD + 文档上传/索引/重试 + 知识图谱实体关系提取 + 分块管理，20+ 接口）、MCP 广场 API（工具列表/详情/安装/卸载 + 12 个种子数据）、Skills 技能管理 API（CRUD + 上传校验 + 批量删除 + 5 个预置技能）、认证授权、验证码、OAuth 第三方登录、短信服务、邮箱验证码
+- **基础设施**：KeyValueStore 存储抽象层（Redis + 内存降级）、RSA + JWT + bcrypt + Fernet 安全体系、SQLAlchemy 异步 ORM（SQLite + PostgreSQL 双后端，19 个 ORM 模型）、LangGraph 检查点双后端（SQLite + PostgreSQL）+ LangGraph Store（Memory + PostgreSQL）、OpenSandbox 沙盒代码执行环境（每用户独立沙盒 + TTL 生命周期 + 健康检查 + 后台清理）、RAG 知识库基础设施（Milvus/Chroma 双向量库后端 + 13 种文档加载器 + 5 种文本切片策略 + BM25 关键词索引 + Langextract 知识图谱提取）、核心工具层（装饰器库 + 分页迭代器）
 
 文档供后端开发人员编码实现、代码审查和后期维护使用。
 
@@ -117,89 +122,105 @@ backend/
 │   ├── server.py                    # 服务入口（FastAPI + uvicorn）
 │   ├── agent/
 │   │   ├── __init__.py              # 导出 get_graph, get_checkpointer, init_graph, shutdown_graph
+│   │   ├── common.py                # Agent 共享工具（v1.7.0 新增：resolve_model, get_tool_registry）
 │   │   ├── config/
 │   │   │   ├── __init__.py          # 导出 settings 实例
-│   │   │   └── config.py            # Settings 配置类定义（含 WORKSPACE、DATABASE_BACKEND、SANDBOX_*、ENCRYPTION_KEY 等）
+│   │   │   └── config.py            # Settings 配置类定义（v1.7.0 扩展：Milvus/Chroma/DocStore/GraphStore/Embedding/Indexing）
 │   │   ├── models/
-│   │   │   ├── __init__.py          # 导出 llm, qwen_llm, embeddings
-│   │   │   ├── llm.py               # ChatOpenAI 实例（DeepSeek + Qwen 3.6 Plus）
+│   │   │   ├── __init__.py          # 导出 llm, embeddings
+│   │   │   ├── llm.py               # ChatOpenAI 实例（v1.7.0 简化为单一 DeepSeek 模型）
 │   │   │   └── em.py                # OpenAIEmbeddings 实例（DashScope）
 │   │   ├── context/
 │   │   │   ├── __init__.py          # 导出 Context
 │   │   │   └── context.py           # Context 数据类（server_info + user_id）
 │   │   ├── tools/
-│   │   │   ├── __init__.py          # 导出 3 个运行时工具（tavily_search, http_request, get_datetime）
-│   │   │   ├── tavily_search.py     # Tavily 互联网搜索工具（含 depth/topic/time_range/answer 参数）
+│   │   │   ├── __init__.py          # 导出 3 个运行时工具
+│   │   │   ├── tavily_search.py     # Tavily 互联网搜索工具
 │   │   │   ├── http_request.py      # HTTP 请求工具（含 SSRF 防护）
 │   │   │   └── get_datetime.py      # 时区感知的日期时间工具
+│   │   ├── buildrs/                 # v1.7.0 新增：Agent 建造者模式
+│   │   │   ├── __init__.py          # 导出 AgentBuilder
+│   │   │   └── agent_builder.py     # AgentBuilder 分步构建器（9 步链式构建）
 │   │   ├── subagents/
-│   │   │   ├── __init__.py          # 导出 research_subagent（静态）+ create_subagents（动态）
-│   │   │   ├── research_subagent.py # 研究子智能体（静态定义，使用 tavily_search 共享工具 + qwen_llm）
-│   │   │   └── subagents_operate.py # 动态子智能体加载器（从 DB 查询 Agent 表，解析模型和工具）
+│   │   │   ├── __init__.py          # 导出 create_subagents
+│   │   │   └── subagents_operate.py # 动态子智能体加载器
 │   │   ├── mainagents/
 │   │   │   ├── __init__.py          # 导出 create_main_agent
-│   │   │   └── main_agent.py        # 主智能体工厂（从 DB 查询配置 → 解析模型/工具/子智能体 → 构建 Backend → 调用 create_deep_agent）
+│   │   │   └── main_agent.py        # 主智能体工厂（v1.7.0 重构：委托给 AgentBuilder）
 │   │   ├── sandbox/
-│   │   │   ├── opensandbox_backend.py       # OpenSandboxBackend 实现（代码执行 + 文件上下传）
-│   │   │   ├── user_aware_sandbox_backend.py # UserAwareSandboxBackend（运行时 user_id 感知，委托给 SandboxManager）
-│   │   │   ├── sandbox_manager.py            # SandboxManager（每用户沙盒池 + TTL + 健康检查 + 后台清理线程）
-│   │   │   └── opensandbox_operate.py        # 沙盒创建/连接辅助函数（同步 + 异步）
+│   │   │   ├── opensandbox_backend.py       # OpenSandboxBackend 实现
+│   │   │   ├── user_aware_sandbox_backend.py # UserAwareSandboxBackend
+│   │   │   ├── sandbox_manager.py            # SandboxManager（每用户沙盒池）
+│   │   │   └── opensandbox_operate.py        # 沙盒创建/连接辅助函数
 │   │   ├── middleware/
 │   │   │   ├── __init__.py          # 导出 SkillSandboxSyncMiddleware
-│   │   │   └── skill_sandbox_sync.py # 技能→沙盒同步中间件（abefore_agent + 文件同步 + 网络策略应用）
+│   │   │   └── skill_sandbox_sync.py # 技能→沙盒同步中间件
 │   │   └── utils/
 │   │       └── __init__.py          # 辅助方法导出（预留）
 │   │
 │   ├── api/
-│   │   ├── __init__.py              # 导出顶层 router（汇总 12 个子模块）
-│   │   ├── deps.py                  # 依赖注入（get_db, get_store, get_client_ip, get_current_user_id）
+│   │   ├── __init__.py              # 导出顶层 router（v1.7.0：汇总 16 个子模块）
+│   │   ├── deps.py                  # 依赖注入
 │   │   ├── agent/
 │   │   │   ├── __init__.py          # 导出 agent router
-│   │   │   └── agent_api.py         # Chat API 路由与数据模型（含 Context 注入 + 对话记录创建）
+│   │   │   └── agent_api.py         # Chat API 路由与数据模型
 │   │   ├── agents/
 │   │   │   ├── __init__.py          # 导出 agents router
-│   │   │   ├── agents_api.py        # 智能体管理 API 路由（16 个接口）
-│   │   │   ├── schemas.py           # 智能体管理请求/响应 Pydantic 模型（含 SkillBrief/CronJobBrief）
-│   │   │   └── service.py           # 智能体管理业务逻辑（CRUD + 配置 + 文件 + 技能关联 + CronJob）
+│   │   │   ├── agents_api.py        # 智能体管理 API 路由（17 个接口）
+│   │   │   ├── schemas.py           # 智能体管理请求/响应 Pydantic 模型
+│   │   │   └── service.py           # 智能体管理业务逻辑
 │   │   ├── auth/
 │   │   │   ├── __init__.py          # 导出 auth router
 │   │   │   ├── auth_api.py          # 认证 API 路由（8 个接口）
 │   │   │   ├── schemas.py           # 认证请求/响应 Pydantic 模型
-│   │   │   └── service.py           # 认证业务逻辑（登录/注册/刷新）
+│   │   │   └── service.py           # 认证业务逻辑
 │   │   ├── captcha/
 │   │   │   ├── __init__.py          # 导出 captcha router
-│   │   │   ├── captcha_api.py       # 验证码 API 路由（4 个接口，含 Session Cookie）
+│   │   │   ├── captcha_api.py       # 验证码 API 路由（4 个接口）
 │   │   │   ├── schemas.py           # 验证码请求/响应 Pydantic 模型
-│   │   │   └── service.py           # 验证码业务逻辑（Pillow 图片生成）
+│   │   │   └── service.py           # 验证码业务逻辑
 │   │   ├── conversation/
 │   │   │   ├── __init__.py          # 导出 conversation router
-│   │   │   └── conversation_api.py  # 对话历史 CRUD API（4 个接口：列表/详情/重命名/删除）
+│   │   │   └── conversation_api.py  # 对话历史 CRUD API（4 个接口）
 │   │   ├── oauth/
 │   │   │   ├── __init__.py          # 导出 oauth router
 │   │   │   ├── oauth_api.py         # OAuth API 路由（2 个接口）
 │   │   │   ├── schemas.py           # OAuth 请求/响应 Pydantic 模型
-│   │   │   └── service.py           # OAuth 业务逻辑（GitHub/Google/微信）
+│   │   │   └── service.py           # OAuth 业务逻辑
 │   │   ├── providers/
 │   │   │   ├── __init__.py          # 导出 providers router
 │   │   │   ├── providers_api.py     # 模型管理 API 路由（9 个接口）
 │   │   │   ├── schemas.py           # 提供商/模型请求/响应 Pydantic 模型
-│   │   │   └── service.py           # 提供商/模型业务逻辑（CRUD + 克隆 + 状态切换 + api_key 加密）
+│   │   │   └── service.py           # 提供商/模型业务逻辑
 │   │   ├── tools/
-│   │   │   ├── __init__.py          # 导出 tools router（v1.6.0 新增）
+│   │   │   ├── __init__.py          # 导出 tools router
 │   │   │   ├── tools_api.py         # 工具管理 API 路由（7 个接口）
 │   │   │   ├── schemas.py           # 工具请求/响应 Pydantic 模型
-│   │   │   └── service.py           # 工具业务逻辑（CRUD + 列表 + 切换 + 种子数据 11 个工具）
+│   │   │   └── service.py           # 工具业务逻辑
+│   │   ├── knowledge_base/          # v1.7.0 新增：知识库 RAG 子系统
+│   │   │   ├── __init__.py          # 导出 kb_router, doc_router, graph_router, chunk_router
+│   │   │   ├── kb_api.py            # 知识库 CRUD API（10 个接口）
+│   │   │   ├── doc_api.py           # 文档上传/索引/管理 API（5 个接口）
+│   │   │   ├── chunk_api.py         # 分块管理 API（5 个接口）
+│   │   │   ├── graph_api.py         # 知识图谱 API（3 个接口）
+│   │   │   ├── schemas.py           # 知识库/文档/分块/图谱 Pydantic 模型
+│   │   │   ├── service.py           # 知识库业务逻辑
+│   │   │   ├── doc_service.py       # 文档索引流水线 + 观察者 + 调度器
+│   │   │   ├── doc_state.py         # 文档索引 8 状态机（State 模式）
+│   │   │   ├── chunk_service.py     # 分块管理业务逻辑
+│   │   │   └── graph_service.py     # 知识图谱提取服务（Langextract）
 │   │   └── sms/
 │   │       ├── __init__.py          # 导出 sms router
 │   │       ├── sms_api.py           # 短信 API 路由（1 个接口）
-│   │       └── service.py           # 短信发送业务逻辑（含 SendSmsRequest 模型）
+│   │       └── service.py           # 短信发送业务逻辑
 │   │
 │   ├── db/
 │   │   ├── __init__.py
-│   │   ├── engine.py                # SQLAlchemy async engine + sessionmaker + init_db + 6 个迁移函数（DATABASE_BACKEND 双后端）
+│   │   ├── engine.py                # SQLAlchemy async engine + sessionmaker + init_db + 迁移函数
 │   │   ├── base.py                  # DeclarativeBase
+│   │   ├── utils.py                 # utcnow() 辅助函数
 │   │   └── models/
-│   │       ├── __init__.py          # 导出所有 model（共 15 个）
+│   │       ├── __init__.py          # 导出所有 model（v1.7.0：共 19 个）
 │   │       ├── user.py              # User 模型
 │   │       ├── user_oauth.py        # UserOAuth 第三方绑定模型
 │   │       ├── login_record.py      # LoginRecord 登录记录模型
@@ -207,54 +228,72 @@ backend/
 │   │       ├── skill.py             # Skill 技能模型
 │   │       ├── mcp_tool.py          # McpTool MCP 工具模型
 │   │       ├── mcp_installation.py  # McpInstallation 安装记录模型
-│   │       ├── agent.py             # Agent 智能体模型（v1.6.0 重构：移除 user_id/tools/skills/prompts 列，新增 system_prompt/provider_id/model_id）
+│   │       ├── agent.py             # Agent 智能体模型
 │   │       ├── agent_file.py        # AgentFile 智能体文件模型
-│   │       ├── agent_skill.py       # AgentSkill 多对多关联模型（v1.6.0 新增）
-│   │       ├── agent_tool.py        # AgentTool 多对多关联模型（v1.6.0 新增）
+│   │       ├── agent_skill.py       # AgentSkill 多对多关联模型
+│   │       ├── agent_tool.py        # AgentTool 多对多关联模型
 │   │       ├── ai_model.py          # AIModel 模型元数据模型
-│   │       ├── provider.py          # Provider 模型提供商模型（含加密 api_key）
-│   │       ├── tool.py              # Tool 工具定义模型（v1.6.0 新增）
-│   │       └── cron_job.py          # CronJob 定时任务模型（v1.6.0 新增）
+│   │       ├── provider.py          # Provider 模型提供商模型
+│   │       ├── tool.py              # Tool 工具定义模型
+│   │       ├── cron_job.py          # CronJob 定时任务模型
+│   │       ├── knowledge_base.py    # KnowledgeBase 知识库模型（v1.7.0 新增）
+│   │       ├── knowledge_base_document.py  # KnowledgeBaseDocument 文档模型（v1.7.0 新增）
+│   │       ├── knowledge_base_entity.py    # KnowledgeBaseEntity 实体模型（v1.7.0 新增）
+│   │       └── knowledge_base_relation.py  # KnowledgeBaseRelation 关系模型（v1.7.0 新增）
 │   │   └── seeds/
-│   │       └── mcp_tools_seed.json   # MCP 工具种子数据（12 个预置工具）
+│   │       └── mcp_tools_seed.json   # MCP 工具种子数据
 │   │
 │   └── core/
 │       ├── __init__.py
-│       ├── security.py              # bcrypt 密码哈希、cryptography RSA 加解密 + Fernet 对称加密、PyJWT Token 签发/验证
-│       ├── store.py                 # KeyValueStore 抽象 + RedisStore / MemoryStore 实现
-│       └── response.py              # 统一响应格式 ApiResponse[T]
+│       ├── security.py              # bcrypt + RSA + JWT + Fernet 安全体系
+│       ├── store.py                 # KeyValueStore 抽象 + RedisStore / MemoryStore
+│       ├── response.py              # 统一响应格式 ApiResponse[T]
+│       ├── decorators.py            # v1.7.0 新增：装饰器库（handle_errors/cached/retry/log_call）
+│       ├── pagination.py            # v1.7.0 新增：PageIterator 分页迭代器
+│       └── rag/                     # v1.7.0 新增：RAG 核心基础设施
+│           ├── __init__.py          # 导出所有 RAG 组件
+│           ├── embedding.py         # 嵌入模型工厂（DashScope + OpenAI 兼容）
+│           ├── vector_store.py      # 向量库抽象层（Milvus + Chroma）
+│           ├── loaders.py           # 文档加载器策略/注册表（13 种格式）
+│           ├── splitters.py         # 文本切片策略/注册表（5 种策略）
+│           └── bm25_index.py        # BM25 关键词索引器
 │
 ├── db/                              # SQLite 数据库文件目录
-│   └── ke-hermes.db                 # 开发环境 SQLite 数据库文件（业务 + 检查点共用）
+│   └── ke-hermes.db                 # 开发环境 SQLite 数据库文件
 │
 ├── workspace/                       # 智能体工作目录
 │   ├── memories/AGENT.md            # Agent 持久化记忆文件
-│   ├── skills/                      # 每智能体技能文件目录（v1.6.0：按 agent_id 子目录组织）
+│   ├── skills/                      # 每智能体技能文件目录
 │   └── skills_upload/               # 上传技能目录
 │
-├── tests/
-│   ├── conftest.py                  # 测试公共 fixtures
-│   ├── unit_tests/
-│   │   ├── test_config.py           # 配置模块测试
-│   │   ├── test_models.py           # 模型实例测试
-│   │   ├── test_agent.py            # 智能体导出测试
-│   │   └── test_agent_service.py    # 智能体管理服务单元测试
-│   └── integration_tests/
-│       ├── test_server.py           # 服务启动测试
-│       ├── test_agent_api.py        # Chat API 接口测试
-│       └── test_agents_api.py       # Agents API 集成测试
-│
 ├── docs/
-│   ├── requirements.md              # 需求文档
-│   └── Ke-Hermes-后端详细设计说明书.md  # 本文件
+│   ├── Ke-Hermes-后端详细设计说明书.md  # 本文件
+│   └── Ke-Hermes-后端代码设计模式评估报告.md  # 设计模式评估报告
 │
-├── .env                             # 环境变量配置（不入库）
-├── .env.example                     # 环境变量示例
-├── .jwt_secret                      # JWT 签名密钥持久化文件（自动生成）
-├── .fernet_key                      # Fernet 对称加密密钥持久化文件（自动生成）
-├── pyproject.toml                   # 项目元数据与依赖
-├── run.py                           # 开发启动脚本
-└── langgraph.json                   # LangGraph CLI 配置
+├── tests/
+│   ├── conftest.py
+│   ├── test_loaders.py              # 文档加载器测试（v1.7.0 新增）
+│   ├── unit_tests/
+│   │   ├── test_config.py
+│   │   ├── test_models.py
+│   │   ├── test_agent.py
+│   │   ├── test_agent_service.py
+│   │   ├── test_http_request.py
+│   │   └── test_tavily_search.py
+│   └── integration_tests/
+│       ├── test_server.py
+│       ├── test_agent_api.py
+│       └── test_agents_api.py
+│
+├── .env
+├── .env.example
+├── .jwt_secret
+├── .fernet_key                      # Fernet 密钥持久化文件
+├── .rsa_key                         # RSA 密钥持久化文件
+├── pyproject.toml
+├── run.py
+├── Makefile
+└── langgraph.json
 ```
 
 ---
@@ -343,35 +382,40 @@ app.include_router(router)
 
 **v1.6.0 启动时的基础设施初始化顺序：**
 
-1. `init_db()` → SQLAlchemy 自动建表（`Base.metadata.create_all`）+ 运行 6 个迁移函数
+1. `init_db()` → SQLAlchemy 自动建表（`Base.metadata.create_all`）+ 运行迁移函数
 2. `seed_mcp_tools(session)` → MCP 工具种子数据初始化（12 个）
-3. `seed_builtin_skills(session)` → 内置技能种子数据初始化（5 个，v1.6.0 新增）
-4. `seed_builtin_tools(session)` → 内置工具种子数据初始化（11 个，v1.6.0 新增）
-5. `migrate_plaintext_api_keys(session)` → 将 Provider 表中明文 api_key 迁移为加密存储（v1.6.0 新增）
+3. `seed_builtin_skills(session)` → 内置技能种子数据初始化（5 个）
+4. `seed_builtin_tools(session)` → 内置工具种子数据初始化（11 个）
+5. `migrate_plaintext_api_keys(session)` → 将 Provider 表中明文 api_key 迁移为加密存储
 6. `init_graph()` → 创建检查点后端 + LangGraph Store + SandboxManager + create_main_agent
-7. `create_store()` → 尝试连接 Redis，失败则降级为 `MemoryStore`
-8. `set_store(store)` → 注入到 FastAPI 依赖注入系统
-9. `init_jwt()` → 读取或生成持久化 JWT 签名密钥
-10. (关闭时) `shutdown_graph()` → 关闭沙盒管理器 + PostgreSQL 连接池
+7. **`_init_knowledge_base(app)`**（v1.7.0 新增）→ 初始化嵌入模型 + 向量库（Milvus/Chroma）+ 文档加载器注册表 + 切片策略注册表 + 图谱提取服务 + 索引流水线 + 进度观察者 + 索引调度器
+8. `create_store()` → 尝试连接 Redis，失败则降级为 `MemoryStore`
+9. `set_store(store)` → 注入到 FastAPI 依赖注入系统
+10. `init_jwt()` → 读取或生成持久化 JWT 签名密钥
+11. (关闭时) `shutdown_graph()` → 关闭沙盒管理器 + PostgreSQL 连接池
 
 **Windows 兼容性：** server.py 在导入链顶部通过 monkeypatch 强制使用 `SelectorEventLoop`，确保 PostgreSQL 驱动在 Windows 下正常工作。
 
-**路由注册链（v1.6.0：12 个子模块）：**
+**路由注册链（v1.7.0：16 个子模块）：**
 
 ```
 api/__init__.py → 汇总所有子模块 router
-  ├── api/agent/        → agent_api.router        (prefix="/api")               ← 已实现
-  ├── api/agents/       → agents_api.router       (prefix="/api/agents")        ← v1.5.0 新增
-  ├── api/auth/         → auth_api.router         (prefix="/api/auth")          ← 已实现
-  ├── api/captcha/      → captcha_api.router      (prefix="/api/captcha")       ← 已实现
-  ├── api/oauth/        → oauth_api.router        (prefix="/api/oauth")         ← 已实现
-  ├── api/sms/          → sms_api.router          (prefix="/api/sms")           ← 已实现
-  ├── api/conversation/ → conversation_api.router (prefix="/api")               ← v1.3.0 新增
-  ├── api/email/        → email_api.router        (prefix="/api/email")         ← v1.4.0 新增
-  ├── api/mcp/          → mcp_api.router          (prefix="/api/mcp")           ← v1.4.0 新增
-  ├── api/providers/    → providers_api.router    (prefix="/api/providers")     ← v1.5.0 新增
-  ├── api/skill/        → skill_api.router        (prefix="/api/skill")         ← v1.4.0 新增
-  └── api/tools/        → tools_api.router        (prefix="/api/tools")         ← v1.6.0 新增
+  ├── api/agent/         → agent_api.router        (prefix="/api")               ← 已实现
+  ├── api/agents/        → agents_api.router       (prefix="/api/agents")        ← v1.5.0 新增
+  ├── api/auth/          → auth_api.router         (prefix="/api/auth")          ← 已实现
+  ├── api/captcha/       → captcha_api.router      (prefix="/api/captcha")       ← 已实现
+  ├── api/oauth/         → oauth_api.router        (prefix="/api/oauth")         ← 已实现
+  ├── api/sms/           → sms_api.router          (prefix="/api/sms")           ← 已实现
+  ├── api/conversation/  → conversation_api.router (prefix="/api")               ← v1.3.0 新增
+  ├── api/email/         → email_api.router        (prefix="/api/email")         ← v1.4.0 新增
+  ├── api/mcp/           → mcp_api.router          (prefix="/api/mcp")           ← v1.4.0 新增
+  ├── api/providers/     → providers_api.router    (prefix="/api/providers")     ← v1.5.0 新增
+  ├── api/skill/         → skill_api.router        (prefix="/api/skill")         ← v1.4.0 新增
+  ├── api/tools/         → tools_api.router        (prefix="/api/tools")         ← v1.6.0 新增
+  ├── api/knowledge_base/→ kb_api.router           (prefix="/api/knowledge-bases")         ← v1.7.0 新增
+  ├── api/knowledge_base/→ doc_api.router          (prefix="/api/knowledge-bases/{kb_id}") ← v1.7.0 新增
+  ├── api/knowledge_base/→ graph_api.router        (prefix="/api/knowledge-bases/{kb_id}") ← v1.7.0 新增
+  └── api/knowledge_base/→ chunk_api.router        (prefix="/api/knowledge-bases/{kb_id}") ← v1.7.0 新增
         ↓
 server.py → app.include_router(router)
 ```
@@ -533,9 +577,9 @@ class Settings(BaseSettings):
 
 ### 4.3 模型模块 — `agent/models`
 
-**职责：** 创建 LLM 和向量模型实例。v1.3.0 新增 `qwen_llm` 子智能体专用模型。
+**职责：** 创建 LLM 和向量模型实例。
 
-#### `llm.py` — DeepSeek + Qwen 双模型
+#### `llm.py` — DeepSeek 单模型（v1.7.0 简化）
 
 ```python
 from langchain_openai import ChatOpenAI
@@ -548,18 +592,12 @@ llm = ChatOpenAI(
     extra_body={"thinking": {"type": "disabled"}}
 )
 
-qwen_llm = ChatOpenAI(
-    model="qwen3.6-plus",
-    api_key=settings.DASHSCOPE_API_KEY,
-    base_url=settings.DASHSCOPE_BASE_URL
-)
-
-__all__ = ["llm", "qwen_llm"]
+__all__ = ["llm"]
 ```
 
-- **`llm`**（主智能体默认）：DeepSeek 模型，通过 `extra_body` 关闭思考过程以加速响应
-- **`qwen_llm`**（子智能体默认）：Qwen 3.6 Plus 模型，通过 DashScope 兼容接口调用
-- **v1.6.0 变更**：主智能体和子智能体的模型均可通过 Provider/AIModel 表动态覆盖，模块级 `llm` 和 `qwen_llm` 仅作为 fallback 默认值
+- **`llm`**：DeepSeek 模型，通过 `extra_body` 关闭思考过程以加速响应。作为全局 fallback 默认值
+- **v1.7.0 变更**：移除 `qwen_llm`（Qwen 3.6 Plus）模块级实例。系统默认只配置一个 DeepSeek 大模型，子智能体模型通过 Provider/AIModel 表或 `resolve_model()` 动态选择
+- 主智能体和子智能体的模型均可通过 Provider/AIModel 表动态覆盖，模块级 `llm` 仅作为 fallback
 
 #### `em.py` — DashScope Embeddings
 
@@ -687,89 +725,151 @@ async def shutdown_graph():
 | SQLite     | `sqlite`           | `AsyncSqliteSaver`   | `InMemoryStore`   | 开发环境 / 单机部署  |
 | PostgreSQL | `postgres`         | `AsyncPostgresSaver` | `AsyncPostgresStore` | 生产环境 / 多实例部署 |
 
-### 4.6 主智能体工厂 — `agent/mainagents`
+### 4.6 Agent 共享工具 — `agent/common.py`（v1.7.0 新增）
 
-**文件：** `agent/mainagents/main_agent.py`（v1.6.0 新增）
+**文件：** `agent/common.py`
 
-**职责：** 从数据库查询智能体配置，动态构建主智能体图（模型解析、工具注册、子智能体加载、Backend 组装、中间件挂载）。
+**职责：** 提供 Agent 子系统共享的工具函数——工具名称解析和 LLM 模型动态加载。作为外观模式（Facade）封装底层复杂逻辑。
 
-#### 流程概览
+#### `get_tool_registry()` — 工具注册表
+
+```python
+def get_tool_registry() -> dict:
+    """构建工具名称到可调用函数的映射字典。"""
+    from agent.tools import get_datetime, http_request, tavily_search
+    return {
+        "get_datetime": get_datetime,
+        "http_request": http_request,
+        "tavily_search": tavily_search,
+    }
+```
+
+#### `resolve_model()` — 模型动态加载器
+
+```python
+async def resolve_model(
+    provider_id: str | None,
+    model_id: str | None,
+    fallback_to_settings: bool = True,
+):
+    """从数据库动态加载 LLM 模型实例。
+
+    1. 若提供了 provider_id 和 model_id，从 Provider + AIModel 表查询配置
+    2. 解密 api_key（Fernet），构造 ChatOpenAI 实例
+    3. 若查询失败且 fallback_to_settings=True，回退到默认 llm
+    4. 若查询失败且 fallback_to_settings=False，抛出异常
+    """
+```
+
+**设计要点：**
+- **外观模式**：封装了跨表查询 → 解密 → 模型构造的复杂流程，对调用方暴露单一函数接口
+- **灵活回退**：数据库配置优先，缺失时自动回退到 `agent.models.llm` 默认值
+- **多调用方**：被 `AgentBuilder.with_model()` 和 `subagents_operate.py` 共同使用
+
+---
+
+### 4.7 主智能体工厂 — `agent/mainagents`（v1.7.0 重构）
+
+**文件：** `agent/mainagents/main_agent.py`
+
+**职责：** 从数据库查询智能体配置，委托给 `AgentBuilder` 构建主智能体图。
+
+#### v1.7.0 重构
 
 ```python
 async def create_main_agent(*, checkpointer, store, sandbox_manager):
-    # 1. 从 DB 查询当前活跃的主智能体
-    from api.agents.service import list_agents  # 返回当前用户的主智能体
-    from db.engine import async_session
+    """主智能体工厂——委托给 AgentBuilder 构建。
 
-    # 2. 解析 LLM 模型（从 Provider/AIModel 表，fallback 到默认 DeepSeek）
-    model = _resolve_model(agent_info) or llm
-
-    # 3. 从 agent_info.tools 名称列表解析为可调用工具函数（从工具注册表查找）
-    tools = _resolve_tools(agent_info.tools)  # 按名称从 agent.tools 注册表查找
-
-    # 4. 动态加载子智能体（从 DB 查询 type="sub" 且 status="active" 的 Agent）
-    subagents = await create_subagents(sandbox_manager)
-
-    # 5. 构建 UserAwareSandboxBackend（运行时从 context.user_id 路由到对应用户沙盒）
-    from agent.sandbox.user_aware_sandbox_backend import UserAwareSandboxBackend
-    sandbox_backend = UserAwareSandboxBackend(sandbox_manager=sandbox_manager)
-
-    # 6. 构建 CompositeBackend（三层路由）
-    from deepagents.backends import CompositeBackend, StateBackend, StoreBackend
-    from deepagents.backends.filesystem import FilesystemBackend
-
-    backend = CompositeBackend(
-        default=sandbox_backend,           # 默认：用户感知沙盒（代码执行 + 文件操作）
-        routes={
-            "/memories/": StoreBackend(
-                namespace=lambda ctx: (ctx.runtime.context.user_id,),
-            ),
-            "/skills/": FilesystemBackend(root_dir=settings.SKILLS_ROOT, virtual_mode=True),
-        }
-    )
-
-    # 7. 挂载 SkillSandboxSyncMiddleware（技能→沙盒同步）
-    from agent.middleware.skill_sandbox_sync import SkillSandboxSyncMiddleware
-    middleware = [SkillSandboxSyncMiddleware(sandbox_manager=sandbox_manager)]
-
-    # 8. 调用 create_deep_agent 构建最终智能体图
-    from deepagents import create_deep_agent
-
-    return create_deep_agent(
-        name=agent_info.name,
-        model=model,
-        tools=tools,
+    v1.7.0 重构：原 118 行内联构建逻辑迁移至 AgentBuilder 建造者模式。
+    """
+    from agent.builders.agent_builder import create_main_agent_v2
+    return await create_main_agent_v2(
         checkpointer=checkpointer,
         store=store,
-        context_schema=Context,
-        skills=[f"/skills/{agent_info.id}/"],
-        memory=["/memories/AGENT.md"],
-        backend=backend,
-        subagents=subagents,
-        system_prompt=agent_info.system_prompt or "你是 ke-hermes 通用智能体...",
-        middleware=middleware,
+        sandbox_manager=sandbox_manager,
     )
 ```
 
-#### CompositeBackend 三层路由（v1.6.0）
+**v1.7.0 变更：**
+- `create_main_agent()` 从内联 118 行构建逻辑简化为对 `AgentBuilder` 的委托调用
+- 原内联的 DB 查询 → 模型解析 → 工具注册 → 子智能体加载 → Backend 组装 → 中间件挂载流程全部迁移至 `AgentBuilder`
+
+---
+
+### 4.8 Agent 建造者 — `agent/builders`（v1.7.0 新增）
+
+**文件：** `agent/builders/agent_builder.py`
+
+**职责：** 用建造者模式（Builder Pattern）将主智能体的复杂构建过程分解为 9 个可组合、可验证的步骤。
+
+#### `AgentBuilder` 类
+
+```python
+class AgentBuilder:
+    """分步构建 Deep Agent 的建造者。
+
+    将原来 118 行的 create_main_agent() 分解为独立的、可测试的构建步骤。
+    每个 with_* 方法返回 self 以支持链式调用。
+    """
+
+    def __init__(self):
+        self._agent_info = None          # DB 查询结果
+        self._model = None               # ChatOpenAI 实例
+        self._tools = []                 # 可调用工具函数列表
+        self._system_prompt = ""         # 系统提示词
+        self._subagents = []             # 子智能体列表
+        self._sandbox_manager = None     # 沙盒管理器
+        self._sandbox_backend = None     # 沙盒后端
+        self._backend = None             # 组合后端
+        self._memory = []                # 记忆路径列表
+        self._middleware = []            # 中间件列表
+
+    async def with_agent_from_db(self, db) -> "AgentBuilder": ...
+    async def with_model(self) -> "AgentBuilder": ...
+    async def with_tools(self) -> "AgentBuilder": ...
+    def with_system_prompt(self, default=None) -> "AgentBuilder": ...
+    async def with_subagents(self) -> "AgentBuilder": ...
+    def with_sandbox(self, sandbox_manager=None) -> "AgentBuilder": ...
+    def with_backend(self) -> "AgentBuilder": ...
+    def with_memory(self) -> "AgentBuilder": ...
+    def with_middleware(self) -> "AgentBuilder": ...
+    def build(self, checkpointer=None, store=None): ...
+```
+
+#### 构建流程
+
+```python
+agent = await (
+    AgentBuilder()
+    .with_agent_from_db(db)        # 1. 查询活跃主智能体
+    .with_model()                  # 2. 解析 LLM（Provider/AIModel → ChatOpenAI）
+    .with_tools()                  # 3. 工具名称 → 可调用函数
+    .with_system_prompt()          # 4. 设置系统提示词
+    .with_subagents()              # 5. 动态加载子智能体
+    .with_sandbox(sandbox_manager) # 6. 每用户沙盒后端
+    .with_backend()                # 7. CompositeBackend 三层路由
+    .with_memory()                 # 8. 记忆路径
+    .with_middleware()             # 9. SkillSandboxSyncMiddleware
+    .build(checkpointer, store)    # 10. 组装 deep agent
+)
+```
+
+**设计要点：**
+- **步骤验证**：关键步骤（如 `with_model()`）在运行时检查前置条件（`with_agent_from_db()` 必须先调用），失败抛出 `RuntimeError`
+- **可选注入**：`with_sandbox()` 支持外部传入 `SandboxManager`（由调用方管理生命周期）或内部自动创建
+- **便利函数**：`create_main_agent_v2()` 封装 Builder 的标准调用流程，保持与原 `create_main_agent()` 相同签名
+
+#### CompositeBackend 三层路由（不变）
 
 | 路由               | Backend                   | namespace / root                         | 说明                      |
 | ---------------- | ------------------------- | ---------------------------------------- | ----------------------- |
-| `/memories/`     | `StoreBackend`            | `(user_id,)`                             | 用户级记忆隔离，存储在 LangGraph Store |
-| `/skills/`       | `FilesystemBackend`       | `settings.SKILLS_ROOT`，virtual_mode=True | 技能文件虚拟文件系统，每智能体按 agent_id 隔离（v1.6.0 新增） |
-| default (其他路径)   | `UserAwareSandboxBackend` | —                                        | 用户感知沙盒后端（v1.6.0 从 OpenSandBoxBackend 变更） |
+| `/memories/`     | `StoreBackend`            | `(user_id,)`                             | 用户级记忆隔离              |
+| `/skills/`       | `FilesystemBackend`       | `settings.SKILLS_ROOT`，virtual_mode=True | 技能文件虚拟文件系统         |
+| default (其他路径)   | `UserAwareSandboxBackend` | —                                        | 用户感知沙盒后端             |
 
-- `/skills/` 路由使用 `FilesystemBackend` 的 virtual_mode，不与真实文件系统交互，提供虚拟文件系统的 API
-- `UserAwareSandboxBackend` 在每次操作时从 LangGraph runtime context 提取 `user_id`，委托给 `SandboxManager` 获取对应用户的沙盒实例
+---
 
-#### 模型解析（`_resolve_model`）
-
-1. 若 Agent 配置了 `provider_id` 和 `model_id`，从 AIModel 表查询对应的模型元数据
-2. 从 Provider 表查询对应的 API 配置（base_url + 解密后的 api_key）
-3. 构造 `ChatOpenAI` 实例
-4. 若数据库未配置，fallback 到模块级的默认 `llm`（DeepSeek-v4-pro）
-
-### 4.7 子智能体模块 — `agent/subagents`
+### 4.9 子智能体模块 — `agent/subagents`
 
 **职责：** 提供子智能体的动态加载。v1.6.0 新增 `subagents_operate.py` 实现从数据库动态加载子智能体。
 
@@ -813,7 +913,7 @@ async def create_subagents(sandbox_manager):
 - **独立技能目录**：每个子智能体有独立的 `/skills/{agent_id}/` 路径
 - **工具独立**：每个子智能体可配置独立的工具列表
 
-### 4.8 Agent 工具集 — `agent/tools`
+### 4.10 Agent 工具集 — `agent/tools`
 
 **文件：** `agent/tools/__init__.py`（v1.6.0 重构）
 
@@ -837,7 +937,7 @@ __all__ = ["get_datetime", "http_request", "tavily_search"]
 - `http_request` 内置 SSRF 防护，禁止访问 127.0.0.0/8、10.0.0.0/8、172.16.0.0/12、192.168.0.0/16 等内网地址
 - `get_datetime` 支持常见时区别名（如 `china` → `Asia/Shanghai`）
 
-### 4.9 Chat API — 对话与流式接口
+### 4.11 Chat API — 对话与流式接口
 
 **文件：** `api/agent/agent_api.py`（已实现）
 
@@ -893,7 +993,7 @@ async def chat(
 
 **v1.6.0 通过 `context.user_id`**，`UserAwareSandboxBackend` 在内部自动定位到对应用户的沙盒实例。
 
-### 4.10 Conversation API — 对话历史 CRUD
+### 4.12 Conversation API — 对话历史 CRUD
 
 **文件：** `api/conversation/conversation_api.py`
 
@@ -1075,7 +1175,128 @@ class CronJobBrief(BaseModel):           # v1.6.0 新增
 | image_generate | image | builtin | AI 图像生成 |
 | text_embedding | ai | builtin | 文本向量化 |
 
-### 4.21 Sandbox — 沙盒代码执行模块
+### 4.23 Knowledge Base API — 知识库管理模块（v1.7.0 新增）
+
+**文件：** `api/knowledge_base/`（11 个文件，包含 4 个子路由 + 状态机 + 观察者 + 调度器）
+
+**路由前缀：** `/api/knowledge-bases`
+
+**职责：** 完整的 RAG 知识库子系统——知识库 CRUD、文档上传与索引、知识图谱实体关系提取、分块管理。
+
+#### 子模块路由
+
+| 子路由 | 文件 | 前缀 | 接口数 | 说明 |
+|--------|------|------|--------|------|
+| kb_router | `kb_api.py` | `/api/knowledge-bases` | 10 | 知识库 CRUD + 统计 + 模型/提供商发现 + 重索引 |
+| doc_router | `doc_api.py` | `/api/knowledge-bases/{kb_id}/documents` | 5 | 文档上传、列表、详情、删除、重试 |
+| chunk_router | `chunk_api.py` | `/api/knowledge-bases/{kb_id}/documents/{doc_id}/chunks` | 5 | 分块列表、详情、更新、删除、批量操作 |
+| graph_router | `graph_api.py` | `/api/knowledge-bases/{kb_id}/graph` | 3 | 实体/关系查询、实体详情、图谱重提取 |
+
+#### 文档索引状态机（State 模式，`doc_state.py`）
+
+实现了 8 种状态的文档索引生命周期：
+
+```
+Queued → Parsing → Chunking → Embedding → BM25 → Extracting → Indexed
+                                                          ↘ Failed（任意阶段失败）
+```
+
+**关键类：**
+
+```python
+@dataclass
+class IndexingContext:
+    """状态模式的 Context 角色——持有当前状态、进度、中间产物。"""
+    doc_id: str; kb_id: str; file_path: str; file_type: str; config: dict
+    current_state: DocState | None = None
+    status: str = "queued"; progress: int = 0
+    documents: list; chunks: list; embeddings: list
+    entities_count: int = 0; relations_count: int = 0
+
+    async def transition_to(self, state, status, progress): ...
+
+class DocState(ABC):
+    """抽象状态接口。"""
+    @abstractmethod
+    async def handle(self, ctx, pipeline): ...
+
+class QueuedState(DocState): ...    # → ParsingState
+class ParsingState(DocState): ...   # → ChunkingState（调用文档加载器）
+class ChunkingState(DocState): ...  # → EmbeddingState（调用切片策略）
+class EmbeddingState(DocState): ... # → BM25State（调用嵌入模型）
+class BM25State(DocState): ...      # → ExtractingState（写入向量库）
+class ExtractingState(DocState): ... # → IndexedState（实体关系提取）
+class IndexedState(DocState): ...   # 终态：索引完成
+class FailedState(DocState): ...    # 终态：索引失败
+```
+
+#### 索引流水线（`doc_service.py`）
+
+**`IndexingPipeline`** 作为模板方法模式的实现，持有所有 RAG 组件并通过状态机驱动文档处理：
+
+```python
+class IndexingPipeline:
+    def __init__(self, loader_registry, chunk_registry, embedding_model,
+                 vector_store, graph_service):
+        self._observers: list[ProgressObserver] = []
+
+    async def execute(self, task: IndexingTask): ...
+    async def _run_state_machine(self, ctx: IndexingContext): ...
+```
+
+**观察者模式**：`ProgressObserver` (ABC) → `DatabaseProgressObserver` + `LoggingProgressObserver`，在索引进度变化时通知 UI 轮询。
+
+**`IndexingScheduler`**（单例模式）：维护异步任务队列，控制最大并发索引数（`INDEXING_MAX_CONCURRENT`）。
+
+#### 核心业务逻辑
+
+**知识库 CRUD（`service.py`）：**
+- `list_kbs()`: 分页列表 + 搜索
+- `get_kb_stats()`: 聚合统计（文档数/分块数/实体数/关系数/存储大小）
+- `create_kb()`: 创建知识库 + 自动创建向量库 collection
+- `delete_kb()`: 级联删除文档 + 实体 + 关系 + 向量库 collection
+- `reindex_kb()`: 更新索引配置 + 重建向量库 + 重新索引全部文档
+
+**文档管理（`doc_service.py`）：**
+- `upload_documents()`: 批量上传（最多 20 个文件）→ 入队索引
+- `list_documents()`: 分页列表 + 状态筛选 + 搜索
+- `get_document()`: 详情含 8 阶段流水线状态
+- `delete_document()`: 级联删除向量 + 源文件
+- `retry_document()`: 重试失败文档
+
+**知识图谱（`graph_service.py`）：**
+- `GraphExtractionService` 使用 `langextract` 框架 + DeepSeek LLM 提取实体和关系
+- 实体类型：人物、组织、产品、概念、算法、地点、时间、事件（8 种）
+- 关系去重：按 (from_entity, to_entity, label) 三元组去重
+- 失败容错：实体抽取失败不阻塞索引，文档仍标记为已索引
+
+**分块管理（`chunk_service.py`）：**
+- 支持单个分块的查看（含前后上下文）、更新（重嵌入）、删除
+- 支持批量操作（save_all / delete）
+
+#### 数据模型（`schemas.py`）
+
+核心 `IndexConfigSchema` 包含 15 个索引配置字段：
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| chunk_strategy | str | "recursive" | 切片策略（fixed/recursive/semantic/markdown） |
+| chunk_size | int | 1000 | 切片大小 |
+| chunk_overlap | int | 200 | 切片重叠 |
+| embedding_model | str | "" | 嵌入模型名称 |
+| embedding_dim | int | 1024 | 嵌入维度 |
+| sparse_algo | str | "bm25" | 稀疏检索算法 |
+| bm25_k1 | float | 1.2 | BM25 k1 参数 |
+| bm25_b | float | 0.75 | BM25 b 参数 |
+| entity_model | str | "" | 实体抽取模型 |
+| relation_model | str | "" | 关系抽取模型 |
+| enable_graph | bool | true | 是否启用图谱提取 |
+| reranker_model | str | "" | 重排序模型 |
+| enable_reranker | bool | false | 是否启用重排序 |
+| top_k | int | 5 | 检索返回数量 |
+| hybrid_alpha | float | 0.5 | 混合检索权重 |
+
+### 4.24 Sandbox — 沙盒代码执行模块
 
 **文件：** `agent/sandbox/`（v1.6.0 重构，新增 2 个文件）
 
@@ -1163,7 +1384,7 @@ class UserAwareSandboxBackend(BaseSandbox):
 
 沙盒创建迁移到 `SandboxManager._create_sandbox()` 内部，`opensandbox_operate.py` 保留供直接使用场景。
 
-### 4.22 Middleware — 智能体中间件
+### 4.25 Middleware — 智能体中间件
 
 **文件：** `agent/middleware/skill_sandbox_sync.py`（v1.6.0 新增）
 
@@ -1210,9 +1431,79 @@ class SkillSandboxSyncMiddleware(AgentMiddleware):
 
 ---
 
+### 4.26 核心工具层 — `core/` 模块（v1.7.0 扩展）
+
+v1.7.0 在 `core/` 目录下新增装饰器库、分页迭代器和完整 RAG 基础设施。
+
+#### 4.26.1 装饰器库 — `core/decorators.py`（v1.7.0 新增）
+
+**职责：** 提供可复用的装饰器处理横切关注点，消除 API 层重复的 try/except 模板。
+
+| 装饰器 | 签名 | 用途 |
+|--------|------|------|
+| `@handle_errors` | `(func=None, *, default_message)` | 统一错误处理：捕获 HTTPException → ApiResponse 格式 |
+| `@cached(ttl)` | `(ttl: int = 60)` | API 响应缓存，通过 KeyValueStore 存储 |
+| `@retry(max_attempts, backoff_factor)` | `(max_attempts=3, backoff_factor=2.0)` | 指数退避重试，跳过 HTTPException |
+| `@log_call(level)` | `(level=logging.DEBUG)` | 自动函数调用日志 |
+
+```python
+@handle_errors
+async def my_endpoint(...):
+    result = await some_service(...)
+    return ok(result)
+
+@cached(ttl=300)
+async def list_providers(...): ...
+
+@retry(max_attempts=3)
+async def call_external_api(...): ...
+```
+
+#### 4.26.2 分页迭代器 — `core/pagination.py`（v1.7.0 新增）
+
+**职责：** 统一分页查询逻辑，消除 6+ 个 `list_*` 函数中的重复 offset/limit 代码。
+
+```python
+@dataclass
+class PageResult:
+    items: list; total: int; page: int; page_size: int
+    total_pages: int; has_next: bool; has_prev: bool
+
+class PageIterator:
+    """封装 offset/limit + 总数查询 + 边界钳位。"""
+    def __init__(self, db, query, page, page_size): ...
+    async def get_page(self) -> PageResult: ...
+```
+
+#### 4.26.3 RAG 核心 — `core/rag/`（v1.7.0 新增，6 个文件）
+
+**`embedding.py`** — 嵌入模型工厂：
+- `_DashScopeEmbeddings` 类：适配 DashScope API（10 条/批限制、无 tiktoken 依赖）
+- `get_embedding_model()` 工厂：DashScope / OpenAI 兼容两种后端
+
+**`vector_store.py`** — 向量库抽象层（Strategy 模式）：
+- `BaseVectorStore` (ABC)：`create_collection` / `add_documents` / `similarity_search` / `bm25_search` / `hybrid_search` 等 11 个抽象方法
+- `MilvusVectorStore`：基于 pymilvus 3.0，HNSW COSINE 索引，collection 命名 `kb_{kb_id}`
+- `ChromaVectorStore`：支持 PersistentClient 和 HttpClient，实现完整检索（similarity/bm25/hybrid）
+
+**`loaders.py`** — 文档加载器策略/注册表（Strategy + Composite 模式）：
+- `DocumentLoaderStrategy` (ABC) + 13 种具体策略：PDF（langchain-opendataloader + PyPDF fallback）、Word、Excel、PPT（python-pptx + unstructured fallback）、CSV、JSON、Markdown、HTML、Text、Image（OCR/Tesseract）
+- `FallbackLoaderStrategy`（Composite）：按优先级依次尝试多个策略
+- `DocumentLoaderRegistry`：文件类型 → 策略映射
+- `create_default_loader_registry()`：预注册全部 13 种格式
+
+**`splitters.py`** — 文本切片策略/注册表（Strategy 模式）：
+- `ChunkStrategy` (ABC) + 5 种策略：Fixed（CharacterTextSplitter）、Recursive（RecursiveCharacterTextSplitter）、Semantic（SemanticChunker）、Markdown（MarkdownHeaderTextSplitter）、Agentic（LLM 驱动，存根）
+- `ChunkStrategyRegistry`：策略名 → 策略映射
+- `create_chunk_registry()`：条件注册（semantic 仅在 embedding 可用时注册）
+
+**`bm25_index.py`** — BM25 关键词索引器，委托给 vector_store 的 bm25_search。
+
+---
+
 ## 5. 数据存储设计
 
-### 5.1 业务数据库 — SQLAlchemy ORM（v1.6.0：15 个模型）
+### 5.1 业务数据库 — SQLAlchemy ORM（v1.7.0：19 个模型）
 
 #### User 模型 — `db/models/user.py`（不变）
 
@@ -1376,6 +1667,77 @@ class CronJob(Base):
     updated_at: Mapped[datetime]
 ```
 
+#### KnowledgeBase 模型 — `db/models/knowledge_base.py`（v1.7.0 新增）
+
+```python
+class KnowledgeBase(Base):
+    __tablename__ = "knowledge_bases"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid4)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(16), default="active")
+    config: Mapped[dict] = mapped_column(JSON, default=dict)       # IndexConfigSchema
+    tags: Mapped[list] = mapped_column(JSON, default=list)
+    docs_count: Mapped[int] = mapped_column(Integer, default=0)
+    chunks_count: Mapped[int] = mapped_column(Integer, default=0)
+    entities_count: Mapped[int] = mapped_column(Integer, default=0)
+    relations_count: Mapped[int] = mapped_column(Integer, default=0)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
+    user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    created_at: Mapped[datetime]; updated_at: Mapped[datetime]
+```
+
+#### KnowledgeBaseDocument 模型 — `db/models/knowledge_base_document.py`（v1.7.0 新增）
+
+```python
+class KnowledgeBaseDocument(Base):
+    __tablename__ = "knowledge_base_documents"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid4)
+    kb_id: Mapped[str] = mapped_column(String(36), ForeignKey("knowledge_bases.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    type: Mapped[str] = mapped_column(String(16), nullable=False)   # pdf / docx / pptx / xlsx / csv / json / md / html / txt
+    size_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(16), default="queued")  # queued / parsing / chunking / embedding / bm25 / extracting / indexed / failed
+    progress: Mapped[int] = mapped_column(Integer, default=0)
+    chunks_count: Mapped[int] = mapped_column(Integer, default=0)
+    entities_count: Mapped[int] = mapped_column(Integer, default=0)
+    relations_count: Mapped[int] = mapped_column(Integer, default=0)
+    storage_path: Mapped[str] = mapped_column(String(512), default="")
+    uploaded_at: Mapped[datetime]
+    indexed_at: Mapped[datetime | None]
+    error_message: Mapped[str] = mapped_column(Text, default="")
+```
+
+#### KnowledgeBaseEntity 模型 — `db/models/knowledge_base_entity.py`（v1.7.0 新增）
+
+```python
+class KnowledgeBaseEntity(Base):
+    __tablename__ = "knowledge_base_entities"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid4)
+    kb_id: Mapped[str] = mapped_column(String(36), ForeignKey("knowledge_bases.id", ondelete="CASCADE"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    type: Mapped[str] = mapped_column(String(32), nullable=False)   # 人物/组织/产品/概念/算法/地点/时间/事件
+    mentions: Mapped[int] = mapped_column(Integer, default=1)
+    metadata_: Mapped[dict] = mapped_column("metadata", JSON, default=dict)
+```
+
+#### KnowledgeBaseRelation 模型 — `db/models/knowledge_base_relation.py`（v1.7.0 新增）
+
+```python
+class KnowledgeBaseRelation(Base):
+    __tablename__ = "knowledge_base_relations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid4)
+    kb_id: Mapped[str] = mapped_column(String(36), ForeignKey("knowledge_bases.id", ondelete="CASCADE"), nullable=False, index=True)
+    from_entity: Mapped[str] = mapped_column(String(256), nullable=False)
+    to_entity: Mapped[str] = mapped_column(String(256), nullable=False)
+    label: Mapped[str] = mapped_column(String(128), nullable=False)  # 关系类型
+    weight: Mapped[float] = mapped_column(Float, default=1.0)
+```
+
 #### Provider 模型 — `db/models/provider.py`（v1.6.0 变更）
 
 与 v1.5.0 一致的结构，唯一变更：`api_key` 字段现在存储 **Fernet 加密后的密文**（不再明文），加密/解密通过 `core/security.py` 的 `encrypt_api_key()` / `decrypt_api_key()` 函数处理。
@@ -1426,7 +1788,7 @@ Access Token (2h) + Refresh Token (7d)，流程不变。
 
 ## 7. API 接口总览与前后端对照
 
-### 7.1 完整接口清单（v1.6.0：63+ 接口）
+### 7.1 完整接口清单（v1.7.0：87+ 接口）
 
 | 接口                              | 方法     | 模块           | 后端实现  | 说明                            |
 | ------------------------------- | ------ | ------------ | ----- | ----------------------------- |
@@ -1498,8 +1860,31 @@ Access Token (2h) + Refresh Token (7d)，流程不变。
 | `/api/tools/{tool_id}`           | PUT    | tools        | ✅ 已实现 | **v1.6.0 新增**：更新工具          |
 | `/api/tools/{tool_id}/toggle`    | PATCH  | tools        | ✅ 已实现 | **v1.6.0 新增**：切换工具状态      |
 | `/api/tools/{tool_id}`           | DELETE | tools        | ✅ 已实现 | **v1.6.0 新增**：删除工具          |
+| `/api/knowledge-bases`           | GET    | knowledge_base | ✅ 已实现 | **v1.7.0 新增**：知识库列表（分页+搜索） |
+| `/api/knowledge-bases/stats`     | GET    | knowledge_base | ✅ 已实现 | **v1.7.0 新增**：聚合统计          |
+| `/api/knowledge-bases/available-models` | GET | knowledge_base | ✅ 已实现 | **v1.7.0 新增**：可用模型筛选    |
+| `/api/knowledge-bases/available-providers` | GET | knowledge_base | ✅ 已实现 | **v1.7.0 新增**：可用提供商筛选 |
+| `/api/knowledge-bases`           | POST   | knowledge_base | ✅ 已实现 | **v1.7.0 新增**：创建知识库       |
+| `/api/knowledge-bases/{kb_id}`   | GET    | knowledge_base | ✅ 已实现 | **v1.7.0 新增**：知识库详情       |
+| `/api/knowledge-bases/{kb_id}`   | PUT    | knowledge_base | ✅ 已实现 | **v1.7.0 新增**：更新知识库       |
+| `/api/knowledge-bases/{kb_id}`   | DELETE | knowledge_base | ✅ 已实现 | **v1.7.0 新增**：删除知识库       |
+| `/api/knowledge-bases/{kb_id}/indexing-activity` | GET | knowledge_base | ✅ 已实现 | **v1.7.0 新增**：索引活动 |
+| `/api/knowledge-bases/{kb_id}/reindex` | POST | knowledge_base | ✅ 已实现 | **v1.7.0 新增**：重索引全部文档 |
+| `/api/knowledge-bases/{kb_id}/documents/upload` | POST | knowledge_base | ✅ 已实现 | **v1.7.0 新增**：上传文档（最多20个） |
+| `/api/knowledge-bases/{kb_id}/documents` | GET | knowledge_base | ✅ 已实现 | **v1.7.0 新增**：文档列表 |
+| `/api/knowledge-bases/{kb_id}/documents/{doc_id}` | GET | knowledge_base | ✅ 已实现 | **v1.7.0 新增**：文档详情+流水线状态 |
+| `/api/knowledge-bases/{kb_id}/documents/{doc_id}` | DELETE | knowledge_base | ✅ 已实现 | **v1.7.0 新增**：删除文档 |
+| `/api/knowledge-bases/{kb_id}/documents/{doc_id}/retry` | POST | knowledge_base | ✅ 已实现 | **v1.7.0 新增**：重试失败文档 |
+| `/api/knowledge-bases/{kb_id}/documents/{doc_id}/chunks` | GET | knowledge_base | ✅ 已实现 | **v1.7.0 新增**：分块列表 |
+| `/api/knowledge-bases/{kb_id}/documents/{doc_id}/chunks/{chunk_id}` | GET | knowledge_base | ✅ 已实现 | **v1.7.0 新增**：分块详情 |
+| `/api/knowledge-bases/{kb_id}/documents/{doc_id}/chunks/{chunk_id}` | PUT | knowledge_base | ✅ 已实现 | **v1.7.0 新增**：更新分块 |
+| `/api/knowledge-bases/{kb_id}/documents/{doc_id}/chunks/{chunk_id}` | DELETE | knowledge_base | ✅ 已实现 | **v1.7.0 新增**：删除分块 |
+| `/api/knowledge-bases/{kb_id}/documents/{doc_id}/chunks/batch` | POST | knowledge_base | ✅ 已实现 | **v1.7.0 新增**：批量操作分块 |
+| `/api/knowledge-bases/{kb_id}/graph` | GET | knowledge_base | ✅ 已实现 | **v1.7.0 新增**：实体+关系列表 |
+| `/api/knowledge-bases/{kb_id}/graph/entities/{entity_id}` | GET | knowledge_base | ✅ 已实现 | **v1.7.0 新增**：实体详情 |
+| `/api/knowledge-bases/{kb_id}/graph/re-extract` | POST | knowledge_base | ✅ 已实现 | **v1.7.0 新增**：重提取图谱 |
 
-共 **67 个接口**（v1.5.0 为 51 个，v1.6.0 新增 Tools API 7 个 + Agents API 新增 5 个 + CronJob 1 个 = 16 个新增）。
+共 **90 个接口**（v1.6.0 为 67 个，v1.7.0 新增 Knowledge Base API 23 个）。
 
 ### 7.2 统一响应格式
 
@@ -1540,7 +1925,7 @@ Checkpointer 自动写入检查点 → Store 持久化记忆更新
 ChatResponse → 前端保存 thread_id
 ```
 
-### 8.2 模块依赖关系（v1.6.0 全图）
+### 8.2 模块依赖关系（v1.7.0 全图）
 
 ```
 server.py
@@ -1548,31 +1933,45 @@ server.py
   ├── Windows SelectorEventLoop monkeypatch  ← Windows 兼容
   ├── CORS 中间件
   ├── lifespan:
-  │     ├── init_db()                  ← 自动建表 + 6 个迁移函数（15 个模型）
+  │     ├── init_db()                  ← 自动建表 + 迁移函数（19 个模型）
   │     ├── seed_mcp_tools(session)    ← MCP 工具种子（12 个）
-  │     ├── seed_builtin_skills(session) ← 内置技能种子（5 个，v1.6.0 新增）
-  │     ├── seed_builtin_tools(session) ← 内置工具种子（11 个，v1.6.0 新增）
-  │     ├── migrate_plaintext_api_keys(session) ← api_key 明文→加密迁移（v1.6.0 新增）
-  │     ├── init_graph()               ← 检查点 + Store + SandboxManager + create_main_agent
+  │     ├── seed_builtin_skills(session) ← 内置技能种子（5 个）
+  │     ├── seed_builtin_tools(session) ← 内置工具种子（11 个）
+  │     ├── migrate_plaintext_api_keys(session) ← api_key 明文→加密迁移
+  │     ├── _init_knowledge_base(app)  ← v1.7.0 新增：RAG 基础设施
+  │     │     ├── get_embedding_model()          ← 嵌入模型工厂（DashScope / OpenAI）
+  │     │     ├── VectorStore (Milvus / Chroma)  ← 双后端向量库
+  │     │     ├── create_default_loader_registry() ← 13 种文档加载器
+  │     │     ├── create_chunk_registry()        ← 5 种切片策略
+  │     │     ├── GraphExtractionService          ← Langextract 图谱提取
+  │     │     ├── IndexingPipeline                ← 索引流水线（模板方法）
+  │     │     │     ├── DatabaseProgressObserver   ← 进度持久化（观察者）
+  │     │     │     └── LoggingProgressObserver    ← 日志记录（观察者）
+  │     │     └── IndexingScheduler               ← 异步任务队列（单例）
+  │     ├── init_graph()               ← 检查点 + Store + SandboxManager + AgentBuilder
   │     │     ├── SandboxManager(extra_domains=...).start_cleanup()
   │     │     └── create_main_agent(checkpointer, store, sandbox_manager)
-  │     │           ├── 从 DB 查询主智能体配置 + 子智能体
-  │     │           ├── 解析 LLM 模型（Provider/AIModel 表 → ChatOpenAI，fallback 到默认）
-  │     │           ├── 解析工具（名称 → 注册表查找）
-  │     │           ├── UserAwareSandboxBackend(sandbox_manager)
-  │     │           ├── CompositeBackend:
-  │     │           │     ├── default → UserAwareSandboxBackend
-  │     │           │     ├── /memories/ → StoreBackend(namespace=(user_id,))
-  │     │           │     └── /skills/ → FilesystemBackend(virtual_mode)  ← v1.6.0 新增
-  │     │           ├── SkillSandboxSyncMiddleware(sandbox_manager)  ← v1.6.0 新增
-  │     │           └── create_deep_agent(model, tools, backend, subagents, middleware, ...)
+  │     │           └── AgentBuilder 建造者模式（v1.7.0 重构）
+  │     │                 ├── with_agent_from_db()  → 查询活跃主智能体
+  │     │                 ├── with_model()          → resolve_model() 动态加载
+  │     │                 ├── with_tools()          → get_tool_registry() 解析
+  │     │                 ├── with_system_prompt()  → 系统提示词
+  │     │                 ├── with_subagents()      → 动态子智能体加载
+  │     │                 ├── with_sandbox()        → UserAwareSandboxBackend
+  │     │                 ├── with_backend()        → CompositeBackend 三层路由
+  │     │                 │     ├── default → UserAwareSandboxBackend
+  │     │                 │     ├── /memories/ → StoreBackend(namespace=(user_id,))
+  │     │                 │     └── /skills/ → FilesystemBackend(virtual_mode)
+  │     │                 ├── with_memory()         → 记忆路径
+  │     │                 ├── with_middleware()      → SkillSandboxSyncMiddleware
+  │     │                 └── build()               → create_deep_agent()
   │     ├── create_store()             ← Redis / MemoryStore
   │     ├── set_store()                ← 注入依赖
   │     ├── init_jwt()                 ← JWT 密钥持久化
   │     └── shutdown_graph()           ← 关闭 SandboxManager + 连接池
-  └── api.router (12 个子模块)
+  └── api.router (16 个子模块)
         ├── agent_api.router (prefix="/api")
-        ├── agents_api.router (prefix="/api/agents")     ← v1.6.0: +5 接口（更新 + 技能 + CronJob）
+        ├── agents_api.router (prefix="/api/agents")
         ├── conversation_api.router (prefix="/api")
         ├── auth_api.router (prefix="/api/auth")
         ├── captcha_api.router (prefix="/api/captcha")
@@ -1582,7 +1981,11 @@ server.py
         ├── mcp_api.router (prefix="/api/mcp")
         ├── providers_api.router (prefix="/api/providers")
         ├── skill_api.router (prefix="/api/skill")
-        └── tools_api.router (prefix="/api/tools")       ← v1.6.0 新增
+        ├── tools_api.router (prefix="/api/tools")
+        ├── kb_api.router (prefix="/api/knowledge-bases")               ← v1.7.0 新增
+        ├── doc_api.router (prefix="/api/knowledge-bases/{kb_id}")      ← v1.7.0 新增
+        ├── graph_api.router (prefix="/api/knowledge-bases/{kb_id}")    ← v1.7.0 新增
+        └── chunk_api.router (prefix="/api/knowledge-bases/{kb_id}")    ← v1.7.0 新增
 ```
 
 ---
@@ -1642,8 +2045,24 @@ server.py
 | `SMS_SECRET_KEY`             | str | `""`                                                  | 短信服务商 Secret Key                |
 | `SMS_SIGN_NAME`              | str | `""`                                                  | 短信签名                            |
 | `SMS_TEMPLATE_CODE`          | str | `""`                                                  | 短信模板编号                          |
+| `VECTOR_DB_BACKEND`          | str | `"chroma"`                                            | 向量库后端（milvus / chroma）（v1.7.0 新增） |
+| `MILVUS_URI`                 | str | `""`                                                  | Milvus 连接 URI（v1.7.0 新增）       |
+| `MILVUS_USER`                | str | `""`                                                  | Milvus 用户名（v1.7.0 新增）          |
+| `MILVUS_PASSWORD`            | str | `""`                                                  | Milvus 密码（v1.7.0 新增）           |
+| `MILVUS_DEFAULT_DB`          | str | `"default"`                                           | Milvus 默认数据库（v1.7.0 新增）       |
+| `CHROMA_HOST`                | str | `"127.0.0.1"`                                         | Chroma 服务地址（v1.7.0 新增）        |
+| `CHROMA_PORT`                | int | `8000`                                                | Chroma 服务端口（v1.7.0 新增）        |
+| `CHROMA_PERSIST_DIR`         | str | `"./db/chroma"`                                       | Chroma 持久化目录（v1.7.0 新增）      |
+| `DOC_STORE_BACKEND`          | str | `"local"`                                             | 文档存储后端（v1.7.0 新增）            |
+| `DOC_UPLOAD_DIR`             | str | `"./uploads"`                                         | 文档上传目录（v1.7.0 新增）            |
+| `GRAPH_STORE_BACKEND`        | str | `"sqlite"`                                            | 图谱存储后端（v1.7.0 新增）            |
+| `DEFAULT_EMBEDDING_MODEL`    | str | `""`                                                  | 默认嵌入模型名称（v1.7.0 新增）         |
+| `DEFAULT_EMBEDDING_DIM`      | int | `1024`                                                | 默认嵌入维度（v1.7.0 新增）            |
+| `INDEXING_MAX_CONCURRENT`    | int | `3`                                                   | 最大并发索引数（v1.7.0 新增）           |
+| `BM25_DEFAULT_K1`            | float | `1.2`                                                | BM25 k1 参数（v1.7.0 新增）          |
+| `BM25_DEFAULT_B`             | float | `0.75`                                               | BM25 b 参数（v1.7.0 新增）           |
 
-共 **50 个配置项**（v1.5.0 为 41 个，v1.6.0 新增 9 个：SKILLS_ROOT + 7 个 SANDBOX_* + ENCRYPTION_KEY）。
+共 **66 个配置项**（v1.6.0 为 50 个，v1.7.0 新增 16 个：13 个向量库/存储 + 2 个 Embedding + 1 个索引并发）。
 
 ---
 
@@ -1704,6 +2123,53 @@ Provider 的 api_key 使用 Fernet 对称加密存储。设计要点：
 - **明文迁移**：`migrate_plaintext_api_keys()` 在 lifespan 阶段自动将存量明文密钥加密
 - **运行时解密**：`decrypt_api_key()` 在 `main_agent.py` 和 `subagents_operate.py` 的模型解析时被调用
 
+### 10.24 AgentBuilder 建造者模式重构（v1.7.0 新增）
+
+将原 118 行内联 `create_main_agent()` 函数分解为 `AgentBuilder` 的 9 步链式构建。设计原因：
+
+1. **步骤可测试**：每个 `with_*` 步骤可独立单元测试
+2. **依赖显式化**：步骤间前置条件通过运行时检查强制
+3. **组合灵活**：可选择性调用步骤（如跳过子智能体加载），支持变体组合
+
+### 10.25 文档索引状态机（v1.7.0 新增）
+
+使用 GoF 状态模式实现 8 状态文档索引流水线（`doc_state.py`）。设计原因：
+
+1. **阶段独立**：每个索引阶段（解析/切片/向量化/BM25/抽取）为独立状态类
+2. **进度可追踪**：每个状态转换触发进度回调，前端实时展示 8 阶段进度条
+3. **失败隔离**：非关键阶段（实体抽取）失败不阻塞索引，文档仍标记为已索引
+
+### 10.26 观察者模式进度追踪（v1.7.0 新增）
+
+`IndexingPipeline` 维护 `ProgressObserver` 列表（Database + Logging），状态转换时通知所有观察者。设计原因：
+
+1. **职责分离**：进度持久化和日志输出为独立 Observer，IndexingPipeline 不感知
+2. **可扩展**：新增 Observer（如 WebSocket 推送）无需修改 Pipeline
+
+### 10.27 Milvus/Chroma 双向量库后端（v1.7.0 新增）
+
+`BaseVectorStore` 抽象接口 + `MilvusVectorStore` / `ChromaVectorStore` 双实现。设计原因：
+
+1. **开发/生产分离**：开发环境用 Chroma（零依赖），生产环境用 Milvus（高性能分布式）
+2. **检索算法统一**：similarity_search / bm25_search / hybrid_search 统一接口
+3. **Collection 命名规约**：`kb_{kb_id}` 模式确保知识库间数据隔离
+
+### 10.28 Strategy + Registry 文档处理流水线（v1.7.0 新增）
+
+13 种文档加载器 + 5 种切片策略均通过 Strategy 模式 + Registry 注册表管理。设计原因：
+
+1. **开闭原则**：新增文件格式只需实现 `DocumentLoaderStrategy` + 注册
+2. **Fallback 容错**：PDF 提供 open-dataloader → PyPDF 双策略 Fallback
+3. **条件注册**：semantic 切片仅在 embedding 可用时注册，agentic 切片存根预留
+
+### 10.29 装饰器库横切关注点（v1.7.0 新增）
+
+`handle_errors` / `cached` / `retry` / `log_call` 四个装饰器统一处理横切关注点。设计原因：
+
+1. **消除重复**：API 层 ~50 处重复 try/except 模板可通过 `@handle_errors` 消除
+2. **弹性增强**：外部服务调用（OAuth/短信/邮件）通过 `@retry` 增加容错
+3. **性能优化**：高频查询接口通过 `@cached` 减少数据库压力
+
 ---
 
 ## 11. 测试设计
@@ -1713,11 +2179,14 @@ Provider 的 api_key 使用 Fernet 对称加密存储。设计要点：
 ```
 tests/
 ├── conftest.py                 # 公共 fixtures（AsyncClient + lifespan 管理）
+├── test_loaders.py             # 文档加载器测试（v1.7.0 新增）
 ├── unit_tests/
 │   ├── test_config.py          # Settings 类环境变量读取
 │   ├── test_models.py          # LLM/Embeddings 实例导入
 │   ├── test_agent.py           # graph 导出函数验证
-│   └── test_agent_service.py   # 智能体管理服务单元测试
+│   ├── test_agent_service.py   # 智能体管理服务单元测试
+│   ├── test_http_request.py    # HTTP 请求工具测试
+│   └── test_tavily_search.py   # Tavily 搜索工具测试
 └── integration_tests/
     ├── test_server.py          # FastAPI 实例 + 路由注册验证
     ├── test_agent_api.py       # Chat API 接口测试
@@ -1756,7 +2225,7 @@ uv run python run.py       # 启动开发服务器
 
 ### 12.3 API 文档
 
-启动后访问 `http://127.0.0.1:8000/docs`，FastAPI 自动生成交互式 Swagger UI 文档。12 个功能模块共 67 个接口均自动注册。
+启动后访问 `http://127.0.0.1:8000/docs`，FastAPI 自动生成交互式 Swagger UI 文档。16 个功能模块共 90 个接口均自动注册。
 
 ---
 
@@ -1771,7 +2240,8 @@ uv run python run.py       # 启动开发服务器
 | 智能体管理     | ⬜         | ✅ 已实现     | **后端已实现**（16 接口 v1.6.0：增加更新 + 技能关联 + CronJob） |
 | 对话历史 CRUD  | ⬜ 已设计     | ✅ 已实现     | **后端已实现**（4 接口）                     |
 | 模型管理      | ⬜ 已设计     | ✅ 已实现     | **后端已实现**（9 接口 + api_key 加密）          |
-| 工具管理      | ⬜         | ✅ 已实现     | **后端已实现**（v1.6.0 新增：7 接口 + 11 个预置工具） |
+| 知识库管理     | ⬜         | ✅ 已实现     | **后端已实现**（v1.7.0 新增：23 接口 + 8 状态机 + 图谱提取） |
+| 工具管理      | ⬜         | ✅ 已实现     | **后端已实现**（7 接口 + 11 个预置工具） |
 | 账号密码登录     | ✅ 已实现     | ✅ 已实现     | **一致**                                 |
 | 手机验证码登录    | ✅ 已实现     | ✅ 已实现     | **一致**                                 |
 | 手机号注册      | ✅ 已实现     | ✅ 已实现     | **一致**                                 |
@@ -1795,32 +2265,35 @@ uv run python run.py       # 启动开发服务器
 | P3  | 用户管理 API | 4+  | 用户信息编辑、头像上传、密码修改             |
 | P3  | 邮件发送服务   | 1   | 邮箱验证码实际发送（当前仅开发模式）           |
 
-### 13.3 从 v1.0.0 到 v1.6.0 的变更总结
+### 13.3 从 v1.0.0 到 v1.7.0 的变更总结
 
-| 项目       | v1.0.0 (初始)          | v1.6.0 (当前)                                                                                                                   |
+| 项目       | v1.0.0 (初始)          | v1.7.0 (当前)                                                                                                                   |
 | -------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| API 模块   | 1 (agent)            | 12 (agent + agents + auth + captcha + oauth + sms + email + conversation + mcp + providers + skill + tools)                   |
-| 数据模型     | 0                    | 15 (User + UserOAuth + LoginRecord + Conversation + Skill + McpTool + McpInstallation + Agent + AgentFile + AgentSkill + AgentTool + AIModel + Provider + Tool + CronJob) |
-| Agent 架构 | 单智能体 + 无文件后端         | DB 驱动主智能体 + 动态子智能体 + CompositeBackend（三层路由）+ SandboxManager 每用户沙盒 + SkillSandboxSyncMiddleware 技能同步  |
-| LLM 模型  | 1 (DeepSeek)         | 2 fallback (DeepSeek 主智能体 + Qwen 3.6 Plus 子智能体) + 数据库驱动动态选择（Provider/AIModel 表）                                  |
+| API 模块   | 1 (agent)            | 16 (agent + agents + auth + captcha + oauth + sms + email + conversation + mcp + providers + skill + tools + knowledge_base×4) |
+| 数据模型     | 0                    | 19 (User + UserOAuth + LoginRecord + Conversation + Skill + McpTool + McpInstallation + Agent + AgentFile + AgentSkill + AgentTool + AIModel + Provider + Tool + CronJob + KnowledgeBase + KnowledgeBaseDocument + KnowledgeBaseEntity + KnowledgeBaseRelation) |
+| Agent 架构 | 单智能体 + 无文件后端         | DB 驱动主智能体 + AgentBuilder 建造者模式 + 动态子智能体 + CompositeBackend（三层路由）+ SandboxManager 每用户沙盒 + SkillSandboxSyncMiddleware 技能同步 |
+| LLM 模型  | 1 (DeepSeek)         | 1 fallback (DeepSeek) + 数据库驱动动态选择（Provider/AIModel 表）+ `resolve_model()` 外观      |
+| 知识库      | 无                    | 完整 RAG 子系统：KB CRUD + 文档索引 8 状态机 + 知识图谱提取 + 分块管理 + Milvus/Chroma 双向量库 + 13 种文档加载器 + 5 种切片策略 |
+| 设计模式     | 无显式应用                | Builder / State / Observer / Strategy / Template Method / Iterator / Decorator / Singleton / Factory / Proxy / Adapter / Composite / Facade |
 | 文件后端     | 无                    | CompositeBackend（UserAwareSandboxBackend 代码执行 + StoreBackend 记忆存储 + FilesystemBackend 技能虚拟文件系统）             |
 | 沙盒执行     | 无                    | SandboxManager 每用户沙盒池（TTL + 健康检查 + 后台清理）+ UserAwareSandboxBackend 运行时路由 + OpenSandboxBackend 底层封装        |
 | 中间件      | 0                    | CORS + 依赖注入体系 + SkillSandboxSyncMiddleware（技能同步 + 网络策略）                                                     |
 | 检查点后端    | 无                    | 双后端（SQLite + PostgreSQL），含 Store 持久化                                                                                        |
 | 安全       | 无                    | RSA + JWT + bcrypt + Fernet + 登录锁定 + JWT 鉴权                                                            |
 | 存储抽象     | 无                    | KeyValueStore（Redis + MemoryStore）                                                                                            |
+| 核心工具层    | 无                    | 装饰器库（handle_errors / cached / retry / log_call）+ PageIterator 分页迭代器 + RAG 基础设施（嵌入/向量库/加载器/切片器/BM25） |
 | 对话上下文    | 无                    | thread_id 多轮对话 + 对话历史 CRUD + 检查点/Store 持久化                                                                                |
 | 智能体管理    | 无                    | 智能体 CRUD + 主/子层级 + 配置管理 + 文件操作 + 技能关联（关联表）+ CronJob + 克隆                                            |
 | 模型管理     | 无                    | 提供商/模型 CRUD + 7 种模型类型 + 嵌套响应 + 克隆 + 状态切换 + api_key 加密                                                          |
-| 工具管理     | 无                    | 工具 CRUD + 列表 + 切换 + 智能体关联 + 11 个内置种子工具（v1.6.0 新增）                                                        |
+| 工具管理     | 无                    | 工具 CRUD + 列表 + 切换 + 智能体关联 + 11 个内置种子工具                                                        |
 | MCP 广场    | 无                    | 工具列表 + 详情 + 安装/卸载 + 12 个预置种子工具                                                                              |
 | Skills 管理 | 无                    | 上传校验 + CRUD + 批量 + 启用/禁用 + 5 个内置种子技能                                                                          |
 | 邮箱验证     | 无                    | 邮箱验证码发送 + 频率限制 + 开发模式                                                                                       |
-| 外部依赖     | DeepSeek + DashScope | + bcrypt + cryptography + httpx + Pillow + redis(可选) + tavily + psycopg(可选) + python-multipart + opensandbox + opensandbox-code-interpreter |
-| 环境变量     | 8                    | 50                                                                                                                             |
-| API 接口   | 2                    | 67                                                                                                                             |
+| 外部依赖     | DeepSeek + DashScope | + bcrypt + cryptography + httpx + Pillow + redis(可选) + tavily + psycopg(可选) + python-multipart + opensandbox + opensandbox-code-interpreter + langchain-community + unstructured + pymilvus + chromadb + pypdf + docx2txt + tiktoken + transformers + langextract + jq + langchain-opendataloader-pdf + langchain-experimental + langchain-text-splitters |
+| 环境变量     | 8                    | 66                                                                                                                             |
+| API 接口   | 2                    | 90                                                                                                                             |
 
 
 ---
 
-> 本文档 v1.6.0 基于实际代码实现更新。v1.6.0 重点新增：Tools API 模块（7 接口 + 11 个预置工具）、AgentSkill/AgentTool/Tool/CronJob 4 个 ORM 模型、SandboxManager 每用户沙盒管理器、UserAwareSandboxBackend 运行时用户感知、SkillSandboxSyncMiddleware 技能同步中间件、main_agent.py 数据库驱动主智能体工厂、subagents_operate.py 动态子智能体加载、Agents API 新增 5 个接口、Provider api_key 加密存储、Agent 模型重构（关联表替代 JSON 列）；数据模型从 11 个扩展到 15 个；API 子模块从 11 个扩展到 12 个；API 接口从 51 个扩展到 67 个；环境变量从 41 个扩展到 50 个。
+> 本文档 v1.7.0 基于实际代码实现更新。v1.7.0 重点新增：Knowledge Base 完整 RAG 子系统（23 接口 + 4 个 ORM 模型 + 文档索引 8 状态机 + 知识图谱提取 + Milvus/Chroma 双向量库 + 13 种文档加载器 + 5 种切片策略 + BM25 索引）、核心工具层（decorators.py 装饰器库、pagination.py 分页迭代器）、AgentBuilder 建造者模式重构 Agent 构建、Agent 共享工具模块（common.py）、Agent 模型简化为单一 DeepSeek 默认模型；数据模型从 15 个扩展到 19 个；API 子模块从 12 个扩展到 16 个；API 接口从 67 个扩展到 90 个；环境变量从 50 个扩展到 66 个。

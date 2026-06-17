@@ -226,7 +226,7 @@ export async function retryDocument(
 
 export interface GraphDataResponse {
   entities: { id: string; name: string; type: string; mentions: number }[]
-  relations: { id: string; from: string; to: string; label: string; weight: number }[]
+  relations: { id: string; from: string; to: string; label: string; weight: number; sourceEntityId?: string; targetEntityId?: string }[]
 }
 
 export async function fetchGraphData(
@@ -238,16 +238,18 @@ export async function fetchGraphData(
   })
   const raw = res.data.data as {
     entities: { id: string; name: string; type: string; mentions: number }[]
-    relations: { id: string; from_entity: string; to_entity: string; label: string; weight: number }[]
+    relations: { id: string; from_entity: string; to_entity: string; label: string; weight: number; source_entity_id?: string; target_entity_id?: string }[]
   }
   return {
     entities: raw.entities || [],
     relations: (raw.relations || []).map((r) => ({
       id: r.id,
-      from: r.from_entity,
-      to: r.to_entity,
+      from: r.source_entity_id || r.from_entity,
+      to: r.target_entity_id || r.to_entity,
       label: r.label,
       weight: r.weight,
+      sourceEntityId: r.source_entity_id,
+      targetEntityId: r.target_entity_id,
     })),
   }
 }

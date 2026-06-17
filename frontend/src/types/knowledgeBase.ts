@@ -84,6 +84,9 @@ export interface Relation {
   from: string
   to: string
   label: string
+  weight?: number
+  sourceEntityId?: string
+  targetEntityId?: string
 }
 
 // 知识库

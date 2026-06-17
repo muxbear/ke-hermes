@@ -17,3 +17,5 @@ class KnowledgeBaseRelation(Base):
     to_entity: Mapped[str] = mapped_column(String(256), nullable=False)
     label: Mapped[str] = mapped_column(String(256), nullable=False)
     weight: Mapped[float] = mapped_column(Float, default=1.0)
+    source_entity_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    target_entity_id: Mapped[str | None] = mapped_column(String(36), nullable=True)

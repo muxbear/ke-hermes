@@ -17,3 +17,6 @@ class KnowledgeBaseEntity(Base):
     type: Mapped[str] = mapped_column(String(64), nullable=False)
     mentions: Mapped[int] = mapped_column(Integer, default=0)
     metadata_: Mapped[dict] = mapped_column("metadata_", JSON, default=dict)
+    source_text: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    char_start: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    char_end: Mapped[int | None] = mapped_column(Integer, nullable=True)
