@@ -340,11 +340,34 @@ export async function reindexKnowledgeBase(
 }
 
 export async function searchKnowledgeBase(
-  _kbId: string,
-  _query: string,
-  _mode: string,
+  kbId: string,
+  query: string,
+  mode: string,
+  topK: number = 5,
 ): Promise<SearchResult[]> {
-  return []
+  const res = await instance.post(`/knowledge-bases/${kbId}/search`, {
+    query,
+    mode,
+    top_k: topK,
+  })
+  const data = res.data.data as {
+    results: {
+      id: string
+      doc_name: string
+      content: string
+      score: number
+      vec_score: number | null
+      bm25_score: number | null
+    }[]
+  }
+  return (data.results || []).map((r) => ({
+    id: r.id,
+    doc: r.doc_name,
+    chunk: r.content,
+    score: r.score,
+    vec: r.vec_score ?? 0,
+    bm25: r.bm25_score ?? 0,
+  }))
 }
 
 // ─── 切片管理 ─────────────────────────────────────────────────────────────

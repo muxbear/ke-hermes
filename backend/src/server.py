@@ -111,6 +111,16 @@ def _init_knowledge_base(app: FastAPI) -> None:
         "索引调度器已初始化 (max_concurrent=%d)", settings.INDEXING_MAX_CONCURRENT
     )
 
+    # 检索编排器（策略模式：vector / bm25 / hybrid）
+    from api.knowledge_base.search_service import SearchOrchestrator
+
+    search_orchestrator = SearchOrchestrator(
+        vector_store=vector_store,
+        embedding_model=embedding_model,
+    )
+    app.state.search_orchestrator = search_orchestrator
+    kb_logger.info("检索编排器已初始化 (modes: %s)", search_orchestrator._registry.supported_modes)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

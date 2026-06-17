@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { Search, Zap, Sparkle, Hash, Wand2, FileSearch } from 'lucide-vue-next'
 import type { KB, SearchMode, SearchResult } from '@/types/knowledgeBase'
+import * as kbApi from '@/services/knowledgeBaseApi'
 
 const props = defineProps<{
   kb: KB
@@ -30,15 +31,18 @@ async function runSearch() {
   if (!q) return
   searching.value = true
   try {
-    // 使用简易本地模拟，避免延迟
-    results.value = [
-      { id: 'c1', doc: 'RAG技术白皮书.md', chunk: `RAG(Retrieval-Augmented Generation)是一种通过检索外部知识库来增强大语言模型生成能力的技术，${q} 是其中关键环节…`, score: 0.94, vec: 0.92, bm25: 0.87 },
-      { id: 'c2', doc: '员工手册-2026.pdf', chunk: `关于 ${q} 的具体规定，详见第三章第二节。所有员工应严格遵守相关流程，不得擅自变更…`, score: 0.88, vec: 0.85, bm25: 0.91 },
-      { id: 'c3', doc: '产品规格说明书.docx', chunk: `${q} 模块基于 BGE-Large 模型构建，结合 BM25 倒排索引实现混合检索，Top-K 默认 10…`, score: 0.83, vec: 0.81, bm25: 0.79 },
-      { id: 'c4', doc: 'API 文档.html', chunk: `调用 /api/v1/search 接口可指定 ${q} 的检索模式，支持 vector / bm25 / hybrid 三种…`, score: 0.76, vec: 0.74, bm25: 0.72 },
-      { id: 'c5', doc: '客户访谈记录.csv', chunk: `客户反馈在 ${q} 场景下的检索召回率较以往提升 23%，但对长尾术语仍存在覆盖不足…`, score: 0.71, vec: 0.68, bm25: 0.74 },
-    ]
+    results.value = await kbApi.searchKnowledgeBase(
+      props.kb.id,
+      q,
+      mode.value,
+      props.kb.config.topK || 5,
+    )
     searched.value = true
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : '检索失败'
+    results.value = []
+    searched.value = true
+    console.error('Search failed:', msg)
   } finally {
     searching.value = false
   }

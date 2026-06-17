@@ -38,6 +38,10 @@ class BaseVectorStore(ABC):
         """按文档 ID 查询所有切片，按 chunk_index 排序。"""
 
     @abstractmethod
+    async def get_chunks_by_ids(self, kb_id: str, chunk_ids: list[str]) -> list[dict]:
+        """按切片 ID 列表批量查询切片详情。"""
+
+    @abstractmethod
     async def delete_chunk_by_id(self, kb_id: str, chunk_id: str) -> None:
         """按切片 ID 删除单个切片。"""
 
@@ -247,6 +251,24 @@ class MilvusVectorStore(BaseVectorStore):
         logger.info("Milvus queried %d chunks for doc=%s", len(results), doc_id)
         return results
 
+    async def get_chunks_by_ids(self, kb_id: str, chunk_ids: list[str]) -> list[dict]:
+        """按切片 ID 列表批量查询切片详情。"""
+        if not chunk_ids:
+            return []
+
+        collection = await self._get_collection(kb_id)
+        ids_str = ", ".join(f'"{cid}"' for cid in chunk_ids)
+        expr = f"id in [{ids_str}]"
+        try:
+            results = collection.query(
+                expr=expr,
+                output_fields=self._CHUNK_OUTPUT_FIELDS,
+            )
+            return results
+        except Exception:
+            logger.exception("Milvus get_chunks_by_ids failed for kb=%s", kb_id)
+            return []
+
     async def delete_chunk_by_id(self, kb_id: str, chunk_id: str) -> None:
         collection = await self._get_collection(kb_id)
         collection.delete(f'id == "{chunk_id}"')
@@ -272,18 +294,107 @@ class MilvusVectorStore(BaseVectorStore):
     async def similarity_search(
         self, kb_id: str, query_embedding: list[float], top_k: int
     ) -> list[tuple[str, float]]:
-        return []
+        """Milvus 向量检索——ANN 搜索 embedding 字段。"""
+        collection = await self._get_collection(kb_id)
+        results = collection.search(
+            data=[query_embedding],
+            anns_field="embedding",
+            param={"metric_type": "COSINE", "params": {"ef": 64}},
+            limit=top_k,
+            output_fields=[],
+        )
+        pairs: list[tuple[str, float]] = []
+        if results and results[0]:
+            for hit in results[0]:
+                # Milvus COSINE distance: 0=identical, 2=opposite
+                # Convert to similarity: 1 - distance/2 → [0, 1]
+                similarity = 1.0 - (hit.distance / 2.0)
+                pairs.append((hit.id, round(similarity, 6)))
+        logger.info("Milvus similarity search kb=%s top_k=%d returned=%d", kb_id, top_k, len(pairs))
+        return pairs
 
     async def bm25_search(
         self, kb_id: str, query: str, top_k: int
     ) -> list[tuple[str, float]]:
-        return []
+        """Milvus BM25 检索——客户端侧词频打分（避免 LIKE 大小写敏感问题）。
+
+        获取全部 chunk 文本后在客户端侧做大小写不敏感的 TF 评分。
+        """
+        import re
+
+        query_terms = re.findall(r"\w+", query.lower())
+        if not query_terms:
+            return []
+
+        collection = await self._get_collection(kb_id)
+
+        try:
+            candidates = collection.query(
+                expr="id != ''",
+                output_fields=["id", "chunk_text"],
+            )
+        except Exception:
+            logger.warning("Milvus BM25 query failed for kb=%s", kb_id)
+            return []
+
+        if not candidates:
+            return []
+
+        scores: list[tuple[str, float]] = []
+        for row in candidates:
+            text = (row.get("chunk_text") or "").lower()
+            tf = sum(text.count(t) for t in query_terms)
+            if tf > 0:
+                scores.append((row["id"], float(tf)))
+
+        scores.sort(key=lambda x: x[1], reverse=True)
+        logger.info("Milvus BM25 kb=%s top_k=%d candidates=%d returned=%d",
+                     kb_id, top_k, len(candidates), len(scores[:top_k]))
+        return scores[:top_k]
 
     async def hybrid_search(
         self, kb_id: str, query: str, query_embedding: list[float],
         top_k: int, alpha: float = 0.7,
     ) -> list[tuple[str, float]]:
-        return []
+        """Milvus 混合检索——向量 + BM25 加权融合。"""
+        vec_results = await self.similarity_search(kb_id, query_embedding, top_k * 2)
+        bm25_results = await self.bm25_search(kb_id, query, top_k * 2)
+
+        vec_scores: dict[str, float] = {}
+        bm25_scores: dict[str, float] = {}
+
+        if vec_results:
+            max_v = max(s for _, s in vec_results)
+            min_v = min(s for _, s in vec_results)
+            if max_v == min_v:
+                for cid, _ in vec_results:
+                    vec_scores[cid] = 1.0
+            else:
+                v_range = max_v - min_v
+                for cid, s in vec_results:
+                    vec_scores[cid] = (s - min_v) / v_range
+
+        if bm25_results:
+            max_b = max(s for _, s in bm25_results)
+            min_b = min(s for _, s in bm25_results)
+            if max_b == min_b:
+                for cid, _ in bm25_results:
+                    bm25_scores[cid] = 1.0
+            else:
+                b_range = max_b - min_b
+                for cid, s in bm25_results:
+                    bm25_scores[cid] = (s - min_b) / b_range
+
+        fused: dict[str, float] = {}
+        for cid in set(vec_scores) | set(bm25_scores):
+            v = vec_scores.get(cid, 0.0)
+            b = bm25_scores.get(cid, 0.0)
+            fused[cid] = alpha * v + (1 - alpha) * b
+
+        ranked = sorted(fused.items(), key=lambda x: x[1], reverse=True)[:top_k]
+        logger.info("Milvus hybrid kb=%s top_k=%d vec=%d bm25=%d fused=%d",
+                     kb_id, top_k, len(vec_results), len(bm25_results), len(ranked))
+        return ranked
 
 
 class ChromaVectorStore(BaseVectorStore):
@@ -427,6 +538,44 @@ class ChromaVectorStore(BaseVectorStore):
 
         chunks.sort(key=lambda r: r.get("chunk_index", 0))
         logger.info("Chroma queried %d chunks for doc=%s", len(chunks), doc_id)
+        return chunks
+
+    async def get_chunks_by_ids(self, kb_id: str, chunk_ids: list[str]) -> list[dict]:
+        """按切片 ID 列表批量查询切片详情。"""
+        import json
+
+        if not chunk_ids:
+            return []
+
+        collection = self._get_collection(kb_id)
+        result = collection.get(
+            ids=chunk_ids,
+            include=["documents", "metadatas"],
+        )
+
+        chunks: list[dict] = []
+        if not result["ids"]:
+            return chunks
+
+        for i, cid in enumerate(result["ids"]):
+            meta = (result.get("metadatas") or [{}])[i] if i < len(result.get("metadatas") or []) else {}
+            metadata_str = meta.get("metadata_", "{}")
+            try:
+                metadata_obj = json.loads(metadata_str) if isinstance(metadata_str, str) else metadata_str
+            except (json.JSONDecodeError, TypeError):
+                metadata_obj = {}
+
+            chunks.append({
+                "id": cid,
+                "doc_id": meta.get("doc_id", ""),
+                "kb_id": meta.get("kb_id", kb_id),
+                "chunk_index": meta.get("chunk_index", i),
+                "chunk_text": (result.get("documents") or [""])[i] if i < len(result.get("documents") or []) else "",
+                "doc_name": meta.get("doc_name", ""),
+                "doc_type": meta.get("doc_type", ""),
+                "metadata_": metadata_obj,
+            })
+
         return chunks
 
     async def delete_chunk_by_id(self, kb_id: str, chunk_id: str) -> None:

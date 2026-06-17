@@ -159,6 +159,37 @@ class GraphDataResponse(BaseModel):
     relations: list[RelationResponse]
 
 
+# ─── Search ──────────────────────────────────────────────────────────────────
+
+
+class SearchRequest(BaseModel):
+    """检索请求。"""
+    query: str = Field(..., min_length=1, max_length=2000, description="检索查询文本")
+    mode: str = Field(default="hybrid", description="检索模式: hybrid | vector | bm25")
+    top_k: int = Field(default=5, ge=1, le=50, description="返回结果数量")
+    alpha: float | None = Field(default=None, ge=0.0, le=1.0, description="混合检索向量权重")
+
+
+class ChunkMatch(BaseModel):
+    """匹配到的分片。"""
+    id: str
+    doc_id: str
+    doc_name: str
+    chunk_index: int
+    content: str
+    score: float
+    vec_score: float | None = None
+    bm25_score: float | None = None
+
+
+class SearchResponse(BaseModel):
+    """检索响应。"""
+    query: str
+    mode: str
+    total: int
+    results: list[ChunkMatch]
+
+
 # ─── Chunk ───────────────────────────────────────────────────────────────────
 
 
