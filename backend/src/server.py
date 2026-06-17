@@ -112,13 +112,17 @@ def _init_knowledge_base(app: FastAPI) -> None:
     )
 
     # 检索编排器（策略模式：vector / bm25 / hybrid）
-    from api.knowledge_base.search_service import SearchOrchestrator
+    from api.knowledge_base.search_service import (
+        SearchOrchestrator,
+        set_search_orchestrator,
+    )
 
     search_orchestrator = SearchOrchestrator(
         vector_store=vector_store,
         embedding_model=embedding_model,
     )
     app.state.search_orchestrator = search_orchestrator
+    set_search_orchestrator(search_orchestrator)
     kb_logger.info("检索编排器已初始化 (modes: %s)", search_orchestrator._registry.supported_modes)
 
 

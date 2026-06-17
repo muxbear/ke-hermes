@@ -665,6 +665,17 @@ BUILTIN_SKILLS = [
         "category": "tools",
         "prompt": "你是一个文件管理专家，能够读写多种格式的文件并支持批量处理操作。",
     },
+    {
+        "name": "kb-search",
+        "description": "知识库知识检索 —— 支持 RRF 混合检索、向量检索和 BM25 关键词检索",
+        "icon": "Search",
+        "category": "search",
+        "prompt": (
+            "你是一个知识库检索专家。当用户的问题需要从已索引的知识库中查找信息时，"
+            "使用 kb_search 工具进行搜索。支持的检索模式：hybrid（RRF混合，默认）、"
+            "vector（语义）、bm25（关键词）。空结果时尝试更换模式或关键词后重试。"
+        ),
+    },
 ]
 
 

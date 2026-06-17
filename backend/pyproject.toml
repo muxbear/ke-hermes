@@ -43,6 +43,7 @@ dependencies = [
     "docx2txt>=0.9",
     "langchain-experimental>=0.1.0",
     "langextract>=1.5.0",
+    "mcp>=1.0.0",
 ]
 
 

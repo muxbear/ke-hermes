@@ -83,6 +83,30 @@ async def _backfill_relation_entity_ids(conn) -> None:
     )
 
 
+async def _fix_stuck_kb_status(conn) -> None:
+    """修复卡在 'indexing' 状态的知识库——同步文档计数和状态。"""
+    # 将 chunks / entities / relations 计数从实际文档数据同步到 KB 级别
+    await conn.execute(text(
+        "UPDATE knowledge_bases SET "
+        "chunks_count = (SELECT COALESCE(SUM(chunks_count), 0) FROM knowledge_base_documents "
+        "WHERE kb_id = knowledge_bases.id AND status = 'indexed'), "
+        "entities_count = (SELECT COUNT(*) FROM knowledge_base_entities "
+        "WHERE kb_id = knowledge_bases.id), "
+        "relations_count = (SELECT COUNT(*) FROM knowledge_base_relations "
+        "WHERE kb_id = knowledge_bases.id)"
+    ))
+    # 将没有活跃索引文档的 KB 状态设为 ready
+    await conn.execute(text(
+        "UPDATE knowledge_bases SET status = 'ready' "
+        "WHERE status = 'indexing' "
+        "AND id NOT IN ("
+        "SELECT DISTINCT kb_id FROM knowledge_base_documents "
+        "WHERE status NOT IN ('indexed', 'failed')"
+        ")"
+    ))
+    logger.info("已修复卡住的 KB 状态和计数")
+
+
 async def init_db():
     from db.base import Base
     from db.models.cron_job import CronJob  # noqa: F401  ensure table is registered
@@ -114,6 +138,7 @@ async def init_db():
             },
         )
         await _backfill_relation_entity_ids(conn)
+        await _fix_stuck_kb_status(conn)
 
     logger.info("数据库表已创建")
 

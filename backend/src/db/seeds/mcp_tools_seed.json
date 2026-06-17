@@ -478,5 +478,51 @@
         "description": "Number of results to return per query"
       }
     ]
+  },
+  {
+    "name": "知识库知识检索",
+    "description": "基于 RRF 混合检索（向量 + BM25）的知识库内容搜索。支持语义搜索和关键词搜索，自动选择最优检索策略。",
+    "icon": "🔍",
+    "author": "Hermes Official",
+    "version": "1.0.0",
+    "license": "MIT",
+    "repository": "https://github.com/ke-hermes/mcp-kb-search",
+    "rating": 5.0,
+    "category": "search",
+    "tags": ["knowledge-base", "RAG", "semantic-search", "bm25", "vector-search"],
+    "features": [
+      "RRF 混合检索（向量语义 + BM25 关键词）",
+      "纯向量语义检索",
+      "纯 BM25 关键词检索",
+      "自动大小写不敏感匹配",
+      "支持中文分词关键词检索"
+    ],
+    "official": true,
+    "config_schema": [
+      {
+        "name": "kb_id",
+        "label": "知识库 ID",
+        "type": "string",
+        "required": true,
+        "description": "目标知识库的唯一标识"
+      },
+      {
+        "name": "mode",
+        "label": "检索模式",
+        "type": "select",
+        "required": false,
+        "default": "hybrid",
+        "options": ["hybrid", "vector", "bm25"],
+        "description": "hybrid=混合检索，vector=语义检索，bm25=关键词检索"
+      },
+      {
+        "name": "top_k",
+        "label": "返回数量",
+        "type": "number",
+        "required": false,
+        "default": 5,
+        "description": "返回结果数量，范围 1-50"
+      }
+    ]
   }
 ]

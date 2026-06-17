@@ -287,3 +287,19 @@ class SearchOrchestrator:
         更准确的检测需在实际检索中判断，此处做轻量检查。
         """
         return True
+
+
+# ─── 模块级单例 ──────────────────────────────────────────────────────────────
+
+_orchestrator: SearchOrchestrator | None = None
+
+
+def set_search_orchestrator(orch: SearchOrchestrator) -> None:
+    """注入检索编排器单例，由 server.py 在启动时调用。"""
+    global _orchestrator
+    _orchestrator = orch
+
+
+def get_search_orchestrator() -> SearchOrchestrator | None:
+    """获取检索编排器单例，供 Tool 函数等非请求上下文使用。"""
+    return _orchestrator

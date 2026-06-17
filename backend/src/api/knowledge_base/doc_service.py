@@ -146,12 +146,19 @@ class DatabaseProgressObserver(ProgressObserver):
                 )
                 await db.execute(stmt)
 
-                # 更新 KB 级实体/关系计数（从 DB 中重新统计，避免重复计数）
-                if ctx.entities_count or ctx.relations_count:
+                # 文档完成索引时，同步更新 KB 级别计数和状态
+                if ctx.status == "indexed" or ctx.status == "failed":
                     from db.models.knowledge_base import KnowledgeBase
                     from db.models.knowledge_base_entity import KnowledgeBaseEntity
                     from db.models.knowledge_base_relation import KnowledgeBaseRelation
 
+                    # 重新统计 KB 级 chunks / entities / relations
+                    chunks_total = await db.scalar(
+                        select(func.sum(KnowledgeBaseDocument.chunks_count)).where(
+                            KnowledgeBaseDocument.kb_id == ctx.kb_id,
+                            KnowledgeBaseDocument.status == "indexed",
+                        )
+                    )
                     entity_total = await db.scalar(
                         select(func.count()).select_from(KnowledgeBaseEntity).where(
                             KnowledgeBaseEntity.kb_id == ctx.kb_id,
@@ -162,12 +169,24 @@ class DatabaseProgressObserver(ProgressObserver):
                             KnowledgeBaseRelation.kb_id == ctx.kb_id,
                         )
                     )
+
+                    # 检查是否还有未完成的文档
+                    active_count = await db.scalar(
+                        select(func.count()).select_from(KnowledgeBaseDocument).where(
+                            KnowledgeBaseDocument.kb_id == ctx.kb_id,
+                            KnowledgeBaseDocument.status.notin_(["indexed", "failed"]),
+                        )
+                    )
+                    new_status = "ready" if (active_count or 0) == 0 else "indexing"
+
                     await db.execute(
                         update(KnowledgeBase)
                         .where(KnowledgeBase.id == ctx.kb_id)
                         .values(
+                            chunks_count=chunks_total or 0,
                             entities_count=entity_total or 0,
                             relations_count=relation_total or 0,
+                            status=new_status,
                         )
                     )
 
