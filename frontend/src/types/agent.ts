@@ -131,8 +131,8 @@ export const SCOPE_STYLE_MAP: Record<
   mixture: {
     label: '混合级记忆',
     shortLabel: '混合级',
-    color: '#a855f7',
-    bgClass: 'scope--purple',
+    color: '#14b8a6',
+    bgClass: 'scope--teal',
   },
   org: {
     label: '组织级记忆',

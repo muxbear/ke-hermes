@@ -415,10 +415,10 @@ watch(
   background: rgba(59, 130, 246, 0.08);
 }
 
-.scope-option.scope--purple.scope-option--active {
-  border-color: #a855f7;
-  color: #a855f7;
-  background: rgba(168, 85, 247, 0.08);
+.scope-option.scope--teal.scope-option--active {
+  border-color: #14b8a6;
+  color: #14b8a6;
+  background: rgba(20, 184, 166, 0.08);
 }
 
 .scope-dot {

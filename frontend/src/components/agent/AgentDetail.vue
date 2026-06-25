@@ -314,9 +314,10 @@ function getStatusColor(status: string): string {
 
     <!-- Config Sections -->
     <div class="config-sections">
-      <!-- Files tab: scope-grouped layout -->
+      <!-- Files tab: scope-grouped layout (left-right) -->
       <template v-if="activeTab === 'file'">
-        <div class="file-scopes">
+        <div class="file-layout">
+          <div class="file-scopes">
           <!-- 智能体级记忆 -->
           <div class="scope-block scope-block--agent">
             <div class="scope-header">
@@ -501,7 +502,7 @@ function getStatusColor(status: string): string {
                 </div>
               </div>
               <button
-                class="add-btn scope--purple"
+                class="add-btn scope--teal"
                 @click="emit('add-config', 'file', 'mixture')"
               >
                 <Plus :size="13" />
@@ -520,7 +521,7 @@ function getStatusColor(status: string): string {
                   :hide-after="0"
                 >
                   <span
-                    class="config-tag scope--purple"
+                    class="config-tag scope--teal"
                     :class="{
                       'tag-selected':
                         selectedFile?.filename === brief.filename &&
@@ -560,6 +561,7 @@ function getStatusColor(status: string): string {
             @save="handleSave"
           />
         </div>
+        </div><!-- /file-layout -->
       </template>
 
       <!-- Other tabs: standard tag layout -->
@@ -902,15 +904,32 @@ function getStatusColor(status: string): string {
   gap: 16px;
 }
 
-/* ---- File selector ---- */
+/* ---- File layout (left-right) ---- */
+.file-layout {
+  display: flex;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ---- File selector (left sidebar, 50%) ---- */
 .file-scopes {
-  flex-shrink: 0;
+  flex: 5;
+  flex-basis: 0%;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
   overflow-y: auto;
-  max-height: 50%;
   padding-right: 4px;
+}
+
+/* ---- File editor wrap (right, 50%) ---- */
+.file-editor-wrap {
+  flex: 5;
+  flex-basis: 0%;
+  min-width: 0;
 }
 
 .scope-block {
@@ -922,7 +941,7 @@ function getStatusColor(status: string): string {
 
 .scope-block--agent { border-left: 3px solid #eab308; }
 .scope-block--user { border-left: 3px solid var(--color-accent); }
-.scope-block--mixture { border-left: 3px solid #a855f7; }
+.scope-block--mixture { border-left: 3px solid #14b8a6; }
 
 .scope-header {
   display: flex;
@@ -949,7 +968,7 @@ function getStatusColor(status: string): string {
 
 .scope-block--agent .scope-icon { color: #eab308; }
 .scope-block--user .scope-icon { color: var(--color-accent); }
-.scope-block--mixture .scope-icon { color: #a855f7; }
+.scope-block--mixture .scope-icon { color: #14b8a6; }
 
 .scope-label {
   font-size: var(--font-size-sm);
@@ -1030,14 +1049,14 @@ function getStatusColor(status: string): string {
   background: rgba(59, 130, 246, 0.06);
 }
 
-.config-tag.scope--purple {
-  border-color: rgba(168, 85, 247, 0.3);
-  color: #a855f7;
+.config-tag.scope--teal {
+  border-color: rgba(20, 184, 166, 0.3);
+  color: #14b8a6;
 }
 
-.config-tag.scope--purple:hover {
-  border-color: rgba(168, 85, 247, 0.5);
-  background: rgba(168, 85, 247, 0.06);
+.config-tag.scope--teal:hover {
+  border-color: rgba(20, 184, 166, 0.5);
+  background: rgba(20, 184, 166, 0.06);
 }
 
 .config-tag.scope--gray {
@@ -1048,7 +1067,7 @@ function getStatusColor(status: string): string {
 .config-tag.scope--gray .tag-icon { color: #6b7280; }
 .config-tag.scope--yellow .tag-icon { color: #eab308; }
 .config-tag.scope--blue .tag-icon { color: var(--color-accent); }
-.config-tag.scope--purple .tag-icon { color: #a855f7; }
+.config-tag.scope--teal .tag-icon { color: #14b8a6; }
 
 /* ---- Tag selected state ---- */
 .config-tag.tag-selected {
@@ -1068,9 +1087,9 @@ function getStatusColor(status: string): string {
   background: rgba(59, 130, 246, 0.12) !important;
 }
 
-.config-tag.scope--purple.tag-selected {
-  border-color: #a855f7 !important;
-  background: rgba(168, 85, 247, 0.12) !important;
+.config-tag.scope--teal.tag-selected {
+  border-color: #14b8a6 !important;
+  background: rgba(20, 184, 166, 0.12) !important;
 }
 
 .file-scopes .config-tag {
@@ -1088,12 +1107,6 @@ function getStatusColor(status: string): string {
 
 .empty-section--tiny {
   padding: 6px;
-}
-
-/* ---- File editor wrap ---- */
-.file-editor-wrap {
-  flex: 1;
-  min-height: 300px;
 }
 
 .config-section {
