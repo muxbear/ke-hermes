@@ -11,10 +11,14 @@ import {
   Pause,
   ChevronRight,
   Pencil,
+  Lock,
+  Bot,
+  User,
+  Layers,
 } from 'lucide-vue-next'
 import { ref, computed, watch } from 'vue'
-import type { Agent, ConfigType } from '@/types/agent'
-import { STATUS_LABELS } from '@/types/agent'
+import type { Agent, ConfigType, FileBrief, MemoryScope } from '@/types/agent'
+import { SCOPE_STYLE_MAP, STATUS_LABELS } from '@/types/agent'
 import { useAgentStore } from '@/stores/agent'
 import MarkdownEditor from '@/components/agent/MarkdownEditor.vue'
 import FileEditDialog from '@/components/agent/FileEditDialog.vue'
@@ -26,19 +30,25 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'add-config', type: ConfigType): void
-  (e: 'remove-config', type: ConfigType, value: string): void
+  (e: 'add-config', type: ConfigType, scope?: MemoryScope): void
+  (e: 'remove-config', type: ConfigType, value: string, scope?: MemoryScope): void
   (e: 'add-skill'): void
   (e: 'remove-skill', skillId: string): void
   (e: 'toggle-status'): void
   (e: 'select-agent', id: string): void
-  (e: 'save-file-content', filename: string, content: string): void
+  (e: 'save-file-content', filename: string, content: string, scope?: MemoryScope): void
 }>()
 
 const agentStore = useAgentStore()
 const activeTab = ref<ConfigType | 'skill'>('file')
-const selectedFile = ref<string | null>(null)
+const selectedFile = ref<{ filename: string; scope: MemoryScope } | null>(null)
 const editContent = ref('')
+const fileReadOnly = ref(false)
+
+// 当前选中文件是否只读（组织级）
+const isCurrentFileReadOnly = computed(
+  () => fileReadOnly.value || selectedFile.value?.scope === 'org',
+)
 
 // Watch store for content changes
 watch(
@@ -46,6 +56,7 @@ watch(
   (val) => {
     if (val) {
       editContent.value = val.content
+      fileReadOnly.value = val.readOnly
     }
   },
 )
@@ -56,6 +67,7 @@ watch(
   () => {
     selectedFile.value = null
     editContent.value = ''
+    fileReadOnly.value = false
     agentStore.clearFileContent()
     agentStore.fetchFileDescriptions(props.agent.id)
     agentStore.fetchCronJobs(props.agent.id)
@@ -63,44 +75,79 @@ watch(
   { immediate: true },
 )
 
-function selectFile(filename: string) {
-  selectedFile.value = filename
-  agentStore.fetchFileContent(props.agent.id, filename)
+/** 按作用域分组返回文件列表，保证返回完整 4 个分组 */
+const filesByScope = computed<Record<MemoryScope, FileBrief[]>>(() => {
+  const empty: Record<MemoryScope, FileBrief[]> = {
+    agent: [],
+    user: [],
+    mixture: [],
+    org: [],
+  }
+  if (!props.agent.filesByScope) return empty
+  return {
+    agent: props.agent.filesByScope.agent || [],
+    user: props.agent.filesByScope.user || [],
+    mixture: props.agent.filesByScope.mixture || [],
+    org: props.agent.filesByScope.org || [],
+  }
+})
+
+function selectFile(filename: string, scope: MemoryScope) {
+  selectedFile.value = { filename, scope }
+  agentStore.fetchFileContent(props.agent.id, filename, scope)
 }
 
 function handleSave(content: string) {
   if (selectedFile.value) {
-    emit('save-file-content', selectedFile.value, content)
+    emit(
+      'save-file-content',
+      selectedFile.value.filename,
+      content,
+      selectedFile.value.scope,
+    )
   }
 }
 
-function handleRemoveFile(filename: string) {
-  if (selectedFile.value === filename) {
+function handleRemoveFile(filename: string, scope: MemoryScope) {
+  if (
+    selectedFile.value &&
+    selectedFile.value.filename === filename &&
+    selectedFile.value.scope === scope
+  ) {
     selectedFile.value = null
     editContent.value = ''
     agentStore.clearFileContent()
   }
-  emit('remove-config', 'file', filename)
+  emit('remove-config', 'file', filename, scope)
 }
 
 // File edit dialog state
 const editDialogVisible = ref(false)
 const editingFilename = ref('')
+const editingScope = ref<MemoryScope>('agent')
 const editingDescription = ref('')
 
-function openEditDialog(filename: string) {
+function openEditDialog(filename: string, scope: MemoryScope) {
   editingFilename.value = filename
+  editingScope.value = scope
   editingDescription.value = agentStore.currentFileContent?.description || ''
   editDialogVisible.value = true
 }
 
 async function handleFileEdit(filename: string, description: string) {
-  const agentId = props.agent.id
   try {
-    await agentStore.updateConfig('file', editingFilename.value, filename, description)
+    await agentStore.updateConfig(
+      'file',
+      editingFilename.value,
+      filename,
+      description,
+      editingScope.value,
+    )
     // If renamed, update selected file
     if (filename !== editingFilename.value) {
-      selectedFile.value = filename
+      if (selectedFile.value && selectedFile.value.filename === editingFilename.value) {
+        selectedFile.value = { filename, scope: editingScope.value }
+      }
     }
     editDialogVisible.value = false
     ElMessage.success('已更新')
@@ -109,19 +156,33 @@ async function handleFileEdit(filename: string, description: string) {
   }
 }
 
-// Auto-select newly added file
+// Auto-select newly added file (within agent-scoped group by default)
 watch(
   () => props.agent.files,
   (newFiles, oldFiles) => {
     if (!oldFiles || newFiles.length <= oldFiles.length) return
     const added = newFiles.find((f) => !oldFiles.includes(f))
-    if (added) selectFile(added)
+    if (!added) return
+    // 推断新文件作用域：先从 filesByScope 找，否则默认 agent
+    const scope =
+      (['agent', 'user', 'mixture', 'org'] as MemoryScope[]).find(
+        (s) => filesByScope.value[s]?.some((b) => b.filename === added),
+      ) || 'agent'
+    selectFile(added, scope)
   },
 )
 
 const activeSection = computed(() =>
   configSections.find((s) => s.type === activeTab.value) ?? configSections[0],
 )
+
+/** 作用域图标映射 */
+const SCOPE_ICON: Record<MemoryScope, typeof Bot> = {
+  agent: Bot,
+  user: User,
+  mixture: Layers,
+  org: Lock,
+}
 
 /** 配置区域定义 */
 interface ConfigSection {
@@ -253,67 +314,238 @@ function getStatusColor(status: string): string {
 
     <!-- Config Sections -->
     <div class="config-sections">
-      <!-- Files tab: split layout -->
+      <!-- Files tab: scope-grouped layout -->
       <template v-if="activeTab === 'file'">
-        <!-- File selector -->
-        <div class="file-selector">
-          <div class="section-header">
-            <div class="section-title-row">
-              <div class="section-icon" :style="{ background: activeSection.iconBg }">
-                <component :is="activeSection.icon" :size="16" />
+        <div class="file-scopes">
+          <!-- 智能体级记忆 -->
+          <div class="scope-block scope-block--agent">
+            <div class="scope-header">
+              <div class="scope-title-row">
+                <div class="scope-icon" :style="{ background: 'rgba(234, 179, 8, 0.1)' }">
+                  <component :is="SCOPE_ICON.agent" :size="14" />
+                </div>
+                <div>
+                  <h3 class="scope-label">
+                    {{ SCOPE_STYLE_MAP.agent.label }}
+                  </h3>
+                  <span class="scope-count">
+                    {{ filesByScope.agent.length }} 个 · 全用户共享
+                  </span>
+                </div>
               </div>
-              <div>
-                <h3 class="section-label">{{ activeSection.label }}</h3>
-                <span class="section-count">
-                  {{ agent.files?.length ?? 0 }} 个已配置
-                </span>
+              <button
+                class="add-btn scope--yellow"
+                @click="emit('add-config', 'file', 'agent')"
+              >
+                <Plus :size="13" />
+                添加
+              </button>
+            </div>
+
+            <div class="tags-wrap">
+              <template v-if="filesByScope.agent.length > 0">
+                <el-tooltip
+                  v-for="brief in filesByScope.agent"
+                  :key="`agent-${brief.filename}`"
+                  :content="brief.description || agentStore.fileDescriptions[brief.filename] || '暂无描述'"
+                  placement="top"
+                  :show-after="500"
+                  :hide-after="0"
+                >
+                  <span
+                    class="config-tag scope--yellow"
+                    :class="{
+                      'tag-selected':
+                        selectedFile?.filename === brief.filename &&
+                        selectedFile?.scope === 'agent',
+                    }"
+                    @click="selectFile(brief.filename, 'agent')"
+                  >
+                    <FileText :size="12" class="tag-icon" />
+                    {{ brief.filename }}
+                    <button class="tag-edit" @click.stop="openEditDialog(brief.filename, 'agent')">
+                      <Pencil :size="11" />
+                    </button>
+                    <button
+                      class="tag-delete"
+                      @click.stop="handleRemoveFile(brief.filename, 'agent')"
+                    >
+                      <Trash2 :size="11" />
+                    </button>
+                  </span>
+                </el-tooltip>
+              </template>
+              <div v-else class="empty-section empty-section--inline">
+                <p>暂无智能体级文件</p>
+                <span class="empty-hint">点击上方"添加"按钮</span>
               </div>
             </div>
-            <button
-              class="add-btn section--yellow"
-              @click="emit('add-config', 'file')"
-            >
-              <Plus :size="13" />
-              添加
-            </button>
+
+            <!-- 组织级记忆 (只读) 子区块 -->
+            <div class="org-subsection">
+              <div class="org-subheader">
+                <div class="org-sub-title">
+                  <Lock :size="12" />
+                  <span>{{ SCOPE_STYLE_MAP.org.label }}（只读）</span>
+                </div>
+                <span class="org-sub-count">
+                  {{ filesByScope.org.length }} 个
+                </span>
+              </div>
+              <div class="tags-wrap">
+                <template v-if="filesByScope.org.length > 0">
+                  <el-tooltip
+                    v-for="brief in filesByScope.org"
+                    :key="`org-${brief.filename}`"
+                    :content="brief.description || '组织级只读策略'"
+                    placement="top"
+                    :show-after="500"
+                    :hide-after="0"
+                  >
+                    <span
+                      class="config-tag scope--gray org-tag"
+                      :class="{
+                        'tag-selected':
+                          selectedFile?.filename === brief.filename &&
+                          selectedFile?.scope === 'org',
+                      }"
+                      @click="selectFile(brief.filename, 'org')"
+                    >
+                      <Lock :size="11" class="tag-icon" />
+                      {{ brief.filename }}
+                    </span>
+                  </el-tooltip>
+                </template>
+                <div v-else class="empty-section empty-section--inline empty-section--tiny">
+                  <span class="empty-hint">由组织管理员配置</span>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div class="tags-wrap">
-            <template v-if="agent.files && agent.files.length > 0">
-              <el-tooltip
-                v-for="item in agent.files"
-                :key="item"
-                :content="agentStore.fileDescriptions[item] || '暂无描述'"
-                placement="top"
-                :show-after="500"
-                :hide-after="0"
+          <!-- 用户级记忆 -->
+          <div class="scope-block scope-block--user">
+            <div class="scope-header">
+              <div class="scope-title-row">
+                <div class="scope-icon" :style="{ background: 'rgba(59, 130, 246, 0.1)' }">
+                  <component :is="SCOPE_ICON.user" :size="14" />
+                </div>
+                <div>
+                  <h3 class="scope-label">{{ SCOPE_STYLE_MAP.user.label }}</h3>
+                  <span class="scope-count">
+                    {{ filesByScope.user.length }} 个 · 按用户隔离（此处为模板）
+                  </span>
+                </div>
+              </div>
+              <button
+                class="add-btn scope--blue"
+                @click="emit('add-config', 'file', 'user')"
               >
-                <span
-                  class="config-tag section--yellow"
-                  :class="{ 'tag-selected': selectedFile === item }"
-                  @click="selectFile(item)"
+                <Plus :size="13" />
+                添加
+              </button>
+            </div>
+
+            <div class="tags-wrap">
+              <template v-if="filesByScope.user.length > 0">
+                <el-tooltip
+                  v-for="brief in filesByScope.user"
+                  :key="`user-${brief.filename}`"
+                  :content="brief.description || agentStore.fileDescriptions[brief.filename] || '暂无描述'"
+                  placement="top"
+                  :show-after="500"
+                  :hide-after="0"
                 >
-                  <FileText :size="12" class="tag-icon" />
-                  {{ item }}
-                  <button
-                    class="tag-edit"
-                    @click.stop="openEditDialog(item)"
+                  <span
+                    class="config-tag scope--blue"
+                    :class="{
+                      'tag-selected':
+                        selectedFile?.filename === brief.filename &&
+                        selectedFile?.scope === 'user',
+                    }"
+                    @click="selectFile(brief.filename, 'user')"
                   >
-                    <Pencil :size="11" />
-                  </button>
-                  <button
-                    class="tag-delete"
-                    @click.stop="handleRemoveFile(item)"
+                    <FileText :size="12" class="tag-icon" />
+                    {{ brief.filename }}
+                    <button class="tag-edit" @click.stop="openEditDialog(brief.filename, 'user')">
+                      <Pencil :size="11" />
+                    </button>
+                    <button
+                      class="tag-delete"
+                      @click.stop="handleRemoveFile(brief.filename, 'user')"
+                    >
+                      <Trash2 :size="11" />
+                    </button>
+                  </span>
+                </el-tooltip>
+              </template>
+              <div v-else class="empty-section empty-section--inline">
+                <p>暂无用户级文件</p>
+                <span class="empty-hint">点击上方"添加"按钮</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 混合级记忆 -->
+          <div class="scope-block scope-block--mixture">
+            <div class="scope-header">
+              <div class="scope-title-row">
+                <div class="scope-icon" :style="{ background: 'rgba(168, 85, 247, 0.1)' }">
+                  <component :is="SCOPE_ICON.mixture" :size="14" />
+                </div>
+                <div>
+                  <h3 class="scope-label">{{ SCOPE_STYLE_MAP.mixture.label }}</h3>
+                  <span class="scope-count">
+                    {{ filesByScope.mixture.length }} 个 · 按 agent×user 隔离（此处为模板）
+                  </span>
+                </div>
+              </div>
+              <button
+                class="add-btn scope--purple"
+                @click="emit('add-config', 'file', 'mixture')"
+              >
+                <Plus :size="13" />
+                添加
+              </button>
+            </div>
+
+            <div class="tags-wrap">
+              <template v-if="filesByScope.mixture.length > 0">
+                <el-tooltip
+                  v-for="brief in filesByScope.mixture"
+                  :key="`mixture-${brief.filename}`"
+                  :content="brief.description || agentStore.fileDescriptions[brief.filename] || '暂无描述'"
+                  placement="top"
+                  :show-after="500"
+                  :hide-after="0"
+                >
+                  <span
+                    class="config-tag scope--purple"
+                    :class="{
+                      'tag-selected':
+                        selectedFile?.filename === brief.filename &&
+                        selectedFile?.scope === 'mixture',
+                    }"
+                    @click="selectFile(brief.filename, 'mixture')"
                   >
-                    <Trash2 :size="11" />
-                  </button>
-                </span>
-              </el-tooltip>
-            </template>
-            <div v-else class="empty-section">
-              <FileText :size="20" class="empty-icon" />
-              <p>暂无文件</p>
-              <span class="empty-hint">点击上方"添加"按钮</span>
+                    <FileText :size="12" class="tag-icon" />
+                    {{ brief.filename }}
+                    <button class="tag-edit" @click.stop="openEditDialog(brief.filename, 'mixture')">
+                      <Pencil :size="11" />
+                    </button>
+                    <button
+                      class="tag-delete"
+                      @click.stop="handleRemoveFile(brief.filename, 'mixture')"
+                    >
+                      <Trash2 :size="11" />
+                    </button>
+                  </span>
+                </el-tooltip>
+              </template>
+              <div v-else class="empty-section empty-section--inline">
+                <p>暂无混合级文件</p>
+                <span class="empty-hint">点击上方"添加"按钮</span>
+              </div>
             </div>
           </div>
         </div>
@@ -322,8 +554,9 @@ function getStatusColor(status: string): string {
         <div class="file-editor-wrap">
           <MarkdownEditor
             :content="editContent"
-            :filename="selectedFile"
+            :filename="selectedFile?.filename ?? null"
             :loading="agentStore.fileLoading"
+            :read-only="isCurrentFileReadOnly"
             @save="handleSave"
           />
         </div>
@@ -670,19 +903,191 @@ function getStatusColor(status: string): string {
 }
 
 /* ---- File selector ---- */
-.file-selector {
+.file-scopes {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  max-height: 50%;
+  padding-right: 4px;
+}
+
+.scope-block {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  padding: 12px 14px;
+  background: var(--surface-card);
+}
+
+.scope-block--agent { border-left: 3px solid #eab308; }
+.scope-block--user { border-left: 3px solid var(--color-accent); }
+.scope-block--mixture { border-left: 3px solid #a855f7; }
+
+.scope-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.scope-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.scope-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
 }
 
+.scope-block--agent .scope-icon { color: #eab308; }
+.scope-block--user .scope-icon { color: var(--color-accent); }
+.scope-block--mixture .scope-icon { color: #a855f7; }
+
+.scope-label {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--foreground-primary);
+  margin: 0;
+}
+
+.scope-count {
+  font-size: var(--font-size-xs);
+  color: var(--foreground-muted);
+}
+
+/* ---- Org sub-section (nested in agent block) ---- */
+.org-subsection {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-lg);
+  background: rgba(107, 114, 128, 0.06);
+  border: 1px dashed rgba(107, 114, 128, 0.25);
+}
+
+.org-subheader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.org-sub-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: #6b7280;
+}
+
+.org-sub-count {
+  font-size: var(--font-size-xs);
+  color: var(--foreground-muted);
+}
+
+.org-tag {
+  cursor: pointer;
+  border-color: rgba(107, 114, 128, 0.3);
+  color: #6b7280;
+}
+
+.org-tag:hover {
+  border-color: rgba(107, 114, 128, 0.5);
+  background: rgba(107, 114, 128, 0.06);
+}
+
+.org-tag.tag-selected {
+  border-color: #6b7280 !important;
+  background: rgba(107, 114, 128, 0.12) !important;
+}
+
+/* ---- Scope tag colors ---- */
+.config-tag.scope--yellow {
+  border-color: rgba(234, 179, 8, 0.3);
+  color: #eab308;
+}
+
+.config-tag.scope--yellow:hover {
+  border-color: rgba(234, 179, 8, 0.5);
+  background: rgba(234, 179, 8, 0.06);
+}
+
+.config-tag.scope--blue {
+  border-color: rgba(59, 130, 246, 0.3);
+  color: var(--color-accent);
+}
+
+.config-tag.scope--blue:hover {
+  border-color: rgba(59, 130, 246, 0.5);
+  background: rgba(59, 130, 246, 0.06);
+}
+
+.config-tag.scope--purple {
+  border-color: rgba(168, 85, 247, 0.3);
+  color: #a855f7;
+}
+
+.config-tag.scope--purple:hover {
+  border-color: rgba(168, 85, 247, 0.5);
+  background: rgba(168, 85, 247, 0.06);
+}
+
+.config-tag.scope--gray {
+  border-color: rgba(107, 114, 128, 0.3);
+  color: #6b7280;
+}
+
+.config-tag.scope--gray .tag-icon { color: #6b7280; }
+.config-tag.scope--yellow .tag-icon { color: #eab308; }
+.config-tag.scope--blue .tag-icon { color: var(--color-accent); }
+.config-tag.scope--purple .tag-icon { color: #a855f7; }
+
 /* ---- Tag selected state ---- */
 .config-tag.tag-selected {
+  border-color: currentColor !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  cursor: pointer;
+  font-weight: var(--font-weight-medium);
+}
+
+.config-tag.scope--yellow.tag-selected {
   border-color: #eab308 !important;
   background: rgba(234, 179, 8, 0.12) !important;
+}
+
+.config-tag.scope--blue.tag-selected {
+  border-color: var(--color-accent) !important;
+  background: rgba(59, 130, 246, 0.12) !important;
+}
+
+.config-tag.scope--purple.tag-selected {
+  border-color: #a855f7 !important;
+  background: rgba(168, 85, 247, 0.12) !important;
+}
+
+.file-scopes .config-tag {
   cursor: pointer;
 }
 
-.file-selector .config-tag {
-  cursor: pointer;
+/* ---- Empty states inside scope blocks ---- */
+.empty-section--inline {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.empty-section--tiny {
+  padding: 6px;
 }
 
 /* ---- File editor wrap ---- */

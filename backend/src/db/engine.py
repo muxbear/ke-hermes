@@ -83,6 +83,22 @@ async def _backfill_relation_entity_ids(conn) -> None:
     )
 
 
+async def _backfill_agent_file_scope(conn) -> None:
+    """为 agent_files 表回填 scope 字段：USER.md/MEMORY.md → user，其它 → agent。
+
+    新增列时默认值是 'agent'，所以 WHERE 子句不能用 IS NULL——必须无条件更新，
+    否则 USER.md/MEMORY.md 会停留在 'agent' 默认值上。
+    """
+    existing_cols = await _get_existing_columns(conn, "agent_files")
+    if "scope" not in existing_cols:
+        return
+    await conn.execute(text(
+        "UPDATE agent_files SET scope = CASE "
+        "WHEN filename IN ('USER.md', 'MEMORY.md') THEN 'user' "
+        "ELSE 'agent' END"
+    ))
+
+
 async def _fix_stuck_kb_status(conn) -> None:
     """修复卡在 'indexing' 状态的知识库——同步文档计数和状态。"""
     # 将 chunks / entities / relations 计数从实际文档数据同步到 KB 级别
@@ -137,8 +153,23 @@ async def init_db():
                 "char_end": "INTEGER",
             },
         )
+        await _migrate_table_columns(
+            conn,
+            "agent_files",
+            {
+                "scope": "VARCHAR(16) DEFAULT 'agent' NOT NULL",
+                # PostgreSQL 要求 BOOLEAN 列默认值用 FALSE，SQLite 用 0
+                "read_only": (
+                    "BOOLEAN DEFAULT FALSE NOT NULL"
+                    if settings.DATABASE_BACKEND == "postgres"
+                    else "BOOLEAN DEFAULT 0 NOT NULL"
+                ),
+                "org_id": "VARCHAR(64)",
+            },
+        )
         await _backfill_relation_entity_ids(conn)
         await _fix_stuck_kb_status(conn)
+        await _backfill_agent_file_scope(conn)
 
     logger.info("数据库表已创建")
 

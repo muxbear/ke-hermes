@@ -3,6 +3,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from agent.memory.scopes import MemoryScope
+
 
 class AgentCreateRequest(BaseModel):
     """Request body for creating a new agent."""
@@ -31,6 +33,7 @@ class AgentConfigRequest(BaseModel):
     type: str  # tool | prompt | file | subagent (skill is handled separately)
     value: str
     description: str = ""
+    scope: MemoryScope | None = None  # 仅 type=file 时生效；缺省按文件名推断
 
 
 class AgentConfigUpdateRequest(BaseModel):
@@ -40,6 +43,7 @@ class AgentConfigUpdateRequest(BaseModel):
     value: str  # current name (用于定位要更新的项)
     new_value: str = ""  # 新文件名（空则不重命名）
     description: str = ""
+    scope: MemoryScope | None = None  # 仅 type=file 时生效
 
 
 class SkillBrief(BaseModel):
@@ -63,6 +67,19 @@ class AgentAddSkillRequest(BaseModel):
     skill_id: str = Field(..., min_length=1, description="Skill ID to add")
 
 
+class FileBrief(BaseModel):
+    """文件简要信息（按作用域分组返回）。"""
+
+    filename: str
+    scope: MemoryScope
+    description: str = ""
+    read_only: bool = False
+
+    class Config:
+        """Pydantic config for ORM model compatibility."""
+        from_attributes = True
+
+
 class AgentInfo(BaseModel):
     """Single agent record for list/detail responses."""
 
@@ -75,6 +92,7 @@ class AgentInfo(BaseModel):
     skills: list[SkillBrief]
     system_prompt: str
     files: list[str]
+    files_by_scope: dict[str, list[FileBrief]] = {}
     sub_agents: list[str] = []
     parent_id: str | None = None
     provider_id: str | None = None
@@ -124,6 +142,8 @@ class AgentFileContent(BaseModel):
     filename: str
     content: str
     description: str = ""
+    scope: MemoryScope = MemoryScope.AGENT
+    read_only: bool = False
     created_at: datetime
     updated_at: datetime
 

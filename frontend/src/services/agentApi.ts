@@ -1,15 +1,47 @@
 /**
  * Agent API — 后端真实接口调用
  */
-import type { Agent, AgentCreateRequest, AgentFileContent, AgentUpdateRequest, ConfigType, CronJobBrief, SkillBrief } from '@/types/agent'
+import type {
+  Agent,
+  AgentCreateRequest,
+  AgentFileContent,
+  AgentUpdateRequest,
+  ConfigType,
+  CronJobBrief,
+  FileBrief,
+  MemoryScope,
+  SkillBrief,
+} from '@/types/agent'
 import request from '@/services/request'
 
 /* ------------------------------------------------------------------ */
 /*  字段转换                                                            */
 /* ------------------------------------------------------------------ */
 
+/** 后端 snake_case FileBrief → 前端 camelCase */
+function toFileBrief(raw: Record<string, unknown>): FileBrief {
+  return {
+    filename: raw.filename as string,
+    scope: raw.scope as MemoryScope,
+    description: (raw.description as string) || '',
+    readOnly: (raw.read_only as boolean) ?? false,
+  }
+}
+
 /** 后端 snake_case → 前端 camelCase */
 function toAgent(raw: Record<string, unknown>): Agent {
+  const filesByScopeRaw = (raw.files_by_scope as Record<string, unknown>) || {}
+  const filesByScope: Record<MemoryScope, FileBrief[]> = {
+    agent: [],
+    user: [],
+    mixture: [],
+    org: [],
+  }
+  for (const key of Object.keys(filesByScopeRaw)) {
+    const scope = key as MemoryScope
+    const items = (filesByScopeRaw[key] as Array<Record<string, unknown>>) || []
+    filesByScope[scope] = items.map(toFileBrief)
+  }
   return {
     id: raw.id as string,
     name: raw.name as string,
@@ -20,6 +52,7 @@ function toAgent(raw: Record<string, unknown>): Agent {
     skills: (raw.skills as SkillBrief[]) || [],
     systemPrompt: (raw.system_prompt as string) || '',
     files: (raw.files as string[]) || [],
+    filesByScope,
     subAgents: (raw.sub_agents as string[]) || [],
     parentId: (raw.parent_id as string) ?? undefined,
     providerId: (raw.provider_id as string) ?? undefined,
@@ -83,8 +116,14 @@ export async function addConfig(
   type: ConfigType,
   value: string,
   description: string = '',
+  scope?: MemoryScope,
 ): Promise<Agent> {
-  const res = await request.post(`/agents/${agentId}/config`, { type, value, description })
+  const res = await request.post(`/agents/${agentId}/config`, {
+    type,
+    value,
+    description,
+    scope,
+  })
   return toAgent(res.data.data)
 }
 
@@ -94,12 +133,14 @@ export async function updateConfig(
   value: string,
   newValue: string = '',
   description: string = '',
+  scope?: MemoryScope,
 ): Promise<Agent> {
   const res = await request.put(`/agents/${agentId}/config`, {
     type,
     value,
     new_value: newValue,
     description,
+    scope,
   })
   return toAgent(res.data.data)
 }
@@ -108,9 +149,10 @@ export async function removeConfig(
   agentId: string,
   type: ConfigType,
   value: string,
+  scope?: MemoryScope,
 ): Promise<Agent> {
   const res = await request.delete(`/agents/${agentId}/config`, {
-    data: { type, value },
+    data: { type, value, scope },
   })
   return toAgent(res.data.data)
 }
@@ -124,6 +166,8 @@ function toFileContent(raw: Record<string, unknown>): AgentFileContent {
     filename: raw.filename as string,
     content: (raw.content as string) || '',
     description: (raw.description as string) || '',
+    scope: (raw.scope as MemoryScope) || 'agent',
+    readOnly: (raw.read_only as boolean) ?? false,
     createdAt: raw.created_at as string,
     updatedAt: raw.updated_at as string,
   }
@@ -132,9 +176,12 @@ function toFileContent(raw: Record<string, unknown>): AgentFileContent {
 export async function fetchFileContent(
   agentId: string,
   filename: string,
+  scope?: MemoryScope,
 ): Promise<AgentFileContent> {
+  const params = scope ? { scope } : undefined
   const res = await request.get(
     `/agents/${agentId}/files/${encodeURIComponent(filename)}`,
+    { params },
   )
   return toFileContent(res.data.data)
 }
@@ -143,10 +190,13 @@ export async function saveFileContent(
   agentId: string,
   filename: string,
   content: string,
+  scope?: MemoryScope,
 ): Promise<AgentFileContent> {
+  const params = scope ? { scope } : undefined
   const res = await request.put(
     `/agents/${agentId}/files/${encodeURIComponent(filename)}`,
     { content },
+    { params },
   )
   return toFileContent(res.data.data)
 }

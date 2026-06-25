@@ -1,23 +1,26 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { X, Zap, Clock, FileText, Users } from 'lucide-vue-next'
-import type { ConfigType } from '@/types/agent'
-import { CONFIG_TYPE_MAP } from '@/types/agent'
+import type { ConfigType, MemoryScope } from '@/types/agent'
+import { CONFIG_TYPE_MAP, SCOPE_STYLE_MAP } from '@/types/agent'
 
 const props = defineProps<{
   visible: boolean
   type: ConfigType
   agentName: string
   agentType: 'main' | 'sub'
+  /** 文件类型时的默认作用域；缺省 'agent' */
+  defaultScope?: MemoryScope
 }>()
 
 const emit = defineEmits<{
   (e: 'close'): void
-  (e: 'add', type: ConfigType, value: string, description: string): void
+  (e: 'add', type: ConfigType, value: string, description: string, scope?: MemoryScope): void
 }>()
 
 const nameValue = ref('')
 const descValue = ref('')
+const scopeValue = ref<MemoryScope>('agent')
 
 const config = computed(() => CONFIG_TYPE_MAP[props.type])
 
@@ -33,15 +36,19 @@ const iconComponent = computed(() => {
 const placeholders = computed(() => {
   switch (props.type) {
     case 'tool': return { name: '例如: web_search, file_reader', desc: '描述此工具的功能和用途...' }
-    case 'file': return { name: '例如: config.yaml, data.json', desc: '描述此文件的用途和内容...' }
+    case 'file': return { name: '例如: AGENTS.md, USER.md', desc: '描述此文件的用途和内容...' }
     case 'prompt': return { name: '例如: 每天执行一次, 每小时检查', desc: '输入 Cron 表达式和执行任务...' }
     case 'subagent': return { name: '例如: 数据处理子智能体', desc: '描述此子智能体的职责和功能...' }
   }
 })
 
+/** 文件可选作用域（org 由专用接口管理，不在选择器中） */
+const fileScopes: MemoryScope[] = ['agent', 'user', 'mixture']
+
 function handleSubmit() {
   if (!nameValue.value.trim()) return
-  emit('add', props.type, nameValue.value.trim(), descValue.value.trim())
+  const scope = props.type === 'file' ? scopeValue.value : undefined
+  emit('add', props.type, nameValue.value.trim(), descValue.value.trim(), scope)
   resetForm()
 }
 
@@ -53,12 +60,20 @@ function handleClose() {
 function resetForm() {
   nameValue.value = ''
   descValue.value = ''
+  scopeValue.value = props.defaultScope || 'agent'
 }
 
 watch(
   () => props.visible,
   (val) => {
     if (val) resetForm()
+  },
+)
+
+watch(
+  () => props.defaultScope,
+  (val) => {
+    if (val) scopeValue.value = val
   },
 )
 </script>
@@ -96,6 +111,28 @@ watch(
 
           <!-- Body -->
           <form class="dialog-body" @submit.prevent="handleSubmit">
+            <div v-if="type === 'file'" class="form-field">
+              <label class="field-label">记忆作用域</label>
+              <div class="scope-picker">
+                <button
+                  v-for="s in fileScopes"
+                  :key="s"
+                  type="button"
+                  class="scope-option"
+                  :class="[
+                    SCOPE_STYLE_MAP[s].bgClass,
+                    { 'scope-option--active': scopeValue === s },
+                  ]"
+                  @click="scopeValue = s"
+                >
+                  <span class="scope-dot" :style="{ background: SCOPE_STYLE_MAP[s].color }" />
+                  <span>{{ SCOPE_STYLE_MAP[s].label }}</span>
+                </button>
+              </div>
+              <p class="scope-hint">
+                智能体级=全员共享；用户级=按用户隔离；混合级=按 agent×user 隔离
+              </p>
+            </div>
             <div class="form-field">
               <label class="field-label">{{ config.label }}名称</label>
               <input
@@ -338,5 +375,62 @@ watch(
 .modal-enter-from,
 .modal-leave-to {
   opacity: 0;
+}
+
+/* ---- Scope picker ---- */
+.scope-picker {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.scope-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--color-border-input);
+  background: transparent;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.scope-option.scope-option--active {
+  border-color: currentColor;
+  font-weight: var(--font-weight-medium);
+}
+
+.scope-option.scope--yellow.scope-option--active {
+  border-color: #eab308;
+  color: #eab308;
+  background: rgba(234, 179, 8, 0.08);
+}
+
+.scope-option.scope--blue.scope-option--active {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.scope-option.scope--purple.scope-option--active {
+  border-color: #a855f7;
+  color: #a855f7;
+  background: rgba(168, 85, 247, 0.08);
+}
+
+.scope-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.scope-hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  margin: 4px 0 0;
 }
 </style>

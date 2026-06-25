@@ -1,7 +1,8 @@
 """Agent management API endpoints."""
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agent.memory.scopes import MemoryScope
 from api.agents.schemas import (
     AgentAddSkillRequest,
     AgentConfigRequest,
@@ -143,10 +144,13 @@ async def agent_file_descriptions(agent_id: str, db: AsyncSession = Depends(get_
 )
 @handle_errors
 async def agent_get_file(
-    agent_id: str, filename: str, db: AsyncSession = Depends(get_db)
+    agent_id: str,
+    filename: str,
+    scope: MemoryScope | None = Query(None, description="记忆作用域"),
+    db: AsyncSession = Depends(get_db),
 ):
     """获取代理文件内容。"""  # noqa: D415
-    result = await get_agent_file(db, agent_id, filename)
+    result = await get_agent_file(db, agent_id, filename, scope)
     return ok(result)
 
 
@@ -159,10 +163,11 @@ async def agent_save_file(
     agent_id: str,
     filename: str,
     req: AgentFileUpdateRequest,
+    scope: MemoryScope | None = Query(None, description="记忆作用域"),
     db: AsyncSession = Depends(get_db),
 ):
     """保存代理文件内容。"""  # noqa: D415
-    result = await save_agent_file(db, agent_id, filename, req.content)
+    result = await save_agent_file(db, agent_id, filename, req.content, scope)
     return ok(result)
 
 

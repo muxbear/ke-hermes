@@ -26,6 +26,17 @@ export interface CronJobBrief {
   updatedAt: string
 }
 
+/** 记忆作用域：agent / user / mixture / org */
+export type MemoryScope = 'agent' | 'user' | 'mixture' | 'org'
+
+/** 文件简要信息（按作用域分组返回） */
+export interface FileBrief {
+  filename: string
+  scope: MemoryScope
+  description: string
+  readOnly: boolean
+}
+
 /** 代理实体 */
 export interface Agent {
   id: string
@@ -36,6 +47,8 @@ export interface Agent {
   skills: SkillBrief[]
   systemPrompt: string
   files: string[]
+  /** 按作用域分组的文件列表（与 files 同步，由后端返回） */
+  filesByScope?: Record<MemoryScope, FileBrief[]>
   cronJobs: CronJobBrief[]
   subAgents?: string[]
   parentId?: string
@@ -71,6 +84,8 @@ export interface AgentFileContent {
   filename: string
   content: string
   description: string
+  scope: MemoryScope
+  readOnly: boolean
   createdAt: string
   updatedAt: string
 }
@@ -95,3 +110,37 @@ export const CONFIG_TYPE_MAP: Record<
   subagent: { label: '子智能体', color: '#f97316', bgClass: 'config--orange' },
   file: { label: '文件', color: '#eab308', bgClass: 'config--yellow' },
 }
+
+/** 记忆作用域样式映射（颜色 + 标签 + CSS class） */
+export const SCOPE_STYLE_MAP: Record<
+  MemoryScope,
+  { label: string; shortLabel: string; color: string; bgClass: string }
+> = {
+  agent: {
+    label: '智能体级记忆',
+    shortLabel: '智能体级',
+    color: '#eab308',
+    bgClass: 'scope--yellow',
+  },
+  user: {
+    label: '用户级记忆',
+    shortLabel: '用户级',
+    color: '#3b82f6',
+    bgClass: 'scope--blue',
+  },
+  mixture: {
+    label: '混合级记忆',
+    shortLabel: '混合级',
+    color: '#a855f7',
+    bgClass: 'scope--purple',
+  },
+  org: {
+    label: '组织级记忆',
+    shortLabel: '组织级（只读）',
+    color: '#6b7280',
+    bgClass: 'scope--gray',
+  },
+}
+
+/** 作用域展示顺序（org 嵌套在 agent 区块内） */
+export const SCOPE_DISPLAY_ORDER: MemoryScope[] = ['agent', 'org', 'user', 'mixture']

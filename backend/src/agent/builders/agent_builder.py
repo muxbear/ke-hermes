@@ -24,15 +24,23 @@ from typing import Any, cast
 
 from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, FilesystemBackend, StoreBackend
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.common import get_tool_registry, resolve_model
 from agent.config import settings
 from agent.context.context import Context
+from agent.memory.scopes import (
+    DEFAULT_ORG_ID,
+    MemoryScope,
+    build_memory_path,
+    infer_scope,
+)
 from agent.middleware.skill_sandbox_sync import SkillSandboxSyncMiddleware
 from agent.sandbox.sandbox_manager import SandboxManager
 from agent.sandbox.user_aware_sandbox_backend import UserAwareSandboxBackend
 from agent.subagents.subagents_operate import create_subagents
+from db.models.agent_file import AgentFile
 
 logger = logging.getLogger(__name__)
 
@@ -149,17 +157,42 @@ class AgentBuilder:
         return self
 
     def with_backend(self) -> "AgentBuilder":
-        """构建组合后端（sandbox + /memories/ StoreBackend + /skills/ FilesystemBackend）。"""
+        """构建组合后端（sandbox + 三作用域 StoreBackend + /skills/ FilesystemBackend）。
+
+        路由前缀按记忆作用域划分：
+        - /memories/agent/    → namespace=(agent_id,)
+        - /memories/user/     → namespace=(agent_id, user_id)
+        - /memories/mixture/  → namespace=(agent_id, user_id)
+        - /policies/          → namespace=(org_id,) 组织级只读
+        - /skills/            → FilesystemBackend
+        """
         if self._sandbox_backend is None:
             raise RuntimeError("必须先调用 with_sandbox()")
+        agent_id = self._agent_id
+
+        def _org_ns(ctx: Any) -> tuple[str, ...]:
+            org_id = getattr(cast(Any, ctx).runtime.context, "org_id", "")
+            return (org_id or DEFAULT_ORG_ID,)
+
         self._backend = CompositeBackend(
             default=self._sandbox_backend,
             routes={
-                "/memories/": StoreBackend(
+                "/memories/agent/": StoreBackend(
+                    namespace=lambda ctx: (agent_id,),
+                ),
+                "/memories/user/": StoreBackend(
                     namespace=lambda ctx: (
+                        agent_id,
                         cast(Any, ctx).runtime.context.user_id,
                     ),
                 ),
+                "/memories/mixture/": StoreBackend(
+                    namespace=lambda ctx: (
+                        agent_id,
+                        cast(Any, ctx).runtime.context.user_id,
+                    ),
+                ),
+                "/policies/": StoreBackend(namespace=_org_ns),
                 "/skills/": FilesystemBackend(
                     root_dir=self._skills_root, virtual_mode=True
                 ),
@@ -167,14 +200,48 @@ class AgentBuilder:
         )
         return self
 
-    def with_memory(self) -> "AgentBuilder":
-        """根据智能体文件名称构建记忆路径列表。"""
+    async def with_memory(self, db: AsyncSession) -> "AgentBuilder":
+        """根据智能体文件作用域构建记忆路径列表。
+
+        从 AgentFile 表读取每个文件的 scope，按 scope 拼接对应前缀路径。
+        若文件无 scope 记录（旧数据），按文件名推断并回填。
+        """
         if self._agent_info is None:
             raise RuntimeError("必须先调用 with_agent_from_db()")
-        if self._agent_info.files:
-            self._memory = [f"/memories/{f}" for f in self._agent_info.files]
-        else:
-            self._memory = ["/memories/AGENT.md"]
+
+        files = (
+            self._agent_info.files
+            if isinstance(self._agent_info.files, list)
+            else []
+        )
+
+        if not files:
+            # 修复 G3：默认文件名从 AGENT.md 改为 AGENTS.md
+            self._memory = [build_memory_path(MemoryScope.AGENT, "AGENTS.md")]
+            return self
+
+        # 查询每个文件的 scope
+        stmt = select(AgentFile).where(
+            AgentFile.agent_id == self._agent_id,
+            AgentFile.filename.in_(files),
+        )
+        rows = (await db.execute(stmt)).scalars().all()
+        scope_by_filename: dict[str, MemoryScope] = {}
+        for row in rows:
+            try:
+                scope_by_filename[row.filename] = (
+                    MemoryScope(row.scope) if row.scope else infer_scope(row.filename)
+                )
+            except ValueError:
+                scope_by_filename[row.filename] = infer_scope(row.filename)
+
+        self._memory = [
+            build_memory_path(
+                scope_by_filename.get(f, infer_scope(f)),
+                f,
+            )
+            for f in files
+        ]
         return self
 
     def with_middleware(self) -> "AgentBuilder":
@@ -238,6 +305,7 @@ async def create_main_agent_v2(checkpointer=None, store=None, sandbox_manager=No
     async with async_session() as session:
         builder = AgentBuilder()
         await builder.with_agent_from_db(session)
+        await builder.with_memory(session)
 
     await builder.with_model()
     await builder.with_tools()
@@ -245,6 +313,5 @@ async def create_main_agent_v2(checkpointer=None, store=None, sandbox_manager=No
     await builder.with_subagents()
     builder.with_sandbox(sandbox_manager=sandbox_manager)
     builder.with_backend()
-    builder.with_memory()
     builder.with_middleware()
     return builder.build(checkpointer=checkpointer, store=store)

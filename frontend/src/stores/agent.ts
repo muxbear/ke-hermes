@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Agent, AgentFileContent, AgentUpdateRequest, ConfigType, CronJobBrief, SkillBrief } from '@/types/agent'
+import type { Agent, AgentFileContent, AgentUpdateRequest, ConfigType, CronJobBrief, MemoryScope, SkillBrief } from '@/types/agent'
 import * as agentApi from '@/services/agentApi'
 
 export const useAgentStore = defineStore('agent', () => {
@@ -139,12 +139,12 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
-  async function addConfig(type: ConfigType, value: string, description: string = '') {
+  async function addConfig(type: ConfigType, value: string, description: string = '', scope?: MemoryScope) {
     const targetId = selectedAgentId.value
     if (!targetId) throw new Error('未选中代理')
 
     try {
-      await agentApi.addConfig(targetId, type, value, description)
+      await agentApi.addConfig(targetId, type, value, description, scope)
       // 刷新整个列表以保持数据一致性
       agents.value = await agentApi.fetchAgents()
     } catch (err: unknown) {
@@ -152,12 +152,12 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
-  async function updateConfig(type: ConfigType, value: string, newValue: string = '', description: string = '') {
+  async function updateConfig(type: ConfigType, value: string, newValue: string = '', description: string = '', scope?: MemoryScope) {
     const targetId = selectedAgentId.value
     if (!targetId) throw new Error('未选中代理')
 
     try {
-      await agentApi.updateConfig(targetId, type, value, newValue, description)
+      await agentApi.updateConfig(targetId, type, value, newValue, description, scope)
       agents.value = await agentApi.fetchAgents()
       // If file was renamed, update selectedFilename
       if (type === 'file' && newValue && newValue !== value && selectedFilename.value === value) {
@@ -168,12 +168,12 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
-  async function removeConfig(type: ConfigType, value: string) {
+  async function removeConfig(type: ConfigType, value: string, scope?: MemoryScope) {
     const targetId = selectedAgentId.value
     if (!targetId) throw new Error('未选中代理')
 
     try {
-      await agentApi.removeConfig(targetId, type, value)
+      await agentApi.removeConfig(targetId, type, value, scope)
       agents.value = await agentApi.fetchAgents()
     } catch (err: unknown) {
       throw err instanceof Error ? err : new Error('移除配置失败')
@@ -236,11 +236,11 @@ export const useAgentStore = defineStore('agent', () => {
   }
 
   /* ---------- file content actions ---------- */
-  async function fetchFileContent(agentId: string, filename: string) {
+  async function fetchFileContent(agentId: string, filename: string, scope?: MemoryScope) {
     fileLoading.value = true
     selectedFilename.value = filename
     try {
-      currentFileContent.value = await agentApi.fetchFileContent(agentId, filename)
+      currentFileContent.value = await agentApi.fetchFileContent(agentId, filename, scope)
     } catch (err: unknown) {
       currentFileContent.value = null
       throw err instanceof Error ? err : new Error('获取文件内容失败')
@@ -249,9 +249,9 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
-  async function saveFileContent(agentId: string, filename: string, content: string) {
+  async function saveFileContent(agentId: string, filename: string, content: string, scope?: MemoryScope) {
     try {
-      currentFileContent.value = await agentApi.saveFileContent(agentId, filename, content)
+      currentFileContent.value = await agentApi.saveFileContent(agentId, filename, content, scope)
     } catch (err: unknown) {
       throw err instanceof Error ? err : new Error('保存文件内容失败')
     }

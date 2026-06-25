@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { marked } from 'marked'
-import { Edit3, Eye, Save, FileText } from 'lucide-vue-next'
+import { Edit3, Eye, Save, FileText, Lock } from 'lucide-vue-next'
 
 const props = defineProps<{
   content: string
   filename: string | null
   loading: boolean
+  readOnly?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -15,7 +16,7 @@ const emit = defineEmits<{
 }>()
 
 const editContent = ref('')
-const viewMode = ref<'edit' | 'preview'>('edit')
+const viewMode = ref<'edit' | 'preview'>(props.readOnly ? 'preview' : 'edit')
 const dirty = ref(false)
 
 watch(
@@ -23,6 +24,13 @@ watch(
   (val) => {
     editContent.value = val
     dirty.value = false
+  },
+)
+
+watch(
+  () => props.readOnly,
+  (val) => {
+    if (val) viewMode.value = 'preview'
   },
 )
 
@@ -38,6 +46,7 @@ function onSave() {
 }
 
 function toggleMode(mode: 'edit' | 'preview') {
+  if (props.readOnly && mode === 'edit') return
   viewMode.value = mode
 }
 
@@ -60,11 +69,16 @@ const renderedHtml = computed(() => {
     <template v-else>
       <div class="editor-toolbar">
         <div class="toolbar-left">
-          <span v-if="dirty" class="dirty-indicator">未保存</span>
+          <span v-if="readOnly" class="readonly-indicator">
+            <Lock :size="11" />
+            只读
+          </span>
+          <span v-else-if="dirty" class="dirty-indicator">未保存</span>
         </div>
         <div class="toolbar-right">
           <div class="mode-toggle">
             <button
+              v-if="!readOnly"
               class="mode-btn"
               :class="{ active: viewMode === 'edit' }"
               @click="toggleMode('edit')"
@@ -81,7 +95,7 @@ const renderedHtml = computed(() => {
               预览
             </button>
           </div>
-          <button class="save-btn" :disabled="!dirty" @click="onSave">
+          <button v-if="!readOnly" class="save-btn" :disabled="!dirty" @click="onSave">
             <Save :size="13" />
             保存
           </button>
@@ -91,7 +105,7 @@ const renderedHtml = computed(() => {
       <div class="editor-body" v-loading="loading">
         <!-- Edit mode -->
         <textarea
-          v-if="viewMode === 'edit'"
+          v-if="viewMode === 'edit' && !readOnly"
           class="editor-textarea"
           :value="editContent"
           @input="onInput"
@@ -183,6 +197,18 @@ const renderedHtml = computed(() => {
   border-radius: var(--radius-full);
   background: rgba(234, 179, 8, 0.15);
   color: #eab308;
+  flex-shrink: 0;
+}
+
+.readonly-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: rgba(107, 114, 128, 0.15);
+  color: #9ca3af;
   flex-shrink: 0;
 }
 

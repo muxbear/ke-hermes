@@ -46,7 +46,11 @@ async def chat(
     is_new = not req.thread_id
     thread_id = req.thread_id or str(uuid7())
     config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
-    context = Context(server_info="ke_hermes_server", user_id=user_id) # 用 JWT 提取的 user_id 替换 req.user_id
+    context = Context(
+        server_info="ke_hermes_server",
+        user_id=user_id,
+        org_id="default-org",  # TODO: 从 JWT claims 或 User 表读取真实 org_id
+    )
 
     try:
         result = await get_graph().ainvoke(
@@ -86,7 +90,11 @@ async def chat_stream(
     is_new = not req.thread_id
     thread_id = req.thread_id or str(uuid7())
     config: RunnableConfig = {"configurable": {"thread_id": thread_id}, "recursion_limit": 50}
-    context = Context(server_info="ke_hermes_server", user_id=user_id)
+    context = Context(
+        server_info="ke_hermes_server",
+        user_id=user_id,
+        org_id="default-org",  # TODO: 从 JWT claims 或 User 表读取真实 org_id
+    )
 
     async def event_generator():
         chain_names: list[str] = []

@@ -3,7 +3,7 @@ import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, X, Eye, EyeOff } from 'lucide-vue-next'
 import { useAgentStore } from '@/stores/agent'
-import type { ConfigType, Agent } from '@/types/agent'
+import type { ConfigType, Agent, MemoryScope } from '@/types/agent'
 import AgentListItem from '@/components/agent/AgentListItem.vue'
 import AgentDetail from '@/components/agent/AgentDetail.vue'
 import AgentGraph from '@/components/agent/AgentGraph.vue'
@@ -17,6 +17,7 @@ const agentStore = useAgentStore()
 /* ---- Dialog state ---- */
 const dialogVisible = ref(false)
 const dialogType = ref<ConfigType>('tool')
+const dialogDefaultScope = ref<MemoryScope | undefined>(undefined)
 const toolSelectVisible = ref(false)
 const skillDialogVisible = ref(false)
 const showRelationGraph = ref(false)
@@ -26,18 +27,24 @@ const agentFormVisible = ref(false)
 const agentFormMode = ref<'create' | 'edit'>('create')
 const editingAgent = ref<Agent | null>(null)
 
-function openDialog(type: ConfigType) {
+function openDialog(type: ConfigType, scope?: MemoryScope) {
   if (type === 'tool') {
     toolSelectVisible.value = true
     return
   }
   dialogType.value = type
+  dialogDefaultScope.value = scope
   dialogVisible.value = true
 }
 
-async function handleAddConfig(type: ConfigType, value: string, description?: string) {
+async function handleAddConfig(
+  type: ConfigType,
+  value: string,
+  description?: string,
+  scope?: MemoryScope,
+) {
   try {
-    await agentStore.addConfig(type, value, description || '')
+    await agentStore.addConfig(type, value, description || '', scope)
     ElMessage.success(`${type === 'file' ? '文件' : 'Cron Job'}已添加`)
     dialogVisible.value = false
   } catch (err: unknown) {
@@ -85,20 +92,20 @@ async function handleUpdateConfig(type: ConfigType, value: string, newValue?: st
   }
 }
 
-async function handleRemoveConfig(type: ConfigType, value: string) {
+async function handleRemoveConfig(type: ConfigType, value: string, scope?: MemoryScope) {
   try {
-    await agentStore.removeConfig(type, value)
+    await agentStore.removeConfig(type, value, scope)
     ElMessage.success('已移除')
   } catch (err: unknown) {
     ElMessage.error(err instanceof Error ? err.message : '操作失败')
   }
 }
 
-async function handleSaveFileContent(filename: string, content: string) {
+async function handleSaveFileContent(filename: string, content: string, scope?: MemoryScope) {
   const agentId = agentStore.selectedAgent?.id
   if (!agentId) return
   try {
-    await agentStore.saveFileContent(agentId, filename, content)
+    await agentStore.saveFileContent(agentId, filename, content, scope)
     ElMessage.success(`${filename} 已保存`)
   } catch (err: unknown) {
     ElMessage.error(err instanceof Error ? err.message : '保存失败')
@@ -297,6 +304,7 @@ onMounted(() => {
       :type="dialogType"
       :agent-name="agentStore.selectedAgent.name"
       :agent-type="agentStore.selectedAgent.type"
+      :default-scope="dialogDefaultScope"
       @close="dialogVisible = false"
       @add="handleAddConfig"
     />

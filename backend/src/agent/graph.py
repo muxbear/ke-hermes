@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 from agent.mainagents import create_main_agent
 from agent.sandbox.sandbox_manager import SandboxManager
@@ -35,6 +36,13 @@ def get_checkpointer():
     if _checkpointer is None:
         raise RuntimeError("检查点未初始化，请先调用 init_graph()。")
     return _checkpointer
+
+
+def get_store() -> Any:
+    """返回已初始化的 LangGraph Store。必须在 init_graph() 之后调用。"""
+    if _store is None:
+        raise RuntimeError("Store 未初始化，请先调用 init_graph()。")
+    return _store
 
 
 async def init_graph():
@@ -80,6 +88,13 @@ async def init_graph():
         sandbox_manager=_sandbox_manager,
     )
 
+    # 启动时将 AgentFile 表内容种子化到 Store，关闭 DB↔Store 同步差距
+    from agent.memory.memory_sync import bootstrap_agent_memory
+    from db.engine import async_session
+
+    async with async_session() as session:
+        await bootstrap_agent_memory(_store, session)
+
 
 async def shutdown_graph():
     global _conn_pool, _sandbox_manager
@@ -91,4 +106,4 @@ async def shutdown_graph():
         _conn_pool = None
 
 
-__all__ = ["get_graph", "get_checkpointer", "init_graph", "shutdown_graph"]
+__all__ = ["get_graph", "get_checkpointer", "get_store", "init_graph", "shutdown_graph"]

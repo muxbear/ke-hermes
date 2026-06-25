@@ -7,6 +7,17 @@ from fastapi import HTTPException
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agent.graph import get_store
+from agent.memory.memory_sync import (
+    delete_agent_file_from_store,
+    sync_agent_file_to_store,
+)
+from agent.memory.scopes import (
+    DEFAULT_ORG_ID,
+    TEMPLATE_USER_ID,
+    MemoryScope,
+    infer_scope,
+)
 from api.agents.schemas import (
     AgentAddSkillRequest,
     AgentConfigRequest,
@@ -17,6 +28,7 @@ from api.agents.schemas import (
     AgentListResponse,
     AgentUpdateRequest,
     CronJobBrief,
+    FileBrief,
     SkillBrief,
 )
 from db.models.agent import Agent
@@ -41,6 +53,76 @@ DEFAULT_AGENT_FILES = [
     "USER.md", "HEARTBEAT.md", "MEMORY.md",
 ]
 DEFAULT_AGENT_TOOLS = ["tavily_search", "file_reader", "code_executor"]
+
+
+async def _get_agent_files_by_scope(
+    db: AsyncSession, agent_id: str, files: list[str]
+) -> dict[str, list[FileBrief]]:
+    """查询 AgentFile 表，按 scope 分组返回 FileBrief。"""
+    if not files:
+        return {s.value: [] for s in MemoryScope}
+
+    stmt = select(AgentFile).where(
+        AgentFile.agent_id == agent_id, AgentFile.filename.in_(files)
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+    brief_by_filename: dict[str, FileBrief] = {}
+    for row in rows:
+        try:
+            scope = MemoryScope(row.scope) if row.scope else infer_scope(row.filename)
+        except ValueError:
+            scope = infer_scope(row.filename)
+        brief_by_filename[row.filename] = FileBrief(
+            filename=row.filename,
+            scope=scope,
+            description=row.description or "",
+            read_only=bool(row.read_only),
+        )
+
+    # 对未在表中找到记录的文件，按文件名推断 scope
+    for f in files:
+        if f not in brief_by_filename:
+            scope = infer_scope(f)
+            brief_by_filename[f] = FileBrief(
+                filename=f,
+                scope=scope,
+                description="",
+                read_only=(scope is MemoryScope.ORG),
+            )
+
+    grouped: dict[str, list[FileBrief]] = {s.value: [] for s in MemoryScope}
+    for f in files:
+        brief = brief_by_filename[f]
+        grouped[brief.scope.value].append(brief)
+    return grouped
+
+
+async def _sync_file_to_store(
+    agent_id: str,
+    filename: str,
+    content: str,
+    scope: MemoryScope,
+    org_id: str | None = None,
+) -> None:
+    """将文件内容同步到 LangGraph Store。失败仅记录日志，不影响 DB 事务。"""
+    try:
+        store = get_store()
+    except RuntimeError:
+        logger.warning("Store 未初始化，跳过文件 %s 的同步", filename)
+        return
+
+    try:
+        await sync_agent_file_to_store(
+            store,
+            agent_id=agent_id,
+            user_id=TEMPLATE_USER_ID,
+            org_id=org_id or DEFAULT_ORG_ID,
+            filename=filename,
+            content=content,
+            scope=scope,
+        )
+    except Exception:
+        logger.exception("同步文件 %s (scope=%s) 到 Store 失败", filename, scope.value)
 
 
 async def _get_sub_agent_ids(db: AsyncSession, agent_id: str) -> list[str]:
@@ -83,13 +165,16 @@ async def _get_agent_tool_names(db: AsyncSession, agent_id: str) -> list[str]:
     return list(rows)
 
 
-def _agent_to_info(
+async def _agent_to_info(
+    db: AsyncSession,
     agent: Agent,
     sub_agent_ids: list[str] | None = None,
     skills: list[SkillBrief] | None = None,
     tool_names: list[str] | None = None,
 ) -> AgentInfo:
     """Convert ORM Agent to AgentInfo response schema."""
+    files = agent.files if isinstance(agent.files, list) else []
+    files_by_scope = await _get_agent_files_by_scope(db, agent.id, files)
     return AgentInfo(
         id=agent.id,
         name=agent.name,
@@ -99,7 +184,8 @@ def _agent_to_info(
         tools=tool_names if tool_names is not None else [],
         skills=skills if skills is not None else [],
         system_prompt=agent.system_prompt or "",
-        files=agent.files if isinstance(agent.files, list) else [],
+        files=files,
+        files_by_scope=files_by_scope,
         sub_agents=sub_agent_ids if sub_agent_ids is not None else [],
         parent_id=agent.parent_id,
         provider_id=agent.provider_id,
@@ -153,7 +239,7 @@ async def list_agents(db: AsyncSession) -> AgentListResponse:
         sub_ids = await _get_sub_agent_ids(db, agent.id)
         skills = await _get_agent_skill_briefs(db, agent.id)
         tool_names = await _get_agent_tool_names(db, agent.id)
-        agents_info.append(_agent_to_info(agent, sub_ids, skills, tool_names))
+        agents_info.append(await _agent_to_info(db, agent, sub_ids, skills, tool_names))
 
     return AgentListResponse(agents=agents_info)
 
@@ -168,7 +254,7 @@ async def get_agent(db: AsyncSession, agent_id: str) -> AgentInfo:
     sub_ids = await _get_sub_agent_ids(db, agent_id)
     skills = await _get_agent_skill_briefs(db, agent_id)
     tool_names = await _get_agent_tool_names(db, agent_id)
-    return _agent_to_info(row, sub_ids, skills, tool_names)
+    return await _agent_to_info(db, row, sub_ids, skills, tool_names)
 
 
 async def create_agent(db: AsyncSession, req: AgentCreateRequest) -> AgentInfo:
@@ -210,7 +296,7 @@ async def create_agent(db: AsyncSession, req: AgentCreateRequest) -> AgentInfo:
     await db.flush()
 
     logger.info("Created agent '%s' (type=%s)", agent.name, agent.type)
-    return _agent_to_info(agent, [])
+    return await _agent_to_info(db, agent, [])
 
 
 async def delete_agent(db: AsyncSession, agent_id: str) -> None:
@@ -253,7 +339,7 @@ async def toggle_agent_status(db: AsyncSession, agent_id: str) -> AgentInfo:
     sub_ids = await _get_sub_agent_ids(db, agent_id)
     skills = await _get_agent_skill_briefs(db, agent_id)
     tool_names = await _get_agent_tool_names(db, agent_id)
-    return _agent_to_info(agent, sub_ids, skills, tool_names)
+    return await _agent_to_info(db, agent, sub_ids, skills, tool_names)
 
 
 async def clone_agent(db: AsyncSession, agent_id: str) -> AgentInfo:
@@ -337,7 +423,7 @@ async def clone_agent(db: AsyncSession, agent_id: str) -> AgentInfo:
     skills = await _get_agent_skill_briefs(db, cloned.id)
     tool_names = await _get_agent_tool_names(db, cloned.id)
     logger.info("Cloned agent '%s' -> '%s'", source.name, cloned.name)
-    return _agent_to_info(cloned, sub_ids, skills, tool_names)
+    return await _agent_to_info(db, cloned, sub_ids, skills, tool_names)
 
 
 async def update_agent(db: AsyncSession, agent_id: str, req: AgentUpdateRequest) -> AgentInfo:
@@ -365,7 +451,7 @@ async def update_agent(db: AsyncSession, agent_id: str, req: AgentUpdateRequest)
     skills = await _get_agent_skill_briefs(db, agent_id)
     tool_names = await _get_agent_tool_names(db, agent_id)
     logger.info("Updated agent '%s'", agent.name)
-    return _agent_to_info(agent, sub_ids, skills, tool_names)
+    return await _agent_to_info(db, agent, sub_ids, skills, tool_names)
 
 
 async def add_agent_config(
@@ -409,28 +495,44 @@ async def add_agent_config(
             current.append(req.value)
             setattr(agent, column, current)
 
-        # When adding a file, create an AgentFile record with description
-        if req.type == "file" and req.description:
+        # When adding a file, create an AgentFile record with description + scope
+        if req.type == "file":
+            scope = req.scope or infer_scope(req.value)
+            if scope is MemoryScope.ORG:
+                raise HTTPException(
+                    status_code=400,
+                    detail="组织级文件请走专用 /policies/ 接口",
+                )
             existing = (await db.execute(
                 select(AgentFile).where(
-                    AgentFile.agent_id == agent_id, AgentFile.filename == req.value
+                    AgentFile.agent_id == agent_id,
+                    AgentFile.filename == req.value,
+                    AgentFile.scope == scope.value,
                 )
             )).scalar_one_or_none()
             if existing is not None:
-                existing.description = req.description
+                if req.description:
+                    existing.description = req.description
             else:
                 db.add(AgentFile(
                     agent_id=agent_id,
                     filename=req.value,
                     content="",
                     description=req.description,
+                    scope=scope.value,
+                    read_only=False,
                 ))
+                await db.flush()
+                # 同步空种子到 Store
+                await _sync_file_to_store(
+                    agent_id, req.value, "", scope
+                )
 
     await db.flush()
     sub_ids = await _get_sub_agent_ids(db, agent_id)
     skills = await _get_agent_skill_briefs(db, agent_id)
     tool_names = await _get_agent_tool_names(db, agent_id)
-    return _agent_to_info(agent, sub_ids, skills, tool_names)
+    return await _agent_to_info(db, agent, sub_ids, skills, tool_names)
 
 
 async def remove_agent_config(
@@ -468,16 +570,33 @@ async def remove_agent_config(
             setattr(agent, column, current)
         # Clean up orphaned file content row when removing a file config
         if req.type == "file":
+            scope = req.scope or infer_scope(req.value)
+            # 删除所有 scope 下的同名文件（保险起见）
             del_stmt = delete(AgentFile).where(
                 AgentFile.agent_id == agent_id, AgentFile.filename == req.value
             )
             await db.execute(del_stmt)
+            # 从 Store 删除
+            try:
+                store = get_store()
+                await delete_agent_file_from_store(
+                    store,
+                    agent_id=agent_id,
+                    user_id=TEMPLATE_USER_ID,
+                    org_id=DEFAULT_ORG_ID,
+                    filename=req.value,
+                    scope=scope,
+                )
+            except Exception:
+                logger.warning(
+                    "从 Store 删除文件 %s 失败", req.value, exc_info=True
+                )
 
     await db.flush()
     sub_ids = await _get_sub_agent_ids(db, agent_id)
     skills = await _get_agent_skill_briefs(db, agent_id)
     tool_names = await _get_agent_tool_names(db, agent_id)
-    return _agent_to_info(agent, sub_ids, skills, tool_names)
+    return await _agent_to_info(db, agent, sub_ids, skills, tool_names)
 
 
 async def update_agent_config(
@@ -498,6 +617,7 @@ async def update_agent_config(
         raise HTTPException(status_code=404, detail=f"Config item '{req.value}' not found")
 
     if req.type == "file":
+        scope = req.scope or infer_scope(req.value)
         new_name = req.new_value.strip() if req.new_value else ""
         # Rename file in agent.files
         if new_name and new_name != req.value:
@@ -509,30 +629,42 @@ async def update_agent_config(
         # Update description in agent_files
         lookup_name = new_name if new_name else req.value
         file_stmt = select(AgentFile).where(
-            AgentFile.agent_id == agent_id, AgentFile.filename == req.value
+            AgentFile.agent_id == agent_id,
+            AgentFile.filename == req.value,
+            AgentFile.scope == scope.value,
         )
         row = (await db.execute(file_stmt)).scalar_one_or_none()
         if row is not None:
             if new_name and new_name != req.value:
                 row.filename = new_name
             row.description = req.description
+            content = row.content or ""
+            new_scope = req.scope or infer_scope(lookup_name)
+            row.scope = new_scope.value
+            await db.flush()
+            await _sync_file_to_store(agent_id, lookup_name, content, new_scope)
         elif req.description:
+            new_scope = req.scope or infer_scope(lookup_name)
             db.add(AgentFile(
                 agent_id=agent_id,
                 filename=lookup_name,
                 content="",
                 description=req.description,
+                scope=new_scope.value,
             ))
 
     await db.flush()
     sub_ids = await _get_sub_agent_ids(db, agent_id)
     skills = await _get_agent_skill_briefs(db, agent_id)
     tool_names = await _get_agent_tool_names(db, agent_id)
-    return _agent_to_info(agent, sub_ids, skills, tool_names)
+    return await _agent_to_info(db, agent, sub_ids, skills, tool_names)
 
 
 async def get_agent_file(
-    db: AsyncSession, agent_id: str, filename: str
+    db: AsyncSession,
+    agent_id: str,
+    filename: str,
+    scope: MemoryScope | None = None,
 ) -> AgentFileContent:
     """Get file content for a given agent and filename. Auto-creates empty record on first access."""
     stmt = select(Agent).where(Agent.id == agent_id)
@@ -544,26 +676,52 @@ async def get_agent_file(
     if filename not in files:
         raise HTTPException(status_code=404, detail="File not found in agent config")
 
+    resolved_scope = scope or infer_scope(filename)
     file_stmt = select(AgentFile).where(
-        AgentFile.agent_id == agent_id, AgentFile.filename == filename
+        AgentFile.agent_id == agent_id,
+        AgentFile.filename == filename,
+        AgentFile.scope == resolved_scope.value,
     )
     row = (await db.execute(file_stmt)).scalar_one_or_none()
     if row is None:
-        row = AgentFile(agent_id=agent_id, filename=filename, content="")
+        # 兜底：查找任意 scope 下的同名文件
+        fallback_stmt = select(AgentFile).where(
+            AgentFile.agent_id == agent_id, AgentFile.filename == filename
+        )
+        row = (await db.execute(fallback_stmt)).scalar_one_or_none()
+    if row is None:
+        row = AgentFile(
+            agent_id=agent_id,
+            filename=filename,
+            content="",
+            scope=resolved_scope.value,
+            read_only=(resolved_scope is MemoryScope.ORG),
+        )
         db.add(row)
         await db.flush()
+
+    try:
+        row_scope = MemoryScope(row.scope) if row.scope else resolved_scope
+    except ValueError:
+        row_scope = resolved_scope
 
     return AgentFileContent(
         filename=row.filename,
         content=row.content or "",
         description=row.description or "",
+        scope=row_scope,
+        read_only=bool(row.read_only) or row_scope is MemoryScope.ORG,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
 
 
 async def save_agent_file(
-    db: AsyncSession, agent_id: str, filename: str, content: str
+    db: AsyncSession,
+    agent_id: str,
+    filename: str,
+    content: str,
+    scope: MemoryScope | None = None,
 ) -> AgentFileContent:
     """Save file content for a given agent and filename (upsert)."""
     stmt = select(Agent).where(Agent.id == agent_id)
@@ -575,21 +733,42 @@ async def save_agent_file(
     if filename not in files:
         raise HTTPException(status_code=404, detail="File not found in agent config")
 
+    resolved_scope = scope or infer_scope(filename)
+    if resolved_scope is MemoryScope.ORG:
+        raise HTTPException(
+            status_code=403,
+            detail="组织级只读文件不可通过此接口修改，请走 /policies/ 接口",
+        )
+
     file_stmt = select(AgentFile).where(
-        AgentFile.agent_id == agent_id, AgentFile.filename == filename
+        AgentFile.agent_id == agent_id,
+        AgentFile.filename == filename,
+        AgentFile.scope == resolved_scope.value,
     )
     row = (await db.execute(file_stmt)).scalar_one_or_none()
     if row is None:
-        row = AgentFile(agent_id=agent_id, filename=filename, content=content)
+        row = AgentFile(
+            agent_id=agent_id,
+            filename=filename,
+            content=content,
+            scope=resolved_scope.value,
+            read_only=False,
+        )
         db.add(row)
     else:
         row.content = content
+        row.scope = resolved_scope.value
 
     await db.flush()
+    # 同步到 Store
+    await _sync_file_to_store(agent_id, filename, content, resolved_scope)
+
     return AgentFileContent(
         filename=row.filename,
         content=row.content or "",
         description=row.description or "",
+        scope=resolved_scope,
+        read_only=False,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -598,7 +777,7 @@ async def save_agent_file(
 async def list_agent_file_descriptions(
     db: AsyncSession, agent_id: str
 ) -> list[dict]:
-    """Return {filename, description} for all files of an agent."""
+    """Return {filename, description, scope, readOnly} for all files of an agent."""
     stmt = select(Agent).where(Agent.id == agent_id)
     agent = (await db.execute(stmt)).scalar_one_or_none()
     if agent is None:
@@ -606,7 +785,15 @@ async def list_agent_file_descriptions(
 
     file_stmt = select(AgentFile).where(AgentFile.agent_id == agent_id)
     rows = (await db.execute(file_stmt)).scalars().all()
-    return [{"filename": row.filename, "description": row.description or ""} for row in rows]
+    return [
+        {
+            "filename": row.filename,
+            "description": row.description or "",
+            "scope": row.scope or infer_scope(row.filename).value,
+            "readOnly": bool(row.read_only),
+        }
+        for row in rows
+    ]
 
 
 # ── Agent-Skill helpers ───────────────────────────────────────────────────

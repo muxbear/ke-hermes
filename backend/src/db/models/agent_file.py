@@ -2,7 +2,7 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from db.base import Base
@@ -17,7 +17,7 @@ class AgentFile(Base):
 
     __tablename__ = "agent_files"
     __table_args__ = (
-        UniqueConstraint("agent_id", "filename", name="uq_agent_file"),
+        UniqueConstraint("agent_id", "filename", "scope", name="uq_agent_file_scope"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -30,5 +30,8 @@ class AgentFile(Base):
     filename: Mapped[str] = mapped_column(String(256), nullable=False)
     content: Mapped[str] = mapped_column(Text, default="")
     description: Mapped[str] = mapped_column(String(512), default="")
+    scope: Mapped[str] = mapped_column(String(16), default="agent", nullable=False)
+    read_only: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    org_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, onupdate=_utcnow)
