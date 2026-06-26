@@ -1,6 +1,8 @@
 """文档管理 API 路由——上传/列表/详情/删除/重试。"""
 
-from fastapi import APIRouter, Depends, Query, Request, UploadFile, File
+import json
+
+from fastapi import APIRouter, Depends, Form, Query, Request, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_current_user_id, get_db
@@ -11,6 +13,7 @@ from api.knowledge_base.doc_service import (
     retry_document,
     upload_documents,
 )
+from api.knowledge_base.schemas import IndexConfigSchema
 
 router = APIRouter(prefix="/api/knowledge-bases", tags=["知识库-文档"])
 
@@ -28,6 +31,7 @@ async def upload_docs(
     kb_id: str,
     request: Request,
     files: list[UploadFile] = File(..., max_count=20),
+    config: str | None = Form(default=None),
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(get_current_user_id),
 ):
@@ -35,8 +39,16 @@ async def upload_docs(
     if not files:
         return {"code": 400, "data": None, "message": "请选择文件"}
 
+    custom_config: dict | None = None
+    if config:
+        try:
+            custom_config = json.loads(config)
+            IndexConfigSchema(**custom_config)  # 校验
+        except (json.JSONDecodeError, ValueError) as e:
+            return {"code": 400, "data": None, "message": f"索引配置无效: {e}"}
+
     scheduler = _get_scheduler(request)
-    result = await upload_documents(db, kb_id, user_id, files, scheduler)
+    result = await upload_documents(db, kb_id, user_id, files, scheduler, custom_config)
     await db.commit()
     return {
         "code": 0,

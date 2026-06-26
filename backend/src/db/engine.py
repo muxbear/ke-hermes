@@ -138,6 +138,13 @@ async def init_db():
     async with async_engine.begin() as conn:
         await _migrate_table_columns(
             conn,
+            "knowledge_base_documents",
+            {
+                "config": "JSON",
+            },
+        )
+        await _migrate_table_columns(
+            conn,
             "knowledge_base_relations",
             {
                 "source_entity_id": "VARCHAR(36)",

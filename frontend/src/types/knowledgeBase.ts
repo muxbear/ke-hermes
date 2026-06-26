@@ -66,6 +66,7 @@ export interface KBDoc {
   uploadedAt: string
   errorMessage: string | null
   stages: DocStage[]
+  config: IndexConfig | null
 }
 
 // 知识图谱实体

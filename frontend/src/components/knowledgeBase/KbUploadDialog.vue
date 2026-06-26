@@ -1,21 +1,25 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, reactive } from 'vue'
 import { Upload, X, FileType2, FileCode2, FileText, FileSpreadsheet, FileImage, Globe } from 'lucide-vue-next'
-import type { DocType } from '@/types/knowledgeBase'
+import type { DocType, IndexConfig } from '@/types/knowledgeBase'
 import { DOC_TYPE_CONFIG } from '@/types/knowledgeBase'
+import KbIndexConfigForm from './KbIndexConfigForm.vue'
 
 const props = defineProps<{
   visible: boolean
+  defaultConfig: IndexConfig
 }>()
 
 const emit = defineEmits<{
   close: []
-  upload: [files: File[]]
+  upload: [files: File[], config?: IndexConfig]
 }>()
 
 const dialogVisible = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 const files = ref<File[]>([])
+const indexMode = ref<'kb' | 'custom'>('kb')
+let customConfig = reactive<IndexConfig>({ ...props.defaultConfig })
 
 const docTypeIcons: Record<DocType, typeof FileText> = {
   pdf: FileType2, md: FileCode2, docx: FileText, csv: FileSpreadsheet, image: FileImage, html: Globe,
@@ -24,14 +28,23 @@ const docTypeIcons: Record<DocType, typeof FileText> = {
 const ALLOWED_TYPES = '.pdf,.docx,.xlsx,.pptx,.csv,.json,.md,.html,.txt,.png,.jpg,.jpeg'
 
 const hasFiles = computed(() => files.value.length > 0)
+const dialogWidth = computed(() => indexMode.value === 'custom' ? '760px' : '520px')
 
 watch(() => props.visible, (v) => {
   dialogVisible.value = v
   if (v) reset()
 })
 
+watch(indexMode, (mode) => {
+  if (mode === 'custom') {
+    Object.assign(customConfig, props.defaultConfig)
+  }
+})
+
 function reset() {
   files.value = []
+  indexMode.value = 'kb'
+  Object.assign(customConfig, props.defaultConfig)
 }
 
 function handleClose() {
@@ -65,13 +78,11 @@ function handleFileChange(e: Event) {
     for (let i = 0; i < input.files.length; i++) {
       const file = input.files[i]
       if (file.size > 100 * 1024 * 1024) {
-        // Skip files > 100MB
         continue
       }
       files.value.push(file)
     }
   }
-  // Reset input so the same file can be selected again
   input.value = ''
 }
 
@@ -94,7 +105,7 @@ function removeFile(index: number) {
 
 function handleUpload() {
   if (!hasFiles.value) return
-  emit('upload', [...files.value])
+  emit('upload', [...files.value], indexMode.value === 'custom' ? { ...customConfig } : undefined)
   dialogVisible.value = false
 }
 </script>
@@ -102,7 +113,7 @@ function handleUpload() {
 <template>
   <el-dialog
     v-model="dialogVisible"
-    width="520px"
+    :width="dialogWidth"
     :close-on-click-modal="false"
     @close="handleClose"
     class="upload-doc-dialog"
@@ -149,14 +160,26 @@ function handleUpload() {
           </button>
         </div>
       </div>
+
+      <!-- 自定义索引配置 -->
+      <div v-if="indexMode === 'custom'" class="custom-config-section">
+        <div class="config-section-title">自定义索引配置</div>
+        <KbIndexConfigForm v-model="customConfig" />
+      </div>
     </div>
 
     <template #footer>
       <div class="dialog-footer">
-        <button class="btn-cancel" @click="handleClose">取消</button>
-        <button class="btn-upload" :disabled="!hasFiles" @click="handleUpload">
-          <Upload :size="16" />开始索引 ({{ files.length }})
-        </button>
+        <el-radio-group v-model="indexMode" size="small" class="index-mode-radio">
+          <el-radio value="kb">使用知识库索引</el-radio>
+          <el-radio value="custom">自定义索引</el-radio>
+        </el-radio-group>
+        <div class="footer-buttons">
+          <button class="btn-cancel" @click="handleClose">取消</button>
+          <button class="btn-upload" :disabled="!hasFiles" @click="handleUpload">
+            <Upload :size="16" />开始索引 ({{ files.length }})
+          </button>
+        </div>
       </div>
     </template>
   </el-dialog>
@@ -277,10 +300,32 @@ function handleUpload() {
   color: #f87171;
 }
 
+/* Custom config section */
+.custom-config-section {
+  max-height: 420px;
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.15);
+}
+
+.config-section-title {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--foreground-primary);
+  margin-bottom: 12px;
+}
+
 /* ─── Footer ─── */
 .dialog-footer {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.footer-buttons {
+  display: flex;
   gap: 10px;
 }
 
@@ -340,6 +385,7 @@ function handleUpload() {
 .upload-doc-dialog .el-dialog {
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: width 0.25s ease;
 }
 
 .upload-doc-dialog .el-dialog__header {
@@ -352,5 +398,21 @@ function handleUpload() {
 
 .upload-doc-dialog .el-dialog__footer {
   padding: 0 28px 24px;
+}
+
+/* Radio group dark theme */
+.index-mode-radio {
+  --el-radio-text-color: var(--foreground-primary);
+  --el-radio-input-bg-color: rgba(255, 255, 255, 0.05);
+  --el-radio-input-border-color: rgba(255, 255, 255, 0.2);
+}
+
+.index-mode-radio .el-radio__label {
+  font-size: var(--font-size-sm) !important;
+}
+
+.index-mode-radio .el-radio.is-checked .el-radio__inner {
+  background: #3b82f6 !important;
+  border-color: #3b82f6 !important;
 }
 </style>

@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.config import settings
 from api.knowledge_base.doc_state import IndexingContext, DocState, QueuedState
-from api.knowledge_base.schemas import KBDocResponse, KBDocUploadResponse, DocStageInfo
+from api.knowledge_base.schemas import KBDocResponse, KBDocUploadResponse, DocStageInfo, IndexConfigSchema
 from core.rag.loaders import DocumentLoaderRegistry, create_default_loader_registry
 from core.rag.splitters import ChunkStrategyRegistry, create_chunk_registry
 from core.rag.vector_store import BaseVectorStore
@@ -224,9 +224,36 @@ class IndexingPipeline:
         self.vector_store = vector_store
         self.graph_service = graph_service
         self._observers: list[ProgressObserver] = []
+        self._embedding_cache: dict[str, object] = {}
+        self._chunk_registry_cache: dict[tuple, ChunkStrategyRegistry] = {}
 
     def attach(self, observer: ProgressObserver) -> None:
         self._observers.append(observer)
+
+    def _get_or_create_embedding(self, model_name: str | None):
+        """获取或创建 embedding model 实例（缓存避免重复创建）。"""
+        if not model_name:
+            return self.embedding_model
+        if model_name not in self._embedding_cache:
+            from core.rag.embedding import get_embedding_model
+            self._embedding_cache[model_name] = get_embedding_model(
+                model_name=model_name,
+                api_base=settings.DASHSCOPE_BASE_URL,
+                api_key=settings.DASHSCOPE_API_KEY,
+            )
+        return self._embedding_cache[model_name]
+
+    def _get_or_create_chunk_registry(self, config: dict, emb_model):
+        """获取或创建带自定义参数的分片注册表。"""
+        chunk_size = config.get("chunk_size", 512)
+        chunk_overlap = config.get("chunk_overlap", 64)
+        cache_key = (chunk_size, chunk_overlap)
+        if cache_key not in self._chunk_registry_cache:
+            self._chunk_registry_cache[cache_key] = create_chunk_registry(
+                {"chunk_size": chunk_size, "chunk_overlap": chunk_overlap},
+                embedding_model=emb_model,
+            )
+        return self._chunk_registry_cache[cache_key]
 
     async def _notify(self, ctx: IndexingContext) -> None:
         for observer in self._observers:
@@ -237,15 +264,24 @@ class IndexingPipeline:
 
     async def execute(self, task: IndexingTask) -> None:
         """模板方法：定义 8 阶段索引骨架。"""
+        config = task.config
+
+        # 获取该文档使用的 embedding model 和 chunk registry
+        emb_model_name = config.get("embedding_model")
+        emb_model = self._get_or_create_embedding(emb_model_name)
+        chunk_reg = self._get_or_create_chunk_registry(config, emb_model)
+
         ctx = IndexingContext(
             doc_id=task.doc_id,
             kb_id=task.kb_id,
             file_path=task.file_path,
             file_type=task.file_type,
-            config=task.config,
+            config=config,
             current_state=QueuedState(),
             status="queued",
             progress=0,
+            embedding_model=emb_model,
+            chunk_registry=chunk_reg,
         )
 
         async def _on_status_change(c: IndexingContext) -> None:
@@ -341,6 +377,7 @@ async def upload_documents(
     user_id: str,
     files: list[UploadFile],
     scheduler: IndexingScheduler | None = None,
+    custom_config: dict | None = None,
 ) -> list[KBDocUploadResponse]:
     """上传文档并触发索引流水线。"""
     # 校验知识库
@@ -394,6 +431,7 @@ async def upload_documents(
             storage_path=storage_path,
             status="queued",
             uploaded_at=now,
+            config=custom_config,
         )
         db.add(doc)
         total_new_bytes += len(content)
@@ -402,13 +440,15 @@ async def upload_documents(
             id=doc_id, name=filename, type=file_type,
             size_display=_format_bytes(len(content)),
             status="queued", uploaded_at=now,
+            config=IndexConfigSchema(**custom_config) if custom_config else None,
         ))
 
-        # 入队索引任务
+        # 入队索引任务：自定义配置优先，否则回退到 KB 配置
         if scheduler:
+            effective_config = custom_config if custom_config else kb.config
             await scheduler.enqueue(IndexingTask(
                 kb_id=kb_id, doc_id=doc_id, file_path=storage_path,
-                file_type=file_type, config=kb.config,
+                file_type=file_type, config=effective_config,
             ))
 
     # 更新知识库统计
@@ -473,6 +513,7 @@ async def list_documents(
             indexed_at=r.indexed_at,
             error_message=r.error_message,
             stages=[DocStageInfo(**s) for s in compute_stages(r.status or "queued", r.error_message)],
+            config=r.config,
         ))
 
     return {
@@ -512,6 +553,7 @@ async def get_document(
         indexed_at=doc.indexed_at,
         error_message=doc.error_message,
         stages=[DocStageInfo(**s) for s in compute_stages(doc.status or "queued", doc.error_message)],
+        config=doc.config,
     )
 
 
@@ -593,9 +635,11 @@ async def retry_document(
     ).scalar_one_or_none()
 
     if scheduler and kb:
+        # 重试时使用文档级别的 config（如果存在），否则回退到 KB config
+        doc_config = doc.config if doc.config else kb.config
         await scheduler.enqueue(IndexingTask(
             kb_id=kb_id, doc_id=doc_id, file_path=doc.storage_path,
-            file_type=doc.type, config=kb.config,
+            file_type=doc.type, config=doc_config,
         ))
 
     return KBDocResponse(
@@ -609,4 +653,5 @@ async def retry_document(
         indexed_at=doc.indexed_at,
         error_message=doc.error_message,
         stages=[],
+        config=doc.config,
     )

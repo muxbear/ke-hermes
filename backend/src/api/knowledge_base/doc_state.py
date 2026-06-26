@@ -39,6 +39,9 @@ class IndexingContext:
     entities_count: int = 0
     relations_count: int = 0
 
+    embedding_model: object | None = None
+    chunk_registry: object | None = None
+
     on_status_change: Callable[["IndexingContext"], Awaitable[None]] | None = None
 
     async def transition_to(self, state: DocState, status: str, progress: int) -> None:
@@ -88,7 +91,8 @@ class ChunkingState(DocState):
     async def handle(self, ctx: IndexingContext, pipeline: IndexingPipeline) -> None:
         try:
             strategy_name = ctx.config.get("chunk_strategy", "recursive")
-            ctx.chunks = pipeline.chunk_registry.split(strategy_name, ctx.documents)
+            chunk_reg = ctx.chunk_registry or pipeline.chunk_registry
+            ctx.chunks = chunk_reg.split(strategy_name, ctx.documents)
             await ctx.transition_to(EmbeddingState(), "embedding", 30)
         except Exception as e:
             await ctx.fail(f"文本切片失败: {e}")
@@ -100,7 +104,8 @@ class EmbeddingState(DocState):
     async def handle(self, ctx: IndexingContext, pipeline: IndexingPipeline) -> None:
         try:
             texts = [chunk.page_content for chunk in ctx.chunks]
-            ctx.embeddings = await pipeline.embedding_model.aembed_documents(texts)
+            emb_model = ctx.embedding_model or pipeline.embedding_model
+            ctx.embeddings = await emb_model.aembed_documents(texts)
             await ctx.transition_to(BM25State(), "bm25", 55)
         except Exception as e:
             await ctx.fail(f"向量化失败: {e}")

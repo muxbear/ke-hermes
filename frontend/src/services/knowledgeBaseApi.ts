@@ -42,6 +42,7 @@ interface RawDoc {
   indexed_at: string | null
   error_message: string | null
   stages: { name: string; status: string; pct: number }[]
+  config: Record<string, unknown> | null
 }
 
 interface PaginatedData<T> {
@@ -107,6 +108,7 @@ function mapDoc(raw: RawDoc): KBDoc {
     uploadedAt: raw.uploaded_at?.split('T')[0] || '',
     errorMessage: raw.error_message || null,
     stages: (raw.stages || []) as KBDoc['stages'],
+    config: raw.config ? mapConfig(raw.config as Record<string, unknown>) : null,
   }
 }
 
@@ -178,9 +180,13 @@ export async function fetchStats(): Promise<KBStatsResponse> {
 export async function uploadDocuments(
   kbId: string,
   files: File[],
+  config?: IndexConfig,
 ): Promise<KBDoc[]> {
   const formData = new FormData()
   files.forEach((f) => formData.append('files', f))
+  if (config) {
+    formData.append('config', JSON.stringify(configToSnake(config)))
+  }
   const res = await instance.post(
     `/knowledge-bases/${kbId}/documents/upload`,
     formData,

@@ -159,9 +159,9 @@ export const useKnowledgeBaseStore = defineStore('knowledgeBase', () => {
     }
   }
 
-  async function uploadDocs(kbId: string, files: File[]) {
+  async function uploadDocs(kbId: string, files: File[], config?: import('@/types/knowledgeBase').IndexConfig) {
     if (!files.length) return
-    const newDocs = await kbApi.uploadDocuments(kbId, files)
+    const newDocs = await kbApi.uploadDocuments(kbId, files, config)
     if (selectedKb.value && selectedKb.value.id === kbId) {
       selectedKb.value = {
         ...selectedKb.value,

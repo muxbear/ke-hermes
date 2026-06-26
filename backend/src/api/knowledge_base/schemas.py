@@ -105,6 +105,7 @@ class KBDocResponse(BaseModel):
     indexed_at: datetime | None = None
     error_message: str | None = None
     stages: list[DocStageInfo] = []
+    config: IndexConfigSchema | None = None
 
     model_config = {"from_attributes": True}
 
@@ -125,6 +126,7 @@ class KBDocUploadResponse(BaseModel):
     size_display: str
     status: str
     uploaded_at: datetime
+    config: IndexConfigSchema | None = None
 
 
 # ─── Graph ──────────────────────────────────────────────────────────────────

@@ -6,7 +6,7 @@ import {
   FileType2, FileCode2, FileText, FileSpreadsheet, FileImage, Globe,
   Eye, Scissors,
 } from 'lucide-vue-next'
-import type { KB, KBDoc, DocType } from '@/types/knowledgeBase'
+import type { KB, KBDoc, DocType, IndexConfig } from '@/types/knowledgeBase'
 import { useKnowledgeBaseStore } from '@/stores/knowledgeBase'
 import KbDocStatusBadge from './KbDocStatusBadge.vue'
 import KbUploadDialog from './KbUploadDialog.vue'
@@ -38,11 +38,11 @@ const filteredDocs = computed(() => {
 
 const uploading = ref(false)
 
-async function handleUpload(files: File[]) {
+async function handleUpload(files: File[], config?: IndexConfig) {
   uploadVisible.value = false
   try {
     uploading.value = true
-    await store.uploadDocs(props.kb.id, files)
+    await store.uploadDocs(props.kb.id, files, config)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : '上传失败'
     ElMessage.error(msg)
@@ -227,6 +227,7 @@ function handleEditFragment(doc: KBDoc) {
 
       <KbUploadDialog
         :visible="uploadVisible"
+        :default-config="kb.config"
         @close="uploadVisible = false"
         @upload="handleUpload"
       />
