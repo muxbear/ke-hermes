@@ -28,7 +28,7 @@ export const useChatStore = defineStore('chat', () => {
     let traceIdCounter = 0
 
     if (traceEnabled.value) {
-      const idx = messages.value.findIndex(m => m.id === assistantId)
+      const idx = messages.value.findIndex((m) => m.id === assistantId)
       if (idx !== -1) {
         messages.value[idx] = { ...messages.value[idx], traces: [] }
       }
@@ -39,13 +39,23 @@ export const useChatStore = defineStore('chat', () => {
         threadId: threadId.value,
         traceEnabled: traceEnabled.value,
         onToken(token: string) {
-          const idx = messages.value.findIndex(m => m.id === assistantId)
+          const idx = messages.value.findIndex((m) => m.id === assistantId)
           if (idx !== -1) {
-            messages.value[idx] = { ...messages.value[idx], content: messages.value[idx].content + token }
+            messages.value[idx] = {
+              ...messages.value[idx],
+              content: messages.value[idx].content + token,
+            }
+          }
+        },
+        onReasoning(token: string) {
+          const idx = messages.value.findIndex((m) => m.id === assistantId)
+          if (idx !== -1) {
+            const msg = messages.value[idx]
+            messages.value[idx] = { ...msg, reasoning: (msg.reasoning || '') + token }
           }
         },
         onTrace(entry: Omit<TraceEntry, 'id'>) {
-          const idx = messages.value.findIndex(m => m.id === assistantId)
+          const idx = messages.value.findIndex((m) => m.id === assistantId)
           if (idx !== -1 && messages.value[idx].traces) {
             const traces = [...messages.value[idx].traces!, { ...entry, id: ++traceIdCounter }]
             messages.value[idx] = { ...messages.value[idx], traces }
@@ -55,7 +65,7 @@ export const useChatStore = defineStore('chat', () => {
           threadId.value = id
         },
         onDone() {
-          const idx = messages.value.findIndex(m => m.id === assistantId)
+          const idx = messages.value.findIndex((m) => m.id === assistantId)
           if (idx !== -1) {
             messages.value[idx] = { ...messages.value[idx], streaming: false }
           }
@@ -66,7 +76,7 @@ export const useChatStore = defineStore('chat', () => {
           uiStore.fetchHistories()
         },
         onError(err: Error) {
-          const idx = messages.value.findIndex(m => m.id === assistantId)
+          const idx = messages.value.findIndex((m) => m.id === assistantId)
           if (idx !== -1) {
             const msg = messages.value[idx]
             const sep = msg.content ? '\n\n' : ''
@@ -80,7 +90,7 @@ export const useChatStore = defineStore('chat', () => {
         },
       })
     } catch (err) {
-      const idx = messages.value.findIndex(m => m.id === assistantId)
+      const idx = messages.value.findIndex((m) => m.id === assistantId)
       if (idx !== -1) {
         const msg = messages.value[idx]
         const sep = msg.content ? '\n\n' : ''
@@ -113,11 +123,10 @@ export const useChatStore = defineStore('chat', () => {
           id: idx + 1,
           role: m.role as 'user' | 'assistant',
           content: m.content,
-          streaming: false
+          streaming: false,
         }))
-        nextId = messages.value.length + 1
-    } catch {
-    }
+      nextId = messages.value.length + 1
+    } catch {}
 
     loading.value = false
   }

@@ -1,6 +1,6 @@
 <script setup>
-import { computed } from 'vue'
-import { Sparkles, UserCircle } from 'lucide-vue-next'
+import { computed, ref } from 'vue'
+import { Sparkles, UserCircle, Brain, ChevronDown, ChevronRight } from 'lucide-vue-next'
 import { marked } from 'marked'
 import TracePanel from './TracePanel.vue'
 
@@ -10,6 +10,8 @@ const props = defineProps({
     required: true,
   },
 })
+
+const showReasoning = ref(false)
 
 const renderedContent = computed(() => {
   if (props.message.role === 'user') return props.message.content
@@ -31,7 +33,22 @@ const renderedContent = computed(() => {
           :traces="message.traces"
           :streaming="message.streaming"
         />
-        <div v-if="message.role === 'assistant'" class="markdown-body" v-html="renderedContent"></div>
+        <div v-if="message.role === 'assistant' && message.reasoning" class="reasoning-section">
+          <div class="reasoning-toggle" @click="showReasoning = !showReasoning">
+            <Brain :size="12" />
+            <span>思考过程</span>
+            <ChevronDown v-if="!showReasoning" :size="12" />
+            <ChevronRight v-else :size="12" />
+          </div>
+          <div v-if="showReasoning" class="reasoning-content">
+            {{ message.reasoning }}
+          </div>
+        </div>
+        <div
+          v-if="message.role === 'assistant'"
+          class="markdown-body"
+          v-html="renderedContent"
+        ></div>
         <div v-else>{{ message.content }}</div>
         <span v-if="message.streaming && !message.content" class="typing-indicator">
           <span class="dot" />
@@ -139,8 +156,16 @@ const renderedContent = computed(() => {
 }
 
 @keyframes typing {
-  0%, 60%, 100% { opacity: 0.3; transform: scale(0.8); }
-  30% { opacity: 1; transform: scale(1); }
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+    transform: scale(0.8);
+  }
+  30% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 /* Markdown rendered styles inside assistant bubble */
@@ -152,10 +177,18 @@ const renderedContent = computed(() => {
   font-weight: var(--font-weight-semibold);
 }
 
-.markdown-body :deep(h1) { font-size: 18px; }
-.markdown-body :deep(h2) { font-size: 16px; }
-.markdown-body :deep(h3) { font-size: 15px; }
-.markdown-body :deep(h4) { font-size: var(--font-size-md); }
+.markdown-body :deep(h1) {
+  font-size: 18px;
+}
+.markdown-body :deep(h2) {
+  font-size: 16px;
+}
+.markdown-body :deep(h3) {
+  font-size: 15px;
+}
+.markdown-body :deep(h4) {
+  font-size: var(--font-size-md);
+}
 
 .markdown-body :deep(p) {
   margin: 6px 0;
@@ -233,6 +266,38 @@ const renderedContent = computed(() => {
   border: none;
   border-top: 1px solid var(--border-subtle);
   margin: 10px 0;
+}
+
+.reasoning-section {
+  margin-bottom: 8px;
+  border-left: 3px solid #a78bfa;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: rgba(167, 139, 250, 0.06);
+  font-size: var(--font-size-xs);
+  overflow: hidden;
+}
+
+.reasoning-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  color: #7c3aed;
+  user-select: none;
+}
+
+.reasoning-toggle:hover {
+  background: rgba(167, 139, 250, 0.1);
+}
+
+.reasoning-content {
+  padding: 6px 10px 8px 24px;
+  color: var(--foreground-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-style: italic;
+  line-height: 1.5;
 }
 
 .markdown-body :deep(strong) {

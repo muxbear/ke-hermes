@@ -1,8 +1,4 @@
-import axios, {
-  type AxiosInstance,
-  type InternalAxiosRequestConfig,
-  type AxiosError,
-} from 'axios'
+import axios, { type AxiosInstance, type InternalAxiosRequestConfig, type AxiosError } from 'axios'
 import type { ApiResponse } from '@/types/api'
 
 // ---- Token 存储（与 auth store 共享 key，避免循环依赖） ----
@@ -71,10 +67,9 @@ instance.interceptors.response.use(
         if (!refreshPromise) {
           refreshPromise = (async () => {
             try {
-              const res = await axios.post<ApiResponse<{ tokens: { accessToken: string; refreshToken: string } }>>(
-                `${instance.defaults.baseURL}/auth/refresh`,
-                { refreshToken: rt },
-              )
+              const res = await axios.post<
+                ApiResponse<{ tokens: { accessToken: string; refreshToken: string } }>
+              >(`${instance.defaults.baseURL}/auth/refresh`, { refreshToken: rt })
               const { accessToken, refreshToken } = res.data.data.tokens
               // 更新存储中的 token
               updateStoredTokens(accessToken, refreshToken)
@@ -98,11 +93,14 @@ instance.interceptors.response.use(
 )
 
 function updateStoredTokens(accessToken: string, refreshToken: string) {
-  sessionStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify({
-    accessToken,
-    refreshToken,
-    expiresIn: 7200,
-  }))
+  sessionStorage.setItem(
+    TOKEN_STORAGE_KEY,
+    JSON.stringify({
+      accessToken,
+      refreshToken,
+      expiresIn: 7200,
+    }),
+  )
 }
 
 function clearTokensFromStorage() {
@@ -142,13 +140,23 @@ function parseSseDataLine(
   onThreadId?: (threadId: string) => void,
   onTrace?: (entry: Omit<TraceEntry, 'id'>) => void,
   onError?: (err: Error) => void,
+  onReasoning?: (token: string) => void,
 ): void {
   if (!line.startsWith('data: ')) return
   try {
-    const json = JSON.parse(line.slice(6)) as { token?: string; thread_id?: string; trace?: Omit<TraceEntry, 'id'>; error?: string }
+    const json = JSON.parse(line.slice(6)) as {
+      token?: string
+      thread_id?: string
+      trace?: Omit<TraceEntry, 'id'>
+      error?: string
+      reasoning?: string
+    }
     if (json.error && onError) {
       onError(new Error(json.error))
       return
+    }
+    if (json.reasoning && onReasoning) {
+      onReasoning(json.reasoning)
     }
     if (json.token) {
       onToken(json.token)
@@ -173,13 +181,15 @@ export async function sendStreamRequest(
     threadId?: string | null
     traceEnabled?: boolean
     onToken: (token: string) => void
+    onReasoning?: (token: string) => void
     onTrace?: (entry: Omit<TraceEntry, 'id'>) => void
     onThreadId?: (threadId: string) => void
     onDone: () => void
     onError: (err: Error) => void
   },
 ): Promise<void> {
-  const { threadId, traceEnabled, onToken, onTrace, onThreadId, onDone, onError } = options
+  const { threadId, traceEnabled, onToken, onReasoning, onTrace, onThreadId, onDone, onError } =
+    options
 
   const body: { message: string; thread_id?: string } = { message }
   if (threadId) {
@@ -217,13 +227,27 @@ export async function sendStreamRequest(
       buffer = lines.pop() || ''
 
       for (const line of lines) {
-        parseSseDataLine(line, onToken, onThreadId, traceEnabled ? onTrace : undefined, onError)
+        parseSseDataLine(
+          line,
+          onToken,
+          onThreadId,
+          traceEnabled ? onTrace : undefined,
+          onError,
+          onReasoning,
+        )
       }
     }
 
     if (buffer.trim()) {
       for (const line of buffer.split('\n')) {
-        parseSseDataLine(line, onToken, onThreadId, traceEnabled ? onTrace : undefined, onError)
+        parseSseDataLine(
+          line,
+          onToken,
+          onThreadId,
+          traceEnabled ? onTrace : undefined,
+          onError,
+          onReasoning,
+        )
       }
     }
   } catch (err) {

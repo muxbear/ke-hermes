@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { Bot, Wrench, ChevronDown, ChevronRight, Loader } from 'lucide-vue-next'
+import { Bot, Wrench, ChevronDown, ChevronRight, Loader, Network } from 'lucide-vue-next'
 import type { TraceEntry } from '@/types/chat'
 
 const props = defineProps<{
@@ -15,9 +15,12 @@ const agentNames = computed(() => {
   const names = new Set<string>()
   for (const t of props.traces) {
     if (t.agent) names.add(t.agent)
+    if (t.type === 'subagent_start') names.add(t.name)
   }
   return [...names]
 })
+
+const subagentCount = computed(() => props.traces.filter((t) => t.type === 'subagent_start').length)
 
 // Track which tool names have been ended
 const endedTools = computed(() => {
@@ -28,20 +31,44 @@ const endedTools = computed(() => {
   return ended
 })
 
+// Track which subagents have been ended
+const endedSubagents = computed(() => {
+  const ended = new Set<string>()
+  for (const t of props.traces) {
+    if (t.type === 'subagent_end') ended.add(t.name)
+  }
+  return ended
+})
+
 function typeLabel(entry: TraceEntry): string {
   switch (entry.type) {
-    case 'agent_start': return '开始处理'
-    case 'agent_end': return '处理完成'
+    case 'agent_start':
+      return '开始处理'
+    case 'agent_end':
+      return '处理完成'
+    case 'subagent_start':
+      if (!props.streaming && !endedSubagents.value.has(entry.name)) return '委派失败'
+      return '委派中...'
+    case 'subagent_end':
+      if (entry.status === 'failed') return '委派失败'
+      if (entry.status === 'interrupted') return '委派中断'
+      return '委派完成'
     case 'tool_start':
       if (!props.streaming && !endedTools.value.has(entry.name)) return '执行失败'
       return '调用中...'
-    case 'tool_end': return '已完成'
-    default: return entry.type
+    case 'tool_end':
+      return '已完成'
+    default:
+      return entry.type
   }
 }
 
 function isToolActive(entry: TraceEntry): boolean {
   return entry.type === 'tool_start' && props.streaming && !endedTools.value.has(entry.name)
+}
+
+function isSubagentActive(entry: TraceEntry): boolean {
+  return entry.type === 'subagent_start' && props.streaming && !endedSubagents.value.has(entry.name)
 }
 
 const expandedOutputs = ref<Set<number>>(new Set())
@@ -65,6 +92,7 @@ function truncate(s: string, maxLen = 200): string {
       <Wrench :size="14" />
       <span class="trace-summary">
         <template v-if="agentNames.length">{{ agentNames.join(', ') }} · </template>
+        <template v-if="subagentCount">{{ subagentCount }} 个子智能体 · </template>
         {{ toolCount }} 个工具调用
       </span>
       <ChevronDown v-if="!collapsed" :size="14" class="chevron" />
@@ -72,18 +100,24 @@ function truncate(s: string, maxLen = 200): string {
     </div>
 
     <div v-if="!collapsed" class="trace-entries">
-      <div
-        v-for="entry in traces"
-        :key="entry.id"
-        class="trace-entry"
-        :class="entry.type"
-      >
+      <div v-for="entry in traces" :key="entry.id" class="trace-entry" :class="entry.type">
         <div class="trace-entry-row">
-          <Bot v-if="entry.type === 'agent_start' || entry.type === 'agent_end'" :size="12" class="trace-icon agent-icon" />
+          <Bot
+            v-if="entry.type === 'agent_start' || entry.type === 'agent_end'"
+            :size="12"
+            class="trace-icon agent-icon"
+          />
+          <Network
+            v-else-if="entry.type === 'subagent_start' || entry.type === 'subagent_end'"
+            :size="12"
+            class="trace-icon subagent-icon"
+          />
           <Wrench v-else :size="12" class="trace-icon tool-icon" />
-          <span class="trace-name">{{ entry.type.startsWith('agent') ? entry.name : `${entry.name}` }}</span>
+          <span class="trace-name">{{
+            entry.type.startsWith('agent') ? entry.name : `${entry.name}`
+          }}</span>
           <span class="trace-status" :class="entry.type">{{ typeLabel(entry) }}</span>
-          <Loader v-if="isToolActive(entry)" :size="10" class="spin" />
+          <Loader v-if="isToolActive(entry) || isSubagentActive(entry)" :size="10" class="spin" />
         </div>
 
         <div v-if="entry.input" class="trace-detail" @click="toggleOutput(entry.id)">
@@ -160,6 +194,10 @@ function truncate(s: string, maxLen = 200): string {
   color: #7c3aed;
 }
 
+.subagent-icon {
+  color: #0891b2;
+}
+
 .tool-icon {
   color: #d97706;
 }
@@ -182,6 +220,12 @@ function truncate(s: string, maxLen = 200): string {
 .trace-status.agent_end {
   background: rgba(124, 58, 237, 0.12);
   color: #6d28d9;
+}
+
+.trace-status.subagent_start,
+.trace-status.subagent_end {
+  background: rgba(8, 145, 178, 0.12);
+  color: #0e7490;
 }
 
 .trace-detail {
@@ -211,7 +255,11 @@ function truncate(s: string, maxLen = 200): string {
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

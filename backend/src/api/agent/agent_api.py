@@ -1,8 +1,8 @@
+import asyncio
 import json
 import logging
-from typing import Any, cast
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
@@ -85,6 +85,7 @@ async def chat(
 @router.post("/chat/stream")
 async def chat_stream(
     req: ChatRequest,
+    request: Request,
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db)):
     is_new = not req.thread_id
@@ -97,51 +98,125 @@ async def chat_stream(
     )
 
     async def event_generator():
-        chain_names: list[str] = []
+        queue: asyncio.Queue[dict | None] = asyncio.Queue()
+
+        async def consume_all() -> None:
+            try:
+                stream = await get_graph().astream_events(
+                    {"messages": [HumanMessage(content=req.message)]},
+                    config=config,
+                    context=context,
+                    version="v3",
+                )
+
+                async def consume_messages() -> None:
+                    async for message in stream.messages:
+                        async for delta in message.reasoning:
+                            await queue.put({"reasoning": delta})
+                        async for delta in message.text:
+                            await queue.put({"token": delta})
+
+                async def consume_tool_calls() -> None:
+                    async for call in stream.tool_calls:
+                        input_str = json.dumps(call.input, ensure_ascii=False, default=str)
+                        await queue.put({
+                            "trace": {
+                                "type": "tool_start",
+                                "name": call.tool_name,
+                                "agent": "main",
+                                "input": input_str,
+                            }
+                        })
+                        async for delta in call.output_deltas:
+                            await queue.put({"token": str(delta)})
+                        output_str = str(call.output) if call.output is not None else ""
+                        error_str = str(call.error) if call.error is not None else ""
+                        await queue.put({
+                            "trace": {
+                                "type": "tool_end",
+                                "name": call.tool_name,
+                                "agent": "main",
+                                "output": error_str or output_str,
+                            }
+                        })
+
+                async def consume_subagents() -> None:
+                    async for subagent in stream.subagents:
+                        await queue.put({
+                            "trace": {
+                                "type": "subagent_start",
+                                "name": subagent.name,
+                            }
+                        })
+                        try:
+                            async for message in subagent.messages:
+                                async for delta in message.reasoning:
+                                    await queue.put({"reasoning": delta})
+                                async for delta in message.text:
+                                    await queue.put({"token": delta})
+                        except Exception as e:
+                            subagent_error = getattr(subagent, "error", None) or str(e)
+                            subagent_status = getattr(subagent, "status", "failed")
+                            logger.warning(
+                                "Subagent '%s' failed — status=%s, error=%s",
+                                subagent.name, subagent_status, subagent_error,
+                            )
+                            await queue.put({
+                                "trace": {
+                                    "type": "subagent_end",
+                                    "name": subagent.name,
+                                    "status": subagent_status,
+                                    "error": subagent_error,
+                                }
+                            })
+                            continue
+                        await queue.put({
+                            "trace": {
+                                "type": "subagent_end",
+                                "name": subagent.name,
+                                "status": subagent.status,
+                            }
+                        })
+
+                results = await asyncio.gather(
+                    consume_messages(), consume_tool_calls(), consume_subagents(),
+                    return_exceptions=True,
+                )
+                for result in results:
+                    if isinstance(result, BadRequestError):
+                        raise result
+                    if isinstance(result, BaseException):
+                        logger.warning("Stream consumer aborted: %s", result)
+            except BadRequestError as e:
+                logger.warning("Model returned BadRequestError in stream: %s", e)
+                await queue.put({"error": "抱歉，您的请求被模型安全审核拦截，请尝试换一种表述方式。"})
+            except Exception:
+                logger.exception("Agent stream encountered an unhandled error")
+                await queue.put({"error": "抱歉，服务处理您的请求时发生了错误，请稍后重试。"})
+            finally:
+                await queue.put(None)
+
+        consumer = asyncio.create_task(consume_all())
 
         try:
-            async for event in get_graph().astream_events(
-                {"messages": [HumanMessage(content=req.message)]},
-                config=config,
-                context=context,
-                version="v2",
-            ):
-                kind = event["event"]
-                name = event.get("name", "")
+            while True:
+                try:
+                    item = await asyncio.wait_for(queue.get(), timeout=0.5)
+                except TimeoutError:
+                    if await request.is_disconnected():
+                        logger.info("Client disconnected, cancelling agent stream")
+                        consumer.cancel()
+                        break
+                    continue
+                if item is None:
+                    break
+                yield f"data: {json.dumps(item, ensure_ascii=False)}\n\n"
+        except asyncio.CancelledError:
+            logger.info("Stream generator cancelled, cleaning up consumer")
+            consumer.cancel()
+            raise
 
-                if kind == "on_chat_model_stream":
-                    token = cast(Any, event["data"])["chunk"].text
-                    if token:
-                        yield f"data: {json.dumps({'token': token})}\n\n"
-
-                elif kind == "on_chain_start":
-                    if name and not name.startswith(("LangGraph", "Runnable", "Channel")):
-                        chain_names.append(name)
-                        yield f"data: {json.dumps({'trace': {'type': 'agent_start', 'name': name}})}\n\n"
-
-                elif kind == "on_chain_end":
-                    if chain_names and name == chain_names[-1]:
-                        chain_names.pop()
-                        yield f"data: {json.dumps({'trace': {'type': 'agent_end', 'name': name}})}\n\n"
-
-                elif kind == "on_tool_start":
-                    parent_agent = chain_names[-1] if chain_names else "main"
-                    tool_input = event["data"].get("input", {})
-                    input_str = json.dumps(tool_input, ensure_ascii=False, default=str)
-                    yield f"data: {json.dumps({'trace': {'type': 'tool_start', 'name': name, 'agent': parent_agent, 'input': input_str}})}\n\n"
-
-                elif kind == "on_tool_end":
-                    parent_agent = chain_names[-1] if chain_names else "main"
-                    tool_output = event["data"].get("output", "")
-                    output_str = str(tool_output) if tool_output is not None else ""
-                    yield f"data: {json.dumps({'trace': {'type': 'tool_end', 'name': name, 'agent': parent_agent, 'output': output_str}})}\n\n"
-        except BadRequestError as e:
-            logger.warning("Model returned BadRequestError in stream: %s", e)
-            yield f"data: {json.dumps({'error': '抱歉，您的请求被模型安全审核拦截，请尝试换一种表述方式。'})}\n\n"
-        except Exception:
-            logger.exception("Agent stream encountered an unhandled error")
-            error_msg = "抱歉，服务处理您的请求时发生了错误，请稍后重试。"
-            yield f"data: {json.dumps({'error': error_msg})}\n\n"
+        await consumer
 
         yield f"data: {json.dumps({'thread_id': thread_id})}\n\n"
 

@@ -1,10 +1,13 @@
 """Tavily 网络搜索系统工具，支持深度搜索、时间范围过滤、AI 摘要等功能。"""
 
+import logging
 from typing import Any, Literal, cast
 
 from tavily import TavilyClient
 
 from agent.config import settings
+
+logger = logging.getLogger(__name__)
 
 _tavily_client = TavilyClient(api_key=settings.TAVILY_API_KEY)
 
@@ -48,25 +51,34 @@ def tavily_search(
     elif max_results > 20:
         max_results = 20
 
-    if time_range:
-        result = _tavily_client.search(
-            query=query,
-            search_depth=search_depth,  # type: ignore[arg-type]
-            topic=topic,  # type: ignore[arg-type]
-            time_range=cast(Literal["day", "week", "month", "year"], time_range),
-            max_results=max_results,
-            include_answer=include_answer,
-            include_raw_content=include_raw_content,
-        )
-    else:
-        result = _tavily_client.search(
-            query=query,
-            search_depth=search_depth,  # type: ignore[arg-type]
-            topic=topic,  # type: ignore[arg-type]
-            max_results=max_results,
-            include_answer=include_answer,
-            include_raw_content=include_raw_content,
-        )
+    try:
+        if time_range:
+            result = _tavily_client.search(
+                query=query,
+                search_depth=search_depth,  # type: ignore[arg-type]
+                topic=topic,  # type: ignore[arg-type]
+                time_range=cast(Literal["day", "week", "month", "year"], time_range),
+                max_results=max_results,
+                include_answer=include_answer,
+                include_raw_content=include_raw_content,
+            )
+        else:
+            result = _tavily_client.search(
+                query=query,
+                search_depth=search_depth,  # type: ignore[arg-type]
+                topic=topic,  # type: ignore[arg-type]
+                max_results=max_results,
+                include_answer=include_answer,
+                include_raw_content=include_raw_content,
+            )
+    except Exception as e:
+        logger.warning("Tavily search failed for query '%s': %s", query, e)
+        return {
+            "query": query,
+            "results": [],
+            "answer": "",
+            "error": f"搜索服务暂时不可用：{e}",
+        }
 
     # 补充 query 信息，帮助 LLM 理解结果上下文
     result["query"] = result.get("query", query)
