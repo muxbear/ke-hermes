@@ -1,23 +1,21 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Request
 
 from api.deps import get_store
 from api.email.service import SendEmailRequest, send_email_code
-from core.response import error, ok
+from core.decorators import handle_errors, rate_limit
+from core.response import ok
 from core.store import KeyValueStore
 
 router = APIRouter(prefix="/api/email", tags=["email"])
 
 
 @router.post("/send")
+@rate_limit(max_calls=5, period_seconds=60, key_prefix="email")
+@handle_errors
 async def send(
     req: SendEmailRequest,
+    request: Request,
     store: KeyValueStore = Depends(get_store),
 ):
-    try:
-        result = await send_email_code(req, store)
-        return ok(result)
-    except HTTPException as e:
-        if hasattr(e, "status_code"):
-            return error(e.status_code, e.detail)
-    except Exception as e:
-        raise
+    result = await send_email_code(req, store)
+    return ok(result)

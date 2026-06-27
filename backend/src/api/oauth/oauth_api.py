@@ -1,42 +1,33 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.auth.schemas import AuthResponse
 from api.deps import get_db, get_store
 from api.oauth.schemas import OAuthCallbackRequest
 from api.oauth.service import get_auth_url, handle_callback
-from core.response import ApiResponse, error, ok
+from core.decorators import handle_errors
+from core.response import ApiResponse, ok
 from core.store import KeyValueStore
 
 router = APIRouter(prefix="/api/oauth", tags=["oauth"])
 
 
 @router.get("/auth-url")
+@handle_errors
 async def auth_url(
     provider: str,
     store: KeyValueStore = Depends(get_store),
 ):
-    try:
-        url = await get_auth_url(provider, store)
-        return ok({"authUrl": url})
-    except HTTPException as e:
-        if hasattr(e, "status_code"):
-            return error(e.status_code, e.detail)
-    except Exception as e:
-        raise
+    url = await get_auth_url(provider, store)
+    return ok({"authUrl": url})
 
 
 @router.post("/callback", response_model=ApiResponse[AuthResponse])
+@handle_errors
 async def callback(
     req: OAuthCallbackRequest,
     db: AsyncSession = Depends(get_db),
     store: KeyValueStore = Depends(get_store),
 ):
-    try:
-        result = await handle_callback(req.provider, req.code, req.state, store, db)
-        return ok(result)
-    except HTTPException as e:
-        if hasattr(e, "status_code"):
-            return error(e.status_code, e.detail)
-    except Exception as e:
-        raise
+    result = await handle_callback(req.provider, req.code, req.state, store, db)
+    return ok(result)

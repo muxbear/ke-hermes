@@ -1,5 +1,7 @@
 """知识库业务逻辑——CRUD + 统计。"""
 
+from __future__ import annotations
+
 import logging
 from datetime import datetime
 
@@ -200,12 +202,15 @@ async def delete_kb(
     kb_id: str,
     user_id: str,
     vector_store: BaseVectorStore | None = None,
+    mediator: "KnowledgeBaseMediator | None" = None,
 ) -> None:
     """删除知识库——级联删除文档、实体、关系和向量数据。"""
     kb = await _get_kb_or_404(db, kb_id, user_id)
 
-    # Delete vector DB collection
-    if vector_store:
+    # 向量库清理（优先使用中介者）
+    if mediator:
+        await mediator.on_knowledge_base_deleted(kb_id)
+    elif vector_store:
         try:
             await vector_store.delete_collection(kb_id)
         except Exception as e:

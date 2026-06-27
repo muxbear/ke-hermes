@@ -136,6 +136,60 @@ def retry(max_attempts: int = 3, backoff_factor: float = 2.0):
     return decorator
 
 
+def rate_limit(max_calls: int = 5, period_seconds: int = 60, key_prefix: str = "rate_limit"):
+    """请求频率限制装饰器——基于 KeyValueStore 的滑动窗口计数器。
+
+    使用方式:
+        @rate_limit(max_calls=5, period_seconds=60, key_prefix="sms")
+        async def send_sms(...): ...
+
+    按 IP + 函数名生成唯一 key，超过限制返回 429。
+    """
+
+    def decorator(fn: AsyncFunc) -> AsyncFunc:
+        @functools.wraps(fn)
+        async def wrapper(*args: Any, **kwargs: Any) -> Any:
+            from fastapi import HTTPException, Request
+
+            from api.deps import get_store
+
+            # 提取请求对象（约定第一个位置参数或 kwargs 中名为 request 的参数）
+            request: Request | None = None
+            for arg in args:
+                if isinstance(arg, Request):
+                    request = arg
+                    break
+            if request is None:
+                request = kwargs.get("request")
+
+            if request is not None:
+                try:
+                    store = await get_store()
+                except Exception:
+                    return await fn(*args, **kwargs)
+
+                client_ip = request.client.host if request.client else "unknown"
+                rate_key = f"{key_prefix}:{fn.__name__}:{client_ip}"
+                current = await store.get(rate_key)
+                count = int(current) if current else 0
+
+                if count >= max_calls:
+                    raise HTTPException(
+                        status_code=429,
+                        detail=f"Rate limit exceeded. Try again in {period_seconds}s.",
+                    )
+
+                if count == 0:
+                    await store.set(rate_key, "1", ttl=period_seconds)
+                else:
+                    await store.incr(rate_key)
+
+            return await fn(*args, **kwargs)
+
+        return wrapper  # type: ignore[return-value]
+    return decorator
+
+
 def log_call(level: int = logging.DEBUG):
     """自动函数调用日志装饰器。
 

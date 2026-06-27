@@ -568,6 +568,7 @@ async def get_document(
 async def delete_document(
     db: AsyncSession, kb_id: str, doc_id: str, user_id: str,
     vector_store: BaseVectorStore | None = None,
+    mediator: "KnowledgeBaseMediator | None" = None,
 ) -> None:
     """删除文档——级联删除向量数据、源文件和图谱数据。"""
     from api.knowledge_base.service import _get_kb_or_404
@@ -586,17 +587,18 @@ async def delete_document(
 
     was_indexed = doc.status == "indexed"
 
-    # 从向量数据库删除
-    if vector_store:
-        try:
-            await vector_store.delete_by_doc_id(kb_id, doc_id)
-        except Exception as e:
-            logger.error("删除文档 %s 向量数据失败: %s", doc_id, e)
-
-    # 删除源文件
-    storage_dir = os.path.dirname(doc.storage_path)
-    if os.path.isdir(storage_dir):
-        shutil.rmtree(storage_dir, ignore_errors=True)
+    # 向量库 + 文件系统清理（优先使用中介者）
+    if mediator:
+        await mediator.on_document_deleted(kb_id, doc_id, doc.storage_path)
+    else:
+        if vector_store:
+            try:
+                await vector_store.delete_by_doc_id(kb_id, doc_id)
+            except Exception as e:
+                logger.error("删除文档 %s 向量数据失败: %s", doc_id, e)
+        storage_dir = os.path.dirname(doc.storage_path)
+        if os.path.isdir(storage_dir):
+            shutil.rmtree(storage_dir, ignore_errors=True)
 
     # 更新知识库统计
     kb.docs_count = max(0, (kb.docs_count or 0) - 1)

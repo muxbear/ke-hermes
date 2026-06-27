@@ -7,9 +7,6 @@ from api.deps import get_current_user_id, get_db
 from api.knowledge_base.schemas import (
     IndexConfigSchema,
     KBCreateRequest,
-    KBListResponse,
-    KBResponse,
-    KBStatsResponse,
     KBUpdateRequest,
 )
 from api.knowledge_base.service import (
@@ -22,6 +19,8 @@ from api.knowledge_base.service import (
     reindex_kb,
     update_kb,
 )
+from core.decorators import handle_errors
+from core.response import ok
 
 router = APIRouter(prefix="/api/knowledge-bases", tags=["知识库"])
 
@@ -31,7 +30,13 @@ def _get_vector_store(request: Request):
     return getattr(request.app.state, "vector_store", None)
 
 
+def _get_mediator(request: Request):
+    """从 app state 获取知识库中介者。"""
+    return getattr(request.app.state, "kb_mediator", None)
+
+
 @router.get("", response_model=dict)
+@handle_errors
 async def list_knowledge_bases(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=12, ge=1, le=100),
@@ -41,24 +46,22 @@ async def list_knowledge_bases(
 ):
     """获取知识库列表（分页 + 模糊搜索）。"""
     result = await list_kbs(db, user_id, page=page, page_size=page_size, search=search)
-    return {
-        "code": 0,
-        "data": result.model_dump(),
-        "message": "ok",
-    }
+    return ok(result)
 
 
 @router.get("/stats", response_model=dict)
+@handle_errors
 async def get_stats(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(get_current_user_id),
 ):
     """获取知识库统计信息。"""
     result = await get_kb_stats(db, user_id)
-    return {"code": 0, "data": result.model_dump(), "message": "ok"}
+    return ok(result)
 
 
 @router.get("/available-models", response_model=dict)
+@handle_errors
 async def get_available_models(
     model_type: str = "llm",
     provider_id: str | None = Query(default=None),
@@ -93,10 +96,11 @@ async def get_available_models(
         }
         for m in rows
     ]
-    return {"code": 0, "data": models, "message": "ok"}
+    return ok(models)
 
 
 @router.get("/available-providers", response_model=dict)
+@handle_errors
 async def get_available_providers(
     model_type: str = Query(default="llm"),
     db: AsyncSession = Depends(get_db),
@@ -119,7 +123,7 @@ async def get_available_providers(
     provider_ids = (await db.execute(sub_stmt)).scalars().all()
 
     if not provider_ids:
-        return {"code": 0, "data": [], "message": "ok"}
+        return ok([])
 
     # 查出这些 provider
     prov_stmt = select(Provider).where(Provider.id.in_(provider_ids))
@@ -152,10 +156,11 @@ async def get_available_providers(
         }
         for p in providers
     ]
-    return {"code": 0, "data": result, "message": "ok"}
+    return ok(result)
 
 
 @router.post("", response_model=dict, status_code=201)
+@handle_errors
 async def create_knowledge_base(
     body: KBCreateRequest,
     request: Request,
@@ -166,10 +171,11 @@ async def create_knowledge_base(
     vector_store = _get_vector_store(request)
     result = await create_kb(db, user_id, body, vector_store)
     await db.commit()
-    return {"code": 0, "data": result.model_dump(), "message": "ok"}
+    return ok(result)
 
 
 @router.get("/{kb_id}", response_model=dict)
+@handle_errors
 async def get_knowledge_base(
     kb_id: str,
     db: AsyncSession = Depends(get_db),
@@ -177,10 +183,11 @@ async def get_knowledge_base(
 ):
     """获取知识库详情。"""
     result = await get_kb(db, kb_id, user_id)
-    return {"code": 0, "data": result.model_dump(), "message": "ok"}
+    return ok(result)
 
 
 @router.put("/{kb_id}", response_model=dict)
+@handle_errors
 async def update_knowledge_base(
     kb_id: str,
     body: KBUpdateRequest,
@@ -190,10 +197,11 @@ async def update_knowledge_base(
     """更新知识库。"""
     result = await update_kb(db, kb_id, user_id, body)
     await db.commit()
-    return {"code": 0, "data": result.model_dump(), "message": "ok"}
+    return ok(result)
 
 
 @router.delete("/{kb_id}", response_model=dict)
+@handle_errors
 async def delete_knowledge_base(
     kb_id: str,
     request: Request,
@@ -202,12 +210,14 @@ async def delete_knowledge_base(
 ):
     """删除知识库。"""
     vector_store = _get_vector_store(request)
-    await delete_kb(db, kb_id, user_id, vector_store)
+    mediator = _get_mediator(request)
+    await delete_kb(db, kb_id, user_id, vector_store, mediator=mediator)
     await db.commit()
-    return {"code": 0, "data": None, "message": "ok"}
+    return ok(None)
 
 
 @router.get("/{kb_id}/indexing-activity", response_model=dict)
+@handle_errors
 async def get_index_activity(
     kb_id: str,
     limit: int = Query(default=5, ge=1, le=50),
@@ -216,10 +226,11 @@ async def get_index_activity(
 ):
     """获取最近索引活动。"""
     result = await get_indexing_activity(db, kb_id, user_id, limit)
-    return {"code": 0, "data": result, "message": "ok"}
+    return ok(result)
 
 
 @router.post("/{kb_id}/reindex", response_model=dict)
+@handle_errors
 async def reindex_knowledge_base(
     kb_id: str,
     request: Request,
@@ -240,4 +251,4 @@ async def reindex_knowledge_base(
         scheduler=scheduler,
     )
     await db.commit()
-    return {"code": 0, "data": result, "message": "ok"}
+    return ok(result)

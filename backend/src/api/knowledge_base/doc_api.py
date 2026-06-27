@@ -26,6 +26,11 @@ def _get_vector_store(request: Request):
     return getattr(request.app.state, "vector_store", None)
 
 
+def _get_mediator(request: Request):
+    """从 app state 获取知识库中介者。"""
+    return getattr(request.app.state, "kb_mediator", None)
+
+
 @router.post("/{kb_id}/documents/upload", response_model=dict)
 async def upload_docs(
     kb_id: str,
@@ -94,7 +99,8 @@ async def delete_doc(
 ):
     """删除文档。"""
     vector_store = _get_vector_store(request)
-    await delete_document(db, kb_id, doc_id, user_id, vector_store)
+    mediator = _get_mediator(request)
+    await delete_document(db, kb_id, doc_id, user_id, vector_store, mediator=mediator)
     await db.commit()
     return {"code": 0, "data": None, "message": "ok"}
 

@@ -26,104 +26,13 @@ from db.engine import init_db
 from agent.graph import init_graph, shutdown_graph
 
 
-def _init_knowledge_base(app: FastAPI) -> None:
-    """初始化知识库向量存储和索引调度器，挂载到 app.state。"""
+async def _init_knowledge_base(app: FastAPI) -> None:
+    """初始化知识库子系统——委托给 KnowledgeBaseFacade。"""
     from agent.config import settings
-    from core.rag.vector_store import BaseVectorStore, MilvusVectorStore
-    from core.rag.loaders import create_default_loader_registry
-    from core.rag.splitters import create_chunk_registry
-    from core.rag.embedding import get_embedding_model
-    from api.knowledge_base.graph_service import GraphExtractionService
-    from api.knowledge_base.doc_service import (
-        DatabaseProgressObserver,
-        IndexingPipeline,
-        IndexingScheduler,
-        LoggingProgressObserver,
-    )
+    from api.knowledge_base.facade import KnowledgeBaseFacade
 
-    kb_logger = logging.getLogger(__name__)
-
-    # 嵌入模型（从环境变量配置读取）
-    embedding_model = get_embedding_model(
-        model_name=settings.DEFAULT_EMBEDDING_MODEL,
-        api_base=settings.DASHSCOPE_BASE_URL,
-        api_key=settings.DASHSCOPE_API_KEY,
-    )
-
-    # 向量数据库 —— 支持 milvus / chroma
-    vector_store: BaseVectorStore | None = None
-    if settings.VECTOR_DB_BACKEND == "milvus":
-        try:
-            vector_store = MilvusVectorStore(
-                uri=settings.MILVUS_URI,
-                user=settings.MILVUS_USER,
-                password=settings.MILVUS_PASSWORD,
-                db_name=settings.MILVUS_DEFAULT_DB,
-            )
-            kb_logger.info("向量数据库: Milvus (%s, db=%s)",
-                         settings.MILVUS_URI, settings.MILVUS_DEFAULT_DB)
-        except Exception as e:
-            kb_logger.error("Milvus 初始化失败: %s", e)
-            raise
-    elif settings.VECTOR_DB_BACKEND == "chroma":
-        from core.rag.vector_store import ChromaVectorStore
-        vector_store = ChromaVectorStore(
-            host=settings.CHROMA_HOST,
-            port=settings.CHROMA_PORT,
-            persist_dir=settings.CHROMA_PERSIST_DIR,
-        )
-        kb_logger.info("向量数据库: Chroma (persist_dir=%s)", settings.CHROMA_PERSIST_DIR)
-    else:
-        raise RuntimeError(f"不支持的向量数据库后端: {settings.VECTOR_DB_BACKEND}")
-
-    app.state.vector_store = vector_store
-
-    # 文档加载器注册表
-    loader_registry = create_default_loader_registry()
-
-    # 切片策略注册表（语义策略需要嵌入模型）
-    chunk_registry = create_chunk_registry({}, embedding_model=embedding_model)
-
-    # 图谱抽取服务
-    graph_service = GraphExtractionService()
-
-    # 索引流水线
-    pipeline = IndexingPipeline(
-        loader_registry=loader_registry,
-        chunk_registry=chunk_registry,
-        embedding_model=embedding_model,
-        vector_store=vector_store,
-        graph_service=graph_service,
-    )
-
-    # 进度观察者
-    from db.engine import async_session
-    pipeline.attach(DatabaseProgressObserver(async_session))
-    pipeline.attach(LoggingProgressObserver())
-
-    # 索引调度器（单例）
-    scheduler = IndexingScheduler(
-        pipeline=pipeline,
-        max_concurrent=settings.INDEXING_MAX_CONCURRENT,
-    )
-    app.state.scheduler = scheduler
-    kb_logger.info(
-        "索引调度器已初始化 (max_concurrent=%d)", settings.INDEXING_MAX_CONCURRENT
-    )
-
-    # 检索编排器（策略模式：vector / bm25 / hybrid）
-    from api.knowledge_base.search_service import (
-        SearchOrchestrator,
-        set_search_orchestrator,
-    )
-
-    search_orchestrator = SearchOrchestrator(
-        vector_store=vector_store,
-        embedding_model=embedding_model,
-    )
-    app.state.search_orchestrator = search_orchestrator
-    set_search_orchestrator(search_orchestrator)
-    kb_logger.info("检索编排器已初始化 (modes: %s)", search_orchestrator._registry.supported_modes)
+    facade = KnowledgeBaseFacade(settings)
+    await facade.initialize(app)
 
 
 @asynccontextmanager
@@ -155,7 +64,7 @@ async def lifespan(app: FastAPI):
     init_jwt()
 
     # 初始化知识库子系统
-    _init_knowledge_base(app)
+    await _init_knowledge_base(app)
 
     yield
     await shutdown_graph()

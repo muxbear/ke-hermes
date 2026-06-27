@@ -16,6 +16,7 @@ from api.captcha.service import (
     verify_slide,
 )
 from api.deps import get_store
+from core.decorators import handle_errors
 from core.response import ApiResponse, error, ok
 from core.store import KeyValueStore
 
@@ -40,6 +41,7 @@ def _get_session_id(request: Request, response: Response) -> str:
 
 
 @router.get("/slide", response_model=ApiResponse[SlidePuzzleData])
+@handle_errors
 async def get_slide(
     request: Request,
     response: Response,
@@ -51,6 +53,7 @@ async def get_slide(
 
 
 @router.post("/slide/verify", response_model=ApiResponse[SlideVerifyResponse])
+@handle_errors
 async def verify_slide_route(
     req: SlideVerifyRequest,
     request: Request,
@@ -65,12 +68,14 @@ async def verify_slide_route(
 
 
 @router.get("/image", response_model=ApiResponse[ImageCaptchaData])
+@handle_errors
 async def get_image(store: KeyValueStore = Depends(get_store)):
     data = await generate_image_captcha(store)
     return ok(data)
 
 
 @router.post("/image/verify")
+@handle_errors
 async def verify_image_route(
     req: ImageVerifyRequest,
     store: KeyValueStore = Depends(get_store),
