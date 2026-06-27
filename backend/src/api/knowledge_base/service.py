@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 
+from typing import TYPE_CHECKING
+
 from fastapi import HTTPException
 from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,6 +21,9 @@ from api.knowledge_base.schemas import (
 )
 from core.rag.vector_store import BaseVectorStore
 from db.models.knowledge_base import KnowledgeBase
+
+if TYPE_CHECKING:
+    from api.knowledge_base.mediator import KnowledgeBaseMediator
 
 logger = logging.getLogger(__name__)
 

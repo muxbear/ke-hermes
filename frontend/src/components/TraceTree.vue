@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { Bot, Wrench, ChevronDown, ChevronRight, Loader } from 'lucide-vue-next'
 import { marked } from 'marked'
 import type { ExecutionBlock } from '@/types/chat'
-import ToolCard from './ToolCard.vue'
+import ToolCallCard from './ToolCallCard.vue'
 import AgentCard from './AgentCard.vue'
 
 const props = defineProps<{
@@ -20,7 +20,7 @@ function renderMarkdown(text: string): string {
   <div class="trace-tree">
     <template v-for="(block, idx) in blocks" :key="idx">
       <div v-if="block.type === 'text'" class="markdown-body" v-html="renderMarkdown(block.content)" />
-      <ToolCard v-else-if="block.type === 'tool_call'" :tool="block.toolCall" />
+      <ToolCallCard v-else-if="block.type === 'tool_call'" :tool="block.toolCall" />
       <AgentCard v-else-if="block.type === 'sub_agent'" :agent="block.subAgent" />
     </template>
   </div>

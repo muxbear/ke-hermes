@@ -37,6 +37,7 @@ async def _init_knowledge_base(app: FastAPI) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # 初始化数据库
     await init_db()
 
     # 首次启动时种子化 MCP 工具和内置技能

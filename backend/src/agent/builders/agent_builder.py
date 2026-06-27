@@ -98,6 +98,7 @@ class AgentBuilder:
         """通过共享的 resolve_model 解析 LLM 实例。"""
         if self._agent_info is None:
             raise RuntimeError("必须先调用 with_agent_from_db()")
+            
         self._model = await resolve_model(
             self._agent_info.provider_id,
             self._agent_info.model_id,
@@ -109,6 +110,7 @@ class AgentBuilder:
         """将工具名称解析为可调用函数。"""
         if self._agent_info is None:
             raise RuntimeError("必须先调用 with_agent_from_db()")
+
         tool_registry = get_tool_registry()
         for name in self._agent_info.tools:
             fn = tool_registry.get(name)

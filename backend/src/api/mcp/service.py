@@ -1,4 +1,4 @@
-"""Business logic for MCP marketplace operations."""
+"""MCP 广场业务逻辑：工具列表、安装、卸载与种子数据。"""
 
 import json
 import logging
@@ -33,7 +33,7 @@ def _tool_to_response(
     installs: int = 0,
     installed: bool = False,
 ) -> McpToolResponse:
-    """Convert an ORM McpTool instance to a McpToolResponse with computed fields."""
+    """将 ORM McpTool 实例转换为包含计算字段的 McpToolResponse。"""
     return McpToolResponse(
         id=tool.id,
         name=tool.name,
@@ -63,8 +63,8 @@ async def list_mcp_tools(
     search: str | None = None,
     sort: str | None = "popular",
 ) -> list[McpToolResponse]:
-    """List all MCP tools with optional filters, per-user install state, and install counts."""
-    # Subquery: install counts per tool
+    """列出所有 MCP 工具，支持可选筛选、当前用户安装状态和安装数量。"""
+    # 子查询：每个工具的安装数量
     install_count_subq = (
         select(
             McpInstallation.mcp_tool_id,
@@ -74,14 +74,14 @@ async def list_mcp_tools(
         .subquery()
     )
 
-    # Subquery: tool IDs installed by the current user
+    # 子查询：当前用户已安装的工具 ID
     installed_subq = (
         select(McpInstallation.mcp_tool_id)
         .where(McpInstallation.user_id == user_id)
         .subquery()
     )
 
-    # Main query with computed columns
+    # 主查询，带计算列
     stmt = select(
         McpTool,
         func.coalesce(install_count_subq.c.install_count, 0).label("installs"),
@@ -94,11 +94,11 @@ async def list_mcp_tools(
         McpTool.id == install_count_subq.c.mcp_tool_id,
     )
 
-    # Apply category filter
+    # 按分类筛选
     if category:
         stmt = stmt.where(McpTool.category == category)
 
-    # Apply search filter (name, description, tags)
+    # 按关键字搜索（名称、描述、标签）
     if search:
         pattern = f"%{search}%"
         stmt = stmt.where(
@@ -107,12 +107,12 @@ async def list_mcp_tools(
             | func.cast(McpTool.tags, SQLiteJSON).like(pattern)
         )
 
-    # Apply sort
+    # 排序
     if sort == "rating":
         stmt = stmt.order_by(McpTool.rating.desc())
     elif sort == "recent":
         stmt = stmt.order_by(McpTool.created_at.desc())
-    else:  # "popular"
+    else:  # 默认按流行度排序
         stmt = stmt.order_by(
             func.coalesce(install_count_subq.c.install_count, 0).desc()
         )
@@ -129,8 +129,8 @@ async def get_mcp_tool(
     tool_id: str,
     user_id: str,
 ) -> McpToolResponse:
-    """Get a single MCP tool by ID with install count and user install state."""
-    # Install count
+    """根据 ID 获取单个 MCP 工具，含安装数量和当前用户安装状态。"""
+    # 安装数量
     install_count = (
         await db.execute(
             select(func.count())
@@ -139,7 +139,7 @@ async def get_mcp_tool(
         )
     ).scalar() or 0
 
-    # User install state
+    # 当前用户是否已安装
     user_installed = (
         await db.execute(
             select(McpInstallation.id).where(
@@ -149,12 +149,12 @@ async def get_mcp_tool(
         )
     ).scalar_one_or_none() is not None
 
-    # Tool record
+    # 查询工具记录
     tool = (
         await db.execute(select(McpTool).where(McpTool.id == tool_id))
     ).scalar_one_or_none()
     if tool is None:
-        raise HTTPException(status_code=404, detail="MCP tool not found")
+        raise HTTPException(status_code=404, detail="MCP 工具未找到")
 
     return _tool_to_response(tool, installs=install_count, installed=user_installed)
 
@@ -165,15 +165,15 @@ async def install_mcp_tool(
     mcp_id: str,
     config: dict | None = None,
 ) -> None:
-    """Install an MCP tool for the current user."""
-    # Verify tool exists
+    """为当前用户安装 MCP 工具。"""
+    # 校验工具是否存在
     tool = (
         await db.execute(select(McpTool).where(McpTool.id == mcp_id))
     ).scalar_one_or_none()
     if tool is None:
-        raise HTTPException(status_code=404, detail="MCP tool not found")
+        raise HTTPException(status_code=404, detail="MCP 工具未找到")
 
-    # Check for duplicate installation
+    # 检查是否已安装
     existing = (
         await db.execute(
             select(McpInstallation).where(
@@ -183,9 +183,9 @@ async def install_mcp_tool(
         )
     ).scalar_one_or_none()
     if existing is not None:
-        raise HTTPException(status_code=409, detail="Tool already installed")
+        raise HTTPException(status_code=409, detail="工具已安装")
 
-    # Create installation record
+    # 创建安装记录
     db.add(
         McpInstallation(
             id=str(uuid.uuid4()),
@@ -201,7 +201,7 @@ async def uninstall_mcp_tool(
     user_id: str,
     tool_id: str,
 ) -> None:
-    """Uninstall an MCP tool for the current user."""
+    """为当前用户卸载 MCP 工具。"""
     installation = (
         await db.execute(
             select(McpInstallation).where(
@@ -211,19 +211,19 @@ async def uninstall_mcp_tool(
         )
     ).scalar_one_or_none()
     if installation is None:
-        raise HTTPException(status_code=404, detail="Tool not installed")
+        raise HTTPException(status_code=404, detail="工具未安装")
     await db.delete(installation)
 
 
 async def seed_mcp_tools(db: AsyncSession) -> None:
-    """Seed mcp_tools from JSON file if the table is empty. Idempotent."""
+    """从 JSON 文件填充 mcp_tools 表，仅当表为空时执行，可重复调用。"""
     count = (await db.execute(select(func.count()).select_from(McpTool))).scalar() or 0
     if count > 0:
-        logger.info("MCP tools table has %d rows, skipping seed", count)
+        logger.info("MCP 工具表已有 %d 条记录，跳过种子数据", count)
         return
 
     if not os.path.isfile(_SEED_PATH):
-        logger.warning("MCP seed file not found: %s", _SEED_PATH)
+        logger.warning("MCP 种子文件未找到: %s", _SEED_PATH)
         return
 
     with open(_SEED_PATH, encoding="utf-8") as f:
@@ -248,4 +248,4 @@ async def seed_mcp_tools(db: AsyncSession) -> None:
             )
         )
     await db.flush()
-    logger.info("Seeded %d MCP tools", len(tools_data))
+    logger.info("已填充 %d 个 MCP 工具", len(tools_data))

@@ -1,4 +1,4 @@
-"""Tool CRUD business logic and seed data."""
+"""工具 CRUD 业务逻辑与种子数据。"""
 import logging
 
 from fastapi import HTTPException
@@ -16,7 +16,7 @@ from db.models.tool import Tool
 
 logger = logging.getLogger(__name__)
 
-# ── Category aliases for data compatibility ──────────────────────────────
+# ── 分类别名，用于数据兼容 ──────────────────────────────────────────────
 CATEGORY_ALIASES: dict[str, str] = {
     "code": "code",
     "network": "network",
@@ -30,7 +30,7 @@ CATEGORY_ALIASES: dict[str, str] = {
 
 
 def _tool_to_info(tool: Tool, agent_ids: list[str] | None = None) -> ToolInfo:
-    """Convert ORM Tool + optional agent IDs to a ToolInfo response."""
+    """将 ORM Tool 和可选的智能体 ID 列表转换为 ToolInfo 响应。"""
     return ToolInfo(
         id=tool.id,
         name=tool.name,
@@ -50,7 +50,7 @@ def _tool_to_info(tool: Tool, agent_ids: list[str] | None = None) -> ToolInfo:
 
 
 async def _get_agent_ids_for_tool(db: AsyncSession, tool_id: str) -> list[str]:
-    """Get the list of agent IDs that use this tool."""
+    """获取使用该工具的智能体 ID 列表。"""
     stmt = select(AgentTool.agent_id).where(AgentTool.tool_id == tool_id)
     rows = (await db.execute(stmt)).scalars().all()
     return list(rows)
@@ -65,7 +65,7 @@ async def list_tools(
     status: str | None = None,
     keyword: str | None = None,
 ) -> ToolListResponse:
-    """List tools with pagination and optional filters."""
+    """分页列出工具，支持可选筛选。"""
     offset = max(0, (page - 1) * page_size)
     page_size = max(1, min(page_size, 100))
 
@@ -109,7 +109,7 @@ async def list_tools(
 
 
 async def get_tool(db: AsyncSession, tool_id: str) -> ToolInfo:
-    """Get a single tool by ID."""
+    """按 ID 获取单个工具。"""
     stmt = select(Tool).where(Tool.id == tool_id)
     row = (await db.execute(stmt)).scalar_one_or_none()
     if row is None:
@@ -119,7 +119,7 @@ async def get_tool(db: AsyncSession, tool_id: str) -> ToolInfo:
 
 
 async def create_tool(db: AsyncSession, req: ToolCreateRequest) -> ToolInfo:
-    """Create a third-party tool."""
+    """创建第三方工具。"""
     existing = (await db.execute(select(Tool).where(Tool.name == req.name))).scalar_one_or_none()
     if existing is not None:
         raise HTTPException(status_code=409, detail=f"工具标识 '{req.name}' 已存在")
@@ -138,14 +138,14 @@ async def create_tool(db: AsyncSession, req: ToolCreateRequest) -> ToolInfo:
     )
     db.add(tool)
     await db.flush()
-    logger.info("Created third-party tool '%s' (id=%s)", req.name, tool.id)
+    logger.info("已创建第三方工具 '%s' (id=%s)", req.name, tool.id)
     return _tool_to_info(tool)
 
 
 async def update_tool(
     db: AsyncSession, tool_id: str, req: ToolUpdateRequest
 ) -> ToolInfo:
-    """Update tool metadata. Only non-None fields are updated. Builtin tools cannot be modified."""
+    """更新工具元数据，仅更新非 None 字段。内置工具不可修改。"""
     stmt = select(Tool).where(Tool.id == tool_id)
     row = (await db.execute(stmt)).scalar_one_or_none()
     if row is None:
@@ -155,7 +155,7 @@ async def update_tool(
 
     update_data = req.model_dump(exclude_none=True)
 
-    # Check for duplicate name when changing the name field
+    # 修改名称时检查是否重复
     if "name" in update_data and update_data["name"] != row.name:
         existing = (await db.execute(
             select(Tool).where(Tool.name == update_data["name"])
@@ -174,7 +174,7 @@ async def update_tool(
 
 
 async def delete_tool(db: AsyncSession, tool_id: str) -> dict:
-    """Delete a tool. Only third-party tools can be deleted. Cleans up agent-tool links first."""
+    """删除工具。仅第三方工具可删除。先清理工具与智能体的关联。"""
     stmt = select(Tool).where(Tool.id == tool_id)
     row = (await db.execute(stmt)).scalar_one_or_none()
     if row is None:
@@ -182,7 +182,7 @@ async def delete_tool(db: AsyncSession, tool_id: str) -> dict:
     if row.source == "builtin":
         raise HTTPException(status_code=403, detail="内置工具不可删除")
 
-    # Explicitly delete agent-tool links first (belt-and-suspenders with FK CASCADE)
+    # 先显式删除工具与智能体的关联（配合 FK CASCADE 双重保障）
     link_stmt = select(AgentTool).where(AgentTool.tool_id == tool_id)
     links = (await db.execute(link_stmt)).scalars().all()
     for link in links:
@@ -190,14 +190,14 @@ async def delete_tool(db: AsyncSession, tool_id: str) -> dict:
 
     await db.delete(row)
     await db.flush()
-    logger.info("Deleted tool '%s' (id=%s) with %d agent links", row.name, tool_id, len(links))
+    logger.info("已删除工具 '%s' (id=%s)，共 %d 条智能体关联", row.name, tool_id, len(links))
     return {"deleted": True, "id": tool_id}
 
 
 async def toggle_tool_enabled(
     db: AsyncSession, tool_id: str, enabled: bool
 ) -> ToolInfo:
-    """Toggle a tool's enabled/disabled status."""
+    """切换工具的启用/禁用状态。"""
     stmt = select(Tool).where(Tool.id == tool_id)
     row = (await db.execute(stmt)).scalar_one_or_none()
     if row is None:
@@ -212,7 +212,7 @@ async def toggle_tool_enabled(
 async def get_tools_by_agent(
     db: AsyncSession, agent_id: str
 ) -> list[ToolInfo]:
-    """Get all tools linked to a specific agent."""
+    """获取关联到指定智能体的所有工具。"""
     stmt = (
         select(Tool)
         .join(AgentTool, AgentTool.tool_id == Tool.id)
@@ -227,7 +227,7 @@ async def get_tools_by_agent(
     return items
 
 
-# ── Builtin tool seed data ────────────────────────────────────────────────
+# ── 内置工具种子数据 ────────────────────────────────────────────────────
 
 BUILTIN_TOOLS: list[dict] = [
     {
@@ -424,10 +424,10 @@ BUILTIN_TOOLS: list[dict] = [
 ]
 
 async def seed_builtin_tools(db: AsyncSession) -> None:
-    """Seed builtin tools if the tools table is empty. Idempotent."""
+    """填充内置工具，仅当工具表为空时执行，可重复调用。"""
     count = (await db.execute(select(func.count()).select_from(Tool))).scalar() or 0
     if count > 0:
-        logger.info("Tools table has %d rows, skipping seed", count)
+        logger.info("工具表已有 %d 条记录，跳过种子数据", count)
         return
 
     for t in BUILTIN_TOOLS:
@@ -445,4 +445,4 @@ async def seed_builtin_tools(db: AsyncSession) -> None:
         )
         db.add(tool)
 
-    logger.info("Seeded %d builtin tools", len(BUILTIN_TOOLS))
+    logger.info("已填充 %d 个内置工具", len(BUILTIN_TOOLS))

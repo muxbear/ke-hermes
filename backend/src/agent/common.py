@@ -3,6 +3,7 @@
 所有关键导入使用懒加载以避免循环导入（agent ↔ api ↔ core ↔ db 之间的复杂依赖）。
 """
 
+from ast import Raise
 import logging
 
 from agent import tools as agent_tools
@@ -48,7 +49,7 @@ async def resolve_model(
     from db.models.provider import Provider
 
     if not provider_id or not model_id:
-        logger.warning("未配置提供商/模型，使用默认 LLM")
+        logger.warning(f"未配置提供商或模型，使用默认 LLM {default_llm}")
         return default_llm
 
     async with async_session() as session:
@@ -60,18 +61,11 @@ async def resolve_model(
             ).scalar_one_or_none()
 
             if provider is None:
-                logger.warning("提供商 '%s' 未找到，使用默认 LLM", provider_id)
-                return default_llm
+                raise RuntimeError(f"提供商 {provider_id} 未找到，使用默认 LLM")
 
             decrypted_key = decrypt_api_key(provider.api_key)
             if not decrypted_key:
-                if fallback_to_settings:
-                    api_key = settings.DEEPSEEK_API_KEY
-                else:
-                    logger.warning(
-                        "提供商 '%s' 没有 api_key，使用默认 LLM", provider_id,
-                    )
-                    return default_llm
+                raise RuntimeError(f"模型提供商 {provider} 未配置 api_key ")
             else:
                 api_key = decrypted_key
 
@@ -84,12 +78,7 @@ async def resolve_model(
             ).scalar_one_or_none()
 
             if model is None:
-                logger.warning(
-                    "模型 '%s' 在提供商 '%s' 中未找到，使用默认 LLM",
-                    model_id,
-                    provider_id,
-                )
-                return default_llm
+                raise RuntimeError(f"模型提供商 {provider_id} 未配置模型 {provider_id}")
 
             return ChatOpenAI(
                 model=model.name,
@@ -98,4 +87,4 @@ async def resolve_model(
             )
         except Exception:
             logger.exception("解析模型失败，使用默认 LLM")
-            return default_llm
+            raise

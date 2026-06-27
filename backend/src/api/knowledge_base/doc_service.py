@@ -11,7 +11,7 @@ from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from fastapi import HTTPException, UploadFile
 from sqlalchemy import func, select, text, update
@@ -25,6 +25,9 @@ from core.rag.splitters import ChunkStrategyRegistry, create_chunk_registry
 from core.rag.vector_store import BaseVectorStore
 from db.models.knowledge_base import KnowledgeBase
 from db.models.knowledge_base_document import KnowledgeBaseDocument
+
+if TYPE_CHECKING:
+    from api.knowledge_base.mediator import KnowledgeBaseMediator
 
 logger = logging.getLogger(__name__)
 

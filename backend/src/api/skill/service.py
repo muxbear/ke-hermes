@@ -1,4 +1,4 @@
-"""Skill upload business logic: archive extraction, validation, and installation."""
+"""技能上传业务逻辑：压缩包解压、校验与安装。"""
 import json
 import logging
 import os
@@ -36,15 +36,15 @@ SKILLS_DIR = os.path.join(settings.WORKSPACE, "skills_upload")
 
 
 def get_skill_upload_path(skill_name: str) -> str:
-    """Return the filesystem path for a skill in the upload catalog."""
+    """返回技能在上传目录中的文件系统路径。"""
     return os.path.join(SKILLS_DIR, skill_name)
 
 
 def parse_skill_frontmatter(content: str) -> tuple[dict | None, str | None]:
-    """Parse YAML frontmatter from SKILL.md content.
+    """解析 SKILL.md 中的 YAML 前置元数据。
 
-    Returns:
-        Tuple of (parsed_dict_or_None, error_message_or_None).
+    返回:
+        (解析后的字典或 None, 错误信息或 None)。
     """
     match = _FRONTMATTER_RE.match(content)
     if not match:
@@ -62,9 +62,9 @@ def parse_skill_frontmatter(content: str) -> tuple[dict | None, str | None]:
 
 
 def _read_skill_metadata(skill_path: str) -> tuple[str, str]:
-    """Read description and license from a skill's SKILL.md frontmatter.
+    """从技能的 SKILL.md 前置元数据中读取描述和许可证。
 
-    Returns (description, license). Both default to empty strings on any error.
+    返回 (description, license)。出错时两者默认为空字符串。
     """
     skill_md = os.path.join(skill_path, "SKILL.md")
     if not os.path.isfile(skill_md):
@@ -88,18 +88,17 @@ def _read_skill_metadata(skill_path: str) -> tuple[str, str]:
 def validate_skill_directory(
     skill_path: str, expected_name: str | None = None
 ) -> SkillResult:
-    """Validate a skill directory against the Agent Skills specification.
+    """按智能体技能规范校验技能目录。
 
-    Args:
-        skill_path: Path to the skill directory.
-        expected_name: Canonical skill name (from frontmatter). When not provided,
-            falls back to the directory name. Use this when the directory is a
-            temp extraction directory whose name doesn't match the skill.
+    参数:
+        skill_path: 技能目录路径。
+        expected_name: 规范技能名称（来自前置元数据）。未提供时回退到目录名。
+            当目录为临时解压目录且名称与技能不匹配时使用此参数。
     """
     name = expected_name or os.path.basename(skill_path)
     errors: list[SkillValidationError] = []
 
-    # 1. Validate directory name format
+    # 1. 校验目录名称格式
     if not _SKILL_NAME_RE.match(name):
         errors.append(
             SkillValidationError(
@@ -110,7 +109,7 @@ def validate_skill_directory(
             )
         )
 
-    # 2. SKILL.md must exist
+    # 2. SKILL.md 必须存在
     skill_md = os.path.join(skill_path, "SKILL.md")
     if not os.path.isfile(skill_md):
         errors.append(
@@ -120,7 +119,7 @@ def validate_skill_directory(
         )
         return SkillResult(name=name, valid=False, errors=errors)
 
-    # 3. Parse frontmatter
+    # 3. 解析前置元数据
     with open(skill_md, encoding="utf-8") as f:
         content = f.read()
     fm, err = parse_skill_frontmatter(content)
@@ -130,7 +129,7 @@ def validate_skill_directory(
 
     assert fm is not None
 
-    # 4. Required fields
+    # 4. 必填字段校验
     fm_name = fm.get("name")
     if not fm_name or not isinstance(fm_name, str):
         errors.append(
@@ -169,7 +168,7 @@ def validate_skill_directory(
             )
         )
 
-    # 5. Optional fields type validation
+    # 5. 可选字段类型校验
     if "license" in fm and not isinstance(fm["license"], str):
         errors.append(
             SkillValidationError(field="license", message="license 必须为字符串")
@@ -193,7 +192,7 @@ def validate_skill_directory(
                 )
             )
 
-    # 6. Optional subdirectories
+    # 6. 可选子目录校验
     for subdir in ("scripts", "references", "assets"):
         sub_path = os.path.join(skill_path, subdir)
         if os.path.exists(sub_path) and not os.path.isdir(sub_path):
@@ -207,9 +206,9 @@ def validate_skill_directory(
 
 
 def _detect_archive_format(file_path: str) -> str:
-    """Detect archive format by reading magic bytes.
+    """通过读取文件头魔数检测压缩包格式。
 
-    Returns one of: 'zip', 'tar.gz', 'tar.bz2', 'tar.xz', 'tar'.
+    返回以下格式之一: 'zip'、'tar.gz'、'tar.bz2'、'tar.xz'、'tar'。
     """
     with open(file_path, "rb") as f:
         header = f.read(4)
@@ -230,24 +229,24 @@ def _detect_archive_format(file_path: str) -> str:
 
     raise HTTPException(
         status_code=400,
-        detail="Unsupported archive format. Supported: zip, tar.gz, tar.bz2, tar.xz",
+        detail="不支持的压缩格式，支持: zip, tar.gz, tar.bz2, tar.xz",
     )
 
 
 def _extract_archive(src_path: str, dest_dir: str, fmt: str) -> None:
-    """Extract an archive into dest_dir."""
+    """将压缩包解压到目标目录。"""
     try:
         if fmt == "zip":
             with zipfile.ZipFile(src_path) as zf:
                 for member in zf.infolist():
-                    # Path traversal protection
+                    # 路径穿越攻击防护
                     member_path = os.path.realpath(
                         os.path.join(dest_dir, member.filename)
                     )
                     if not member_path.startswith(os.path.realpath(dest_dir) + os.sep):
                         raise HTTPException(
                             status_code=400,
-                            detail="Archive contains path traversal attack",
+                            detail="压缩包包含路径穿越攻击",
                         )
                 zf.extractall(dest_dir)
         elif fmt == "tar.gz":
@@ -266,42 +265,42 @@ def _extract_archive(src_path: str, dest_dir: str, fmt: str) -> None:
         raise
     except Exception as e:
         raise HTTPException(
-            status_code=400, detail=f"Failed to extract archive: {e}"
+            status_code=400, detail=f"解压失败: {e}"
         ) from e
 
 
 def _safe_extract_tar(tf: tarfile.TarFile, dest_dir: str) -> None:
-    """Extract tar with path traversal protection."""
+    """解压 tar 文件，含路径穿越攻击防护。"""
     for member in tf.getmembers():
         member_path = os.path.realpath(os.path.join(dest_dir, member.name))
         if not member_path.startswith(os.path.realpath(dest_dir) + os.sep):
             raise HTTPException(
-                status_code=400, detail="Archive contains path traversal attack"
+                status_code=400, detail="压缩包包含路径穿越攻击"
             )
     tf.extractall(dest_dir)
 
 
 def _is_skill_dir(path: str) -> bool:
-    """Check whether a directory contains a SKILL.md (i.e. is a valid skill root)."""
+    """检查目录是否包含 SKILL.md（即是否为有效的技能根目录）。"""
     return os.path.isfile(os.path.join(path, "SKILL.md"))
 
 
 def _get_skill_directories(extract_dir: str) -> list[str]:
-    """Discover skill directories inside an extracted archive.
+    """发现解压目录中的技能目录。
 
-    Handles three layouts:
-    1. Archive IS a skill — extract_dir itself contains SKILL.md
-    2. Archive contains a single skill dir — one subdir with SKILL.md
-    3. Archive contains multiple skill dirs — several subdirs with SKILL.md
+    处理三种结构：
+    1. 压缩包本身即为技能 —— extract_dir 自身包含 SKILL.md
+    2. 压缩包包含单个技能目录 —— 一个子目录包含 SKILL.md
+    3. 压缩包包含多个技能目录 —— 多个子目录包含 SKILL.md
     """
     if not os.path.isdir(extract_dir):
         return []
 
-    # Layout 1: archive root is a skill
+    # 结构 1：压缩包根目录即为技能
     if _is_skill_dir(extract_dir):
         return [extract_dir]
 
-    # Layout 2 & 3: subdirectories that contain SKILL.md
+    # 结构 2 和 3：包含 SKILL.md 的子目录
     entries = sorted(os.listdir(extract_dir))
     skill_dirs = [
         os.path.join(extract_dir, e)
@@ -312,8 +311,8 @@ def _get_skill_directories(extract_dir: str) -> list[str]:
     if skill_dirs:
         return skill_dirs
 
-    # No skill directories found — fall back to raw subdirectories
-    # (some archives may have subdirs without SKILL.md, let validation report that)
+    # 未找到技能目录 —— 回退到原始子目录
+    # （某些压缩包的子目录可能没有 SKILL.md，由校验步骤报告）
     return [
         os.path.join(extract_dir, e)
         for e in entries
@@ -322,7 +321,7 @@ def _get_skill_directories(extract_dir: str) -> list[str]:
 
 
 def _get_skill_name(skill_path: str) -> str:
-    """Get the canonical skill name — from SKILL.md frontmatter, or fallback to dirname."""
+    """获取规范技能名称 —— 优先从 SKILL.md 前置元数据读取，回退到目录名。"""
     skill_md = os.path.join(skill_path, "SKILL.md")
     if os.path.isfile(skill_md):
         try:
@@ -338,13 +337,13 @@ def _get_skill_name(skill_path: str) -> str:
 async def process_skills_upload(
     file: UploadFile, db: AsyncSession
 ) -> SkillsUploadResponse:
-    """Upload, extract, validate, install, and persist skills from a compressed archive."""
+    """上传、解压、校验、安装并持久化压缩包中的技能。"""
     content = await file.read()
 
     if len(content) > MAX_UPLOAD_SIZE_MB * 1024 * 1024:
         raise HTTPException(
             status_code=413,
-            detail=f"File exceeds maximum size of {MAX_UPLOAD_SIZE_MB}MB",
+            detail=f"文件超过最大限制 {MAX_UPLOAD_SIZE_MB}MB",
         )
 
     with tempfile.NamedTemporaryFile(delete=False) as tmp:
@@ -360,7 +359,7 @@ async def process_skills_upload(
         skill_dirs = _get_skill_directories(extract_dir)
         if not skill_dirs:
             raise HTTPException(
-                status_code=400, detail="Archive contains no skill directories"
+                status_code=400, detail="压缩包中未找到技能目录"
             )
 
         os.makedirs(SKILLS_DIR, exist_ok=True)
@@ -393,7 +392,7 @@ async def process_skills_upload(
                     validation_errors=errors_json,
                 )
             )
-            logger.info("Installed skill '%s' (valid=%s)", skill_name, result.valid)
+            logger.info("已安装技能 '%s' (有效=%s)", skill_name, result.valid)
 
         valid_count = sum(1 for r in results if r.valid)
         invalid_count = len(results) - valid_count
@@ -417,7 +416,7 @@ async def process_skills_upload(
 async def list_skills(
     db: AsyncSession, page: int = 1, page_size: int = 20, category: str | None = None, enabled: bool | None = None
 ) -> SkillListResponse:
-    """List skills with pagination and optional category/enabled filters."""
+    """分页列出技能，支持按分类和启用状态筛选。"""
     from sqlalchemy import func, select
 
     offset = max(0, (page - 1) * page_size)
@@ -455,7 +454,7 @@ async def search_skills(
     category: str | None = None,
     enabled: bool | None = None,
 ) -> SkillListResponse:
-    """Fuzzy-search skills by name, with pagination and optional filters."""
+    """按名称模糊搜索技能，支持分页和可选筛选。"""
     from sqlalchemy import func, select
 
     offset = max(0, (page - 1) * page_size)
@@ -489,14 +488,14 @@ async def search_skills(
 
 
 async def _delete_one_skill(db: AsyncSession, skill_id: str) -> SkillDeleteResult:
-    """Delete a single skill by ID — removes DB record and filesystem directory."""
+    """按 ID 删除单个技能 —— 同时删除数据库记录和文件系统目录。"""
     from sqlalchemy import select
 
     stmt = select(Skill).where(Skill.id == skill_id)
     row = (await db.execute(stmt)).scalar_one_or_none()
 
     if row is None:
-        return SkillDeleteResult(id=skill_id, name="", deleted=False, reason="not found")
+        return SkillDeleteResult(id=skill_id, name="", deleted=False, reason="未找到")
 
     name = row.name
     await db.delete(row)
@@ -504,9 +503,9 @@ async def _delete_one_skill(db: AsyncSession, skill_id: str) -> SkillDeleteResul
     skill_dir = os.path.join(SKILLS_DIR, name)
     if os.path.isdir(skill_dir):
         shutil.rmtree(skill_dir, ignore_errors=True)
-        logger.info("Deleted skill '%s' (id=%s)", name, skill_id)
+        logger.info("已删除技能 '%s' (id=%s)", name, skill_id)
 
-    # Clean up copies from all agents' skills directories
+    # 清理所有智能体技能目录中的副本
     agent_skills_root = os.path.join(settings.WORKSPACE, "skills")
     if os.path.isdir(agent_skills_root):
         for agent_dir in os.listdir(agent_skills_root):
@@ -514,14 +513,14 @@ async def _delete_one_skill(db: AsyncSession, skill_id: str) -> SkillDeleteResul
             if os.path.isdir(agent_skill_path):
                 shutil.rmtree(agent_skill_path, ignore_errors=True)
                 logger.info(
-                    "Cleaned up agent skill '%s/%s'", agent_dir, name
+                    "已清理智能体技能 '%s/%s'", agent_dir, name
                 )
 
     return SkillDeleteResult(id=skill_id, name=name, deleted=True)
 
 
 async def delete_skill(db: AsyncSession, skill_id: str) -> SkillDeleteResponse:
-    """Delete a single skill by ID."""
+    """按 ID 删除单个技能。"""
     result = await _delete_one_skill(db, skill_id)
     return SkillDeleteResponse(
         deleted_count=1 if result.deleted else 0,
@@ -533,7 +532,7 @@ async def delete_skill(db: AsyncSession, skill_id: str) -> SkillDeleteResponse:
 async def delete_skills_batch(
     db: AsyncSession, ids: list[str]
 ) -> SkillDeleteResponse:
-    """Batch-delete skills by ID list."""
+    """按 ID 列表批量删除技能。"""
     results: list[SkillDeleteResult] = []
     for skill_id in ids:
         result = await _delete_one_skill(db, skill_id)
@@ -549,26 +548,26 @@ async def delete_skills_batch(
 
 
 async def get_skill(db: AsyncSession, skill_id: str) -> SkillInfo:
-    """Get a single skill by ID."""
+    """按 ID 获取单个技能。"""
     from sqlalchemy import select
 
     stmt = select(Skill).where(Skill.id == skill_id)
     row = (await db.execute(stmt)).scalar_one_or_none()
     if row is None:
-        raise HTTPException(status_code=404, detail="Skill not found")
+        raise HTTPException(status_code=404, detail="技能未找到")
     return SkillInfo.model_validate(row)
 
 
 async def update_skill(
     db: AsyncSession, skill_id: str, req: SkillUpdateRequest
 ) -> SkillInfo:
-    """Update skill metadata. Only non-None fields are updated."""
+    """更新技能元数据，仅更新非 None 字段。"""
     from sqlalchemy import select
 
     stmt = select(Skill).where(Skill.id == skill_id)
     row = (await db.execute(stmt)).scalar_one_or_none()
     if row is None:
-        raise HTTPException(status_code=404, detail="Skill not found")
+        raise HTTPException(status_code=404, detail="技能未找到")
 
     update_data = req.model_dump(exclude_none=True)
     for key, value in update_data.items():
@@ -580,13 +579,13 @@ async def update_skill(
 async def toggle_skill_enabled(
     db: AsyncSession, skill_id: str, enabled: bool
 ) -> SkillInfo:
-    """Toggle a skill's enabled state."""
+    """切换技能的启用/禁用状态。"""
     from sqlalchemy import select
 
     stmt = select(Skill).where(Skill.id == skill_id)
     row = (await db.execute(stmt)).scalar_one_or_none()
     if row is None:
-        raise HTTPException(status_code=404, detail="Skill not found")
+        raise HTTPException(status_code=404, detail="技能未找到")
 
     row.enabled = enabled
     return SkillInfo.model_validate(row)
@@ -595,15 +594,15 @@ async def toggle_skill_enabled(
 async def create_skill(
     db: AsyncSession, req: SkillCreateRequest
 ) -> SkillInfo:
-    """Create a single skill manually — writes SKILL.md and inserts DB record."""
+    """手动创建单个技能 —— 写入 SKILL.md 并在数据库中插入记录。"""
     from sqlalchemy import select
 
-    # Check for duplicate name
+    # 检查名称是否重复
     existing = (await db.execute(select(Skill).where(Skill.name == req.name))).scalar_one_or_none()
     if existing is not None:
-        raise HTTPException(status_code=409, detail=f"Skill '{req.name}' already exists")
+        raise HTTPException(status_code=409, detail=f"技能 '{req.name}' 已存在")
 
-    # Create workspace directory and SKILL.md
+    # 创建工作区目录和 SKILL.md
     skill_dir = os.path.join(SKILLS_DIR, req.name)
     os.makedirs(skill_dir, exist_ok=True)
 
@@ -624,7 +623,7 @@ async def create_skill(
         is_builtin=False,
     )
     db.add(skill)
-    logger.info("Created skill '%s' (manual)", req.name)
+    logger.info("已创建技能 '%s' (手动)", req.name)
 
     return SkillInfo.model_validate(skill)
 
@@ -680,12 +679,12 @@ BUILTIN_SKILLS = [
 
 
 async def seed_builtin_skills(db: AsyncSession) -> None:
-    """Seed builtin skills if the skills table is empty. Idempotent."""
+    """填充内置技能，仅当技能表为空时执行，可重复调用。"""
     from sqlalchemy import func, select
 
     count = (await db.execute(select(func.count()).select_from(Skill))).scalar() or 0
     if count > 0:
-        logger.info("Skills table has %d rows, skipping seed", count)
+        logger.info("技能表已有 %d 条记录，跳过种子数据", count)
         return
 
     for s in BUILTIN_SKILLS:
@@ -702,4 +701,4 @@ async def seed_builtin_skills(db: AsyncSession) -> None:
         )
         db.add(skill)
 
-    logger.info("Seeded %d builtin skills", len(BUILTIN_SKILLS))
+    logger.info("已填充 %d 个内置技能", len(BUILTIN_SKILLS))
