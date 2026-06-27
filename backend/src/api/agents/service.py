@@ -52,7 +52,8 @@ DEFAULT_AGENT_FILES = [
     "AGENTS.md", "SOUL.md", "TOOLS.md", "IDENTITY.md",
     "USER.md", "HEARTBEAT.md", "MEMORY.md",
 ]
-DEFAULT_AGENT_TOOLS = ["tavily_search", "file_reader", "code_executor"]
+
+DEFAULT_AGENT_TOOLS = ["http_request"]
 
 
 async def _get_agent_files_by_scope(
@@ -208,6 +209,7 @@ async def list_agents(db: AsyncSession) -> AgentListResponse:
         select(func.count()).select_from(Agent)
     )).scalar() or 0
     if count == 0:
+        logger.warning("智能体菜单中当前没有配置主智能体，系统采用默认配置创建了主智能体，请登录系统后重新配置！")
         agent = Agent(
             name="主智能体",
             type="main",

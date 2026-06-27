@@ -35,7 +35,7 @@ def _get_mediator(request: Request):
     return getattr(request.app.state, "kb_mediator", None)
 
 
-@router.get("", response_model=dict)
+@router.get("")
 @handle_errors
 async def list_knowledge_bases(
     page: int = Query(default=1, ge=1),
@@ -49,7 +49,7 @@ async def list_knowledge_bases(
     return ok(result)
 
 
-@router.get("/stats", response_model=dict)
+@router.get("/stats")
 @handle_errors
 async def get_stats(
     db: AsyncSession = Depends(get_db),
@@ -60,7 +60,7 @@ async def get_stats(
     return ok(result)
 
 
-@router.get("/available-models", response_model=dict)
+@router.get("/available-models")
 @handle_errors
 async def get_available_models(
     model_type: str = "llm",
@@ -99,7 +99,7 @@ async def get_available_models(
     return ok(models)
 
 
-@router.get("/available-providers", response_model=dict)
+@router.get("/available-providers")
 @handle_errors
 async def get_available_providers(
     model_type: str = Query(default="llm"),
@@ -159,7 +159,7 @@ async def get_available_providers(
     return ok(result)
 
 
-@router.post("", response_model=dict, status_code=201)
+@router.post("", status_code=201)
 @handle_errors
 async def create_knowledge_base(
     body: KBCreateRequest,
@@ -174,7 +174,7 @@ async def create_knowledge_base(
     return ok(result)
 
 
-@router.get("/{kb_id}", response_model=dict)
+@router.get("/{kb_id}")
 @handle_errors
 async def get_knowledge_base(
     kb_id: str,
@@ -186,7 +186,7 @@ async def get_knowledge_base(
     return ok(result)
 
 
-@router.put("/{kb_id}", response_model=dict)
+@router.put("/{kb_id}")
 @handle_errors
 async def update_knowledge_base(
     kb_id: str,
@@ -200,7 +200,7 @@ async def update_knowledge_base(
     return ok(result)
 
 
-@router.delete("/{kb_id}", response_model=dict)
+@router.delete("/{kb_id}")
 @handle_errors
 async def delete_knowledge_base(
     kb_id: str,
@@ -216,7 +216,7 @@ async def delete_knowledge_base(
     return ok(None)
 
 
-@router.get("/{kb_id}/indexing-activity", response_model=dict)
+@router.get("/{kb_id}/indexing-activity")
 @handle_errors
 async def get_index_activity(
     kb_id: str,
@@ -229,7 +229,7 @@ async def get_index_activity(
     return ok(result)
 
 
-@router.post("/{kb_id}/reindex", response_model=dict)
+@router.post("/{kb_id}/reindex")
 @handle_errors
 async def reindex_knowledge_base(
     kb_id: str,

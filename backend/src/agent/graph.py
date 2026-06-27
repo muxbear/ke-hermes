@@ -74,7 +74,7 @@ async def init_graph():
         await _store.setup()  # 会自动创建 store 表和 store_migrations 表
     else:
         raise ValueError(
-            f"未知的 CHECKPOINT_BACKEND: '{backend}'，期望 'sqlite' 或 'postgres'。"
+            f"未知的 CHECKPOINT_BACKEND: '{checkpoint_backend}'，期望 'sqlite' 或 'postgres'。"
         )
 
     _sandbox_manager = SandboxManager(

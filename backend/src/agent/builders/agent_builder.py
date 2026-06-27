@@ -53,18 +53,18 @@ class AgentBuilder:
     """
 
     def __init__(self) -> None:
+        self._agent_id: str = ""
         self._agent_info: Any = None
         self._model: Any = None
         self._tools: list = []
         self._system_prompt: str = ""
         self._subagents: list[dict] = []
+        self._backend: Any = None
         self._sandbox_manager: SandboxManager | None = None
         self._sandbox_backend: Any = None
-        self._backend: Any = None
         self._memory: list[str] = []
         self._middleware: list = []
         self._skills_root: str = ""
-        self._agent_id: str = ""
 
     async def with_agent_from_db(self, db: AsyncSession) -> "AgentBuilder":
         """从数据库查询活跃的主智能体配置。"""

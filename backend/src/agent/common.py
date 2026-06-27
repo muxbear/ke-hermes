@@ -28,7 +28,7 @@ async def resolve_model(
 ):
     """根据 provider_id 和 model_id 解析 LLM 实例。
 
-    解析失败时回退到默认 LLM。
+    解析失败时抛出异常。
 
     Args:
         provider_id: 提供商 ID。
@@ -48,7 +48,7 @@ async def resolve_model(
     from db.models.provider import Provider
 
     if not provider_id or not model_id:
-        logger.info("未配置提供商/模型，使用默认 LLM")
+        logger.warning("未配置提供商/模型，使用默认 LLM")
         return default_llm
 
     async with async_session() as session:
