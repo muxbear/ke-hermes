@@ -43,7 +43,7 @@ async def upload_docs(
     if config:
         try:
             custom_config = json.loads(config)
-            IndexConfigSchema(**custom_config)  # 校验
+            IndexConfigSchema.model_validate(custom_config)
         except (json.JSONDecodeError, ValueError) as e:
             return {"code": 400, "data": None, "message": f"索引配置无效: {e}"}
 

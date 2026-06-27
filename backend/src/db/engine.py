@@ -106,10 +106,11 @@ async def _fix_stuck_kb_status(conn) -> None:
         "UPDATE knowledge_bases SET "
         "chunks_count = (SELECT COALESCE(SUM(chunks_count), 0) FROM knowledge_base_documents "
         "WHERE kb_id = knowledge_bases.id AND status = 'indexed'), "
-        "entities_count = (SELECT COUNT(*) FROM knowledge_base_entities "
+        "entities_count = (SELECT COUNT(DISTINCT name) FROM knowledge_base_entities "
         "WHERE kb_id = knowledge_bases.id), "
-        "relations_count = (SELECT COUNT(*) FROM knowledge_base_relations "
-        "WHERE kb_id = knowledge_bases.id)"
+        "relations_count = (SELECT COUNT(*) FROM ("
+        "SELECT DISTINCT from_entity, to_entity, label FROM knowledge_base_relations "
+        "WHERE kb_id = knowledge_bases.id) AS _sub)"
     ))
     # 将没有活跃索引文档的 KB 状态设为 ready
     await conn.execute(text(
@@ -158,6 +159,20 @@ async def init_db():
                 "source_text": "VARCHAR(1024)",
                 "char_start": "INTEGER",
                 "char_end": "INTEGER",
+            },
+        )
+        await _migrate_table_columns(
+            conn,
+            "knowledge_base_entities",
+            {
+                "doc_id": "VARCHAR(36)",
+            },
+        )
+        await _migrate_table_columns(
+            conn,
+            "knowledge_base_relations",
+            {
+                "doc_id": "VARCHAR(36)",
             },
         )
         await _migrate_table_columns(

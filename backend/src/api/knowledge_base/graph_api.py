@@ -1,23 +1,15 @@
 """知识图谱 API 路由——实体/关系查询 & 重建。"""
 
-import logging
-import os
-
 from fastapi import APIRouter, Depends, Query, Request
-from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_current_user_id, get_db
 from api.knowledge_base.graph_service import (
-    GraphExtractionService,
     get_entity_detail,
     get_graph_data,
+    rebuild_graph_for_kb,
 )
 from api.knowledge_base.service import _get_kb_or_404
-from core.rag.loaders import create_default_loader_registry
-from core.rag.splitters import create_chunk_registry
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/knowledge-bases", tags=["知识库-图谱"])
 
@@ -56,69 +48,15 @@ async def re_extract_graph(
     db: AsyncSession = Depends(get_db),
     user_id: str = Depends(get_current_user_id),
 ):
-    """重新抽取知识图谱——遍历所有已索引文档，重建实体和关系。
-
-    先清除该 KB 下的旧实体和关系，再对所有文档逐个重新抽取。
-    """
+    """重新抽取知识图谱——遍历所有已索引文档，重建实体和关系。"""
     kb = await _get_kb_or_404(db, kb_id, user_id)
-
-    # 清除旧数据
-    await db.execute(
-        text("DELETE FROM knowledge_base_relations WHERE kb_id = :kb_id"), {"kb_id": kb_id}
-    )
-    await db.execute(
-        text("DELETE FROM knowledge_base_entities WHERE kb_id = :kb_id"), {"kb_id": kb_id}
-    )
+    entities_count, relations_count = await rebuild_graph_for_kb(db, kb.config, kb_id)
     await db.commit()
-
-    # 获取所有已索引文档
-    from db.models.knowledge_base_document import KnowledgeBaseDocument
-    doc_rows = (await db.execute(
-        select(KnowledgeBaseDocument).where(
-            KnowledgeBaseDocument.kb_id == kb_id,
-            KnowledgeBaseDocument.status == "indexed",
-        )
-    )).scalars().all()
-
-    if not doc_rows:
-        return {"code": 0, "data": {"entities": 0, "relations": 0}, "message": "没有已索引的文档"}
-
-    # 加载文档内容并抽取
-    loader_registry = create_default_loader_registry()
-    chunk_registry = create_chunk_registry(kb.config)
-    extractor = GraphExtractionService()
-
-    total_entities = 0
-    total_relations = 0
-
-    for doc in doc_rows:
-        if not doc.storage_path or not os.path.exists(doc.storage_path):
-            logger.warning("File not found for re-extract: %s", doc.storage_path)
-            continue
-
-        try:
-            documents = loader_registry.load(doc.storage_path, doc.type)
-            chunks = chunk_registry.split("recursive", documents)
-            entities, relations = await extractor.extract_entities_and_relations(
-                kb_id, doc.id, chunks,
-            )
-            total_entities += len(entities)
-            total_relations += len(relations)
-        except Exception as e:
-            logger.error("Re-extract failed for doc=%s: %s", doc.id, e)
-            continue
-
-    # 更新 KB 计数
-    result = await get_graph_data(db, kb_id)
-    kb.entities_count = len(result["entities"])
-    kb.relations_count = len(result["relations"])
-
     return {
         "code": 0,
         "data": {
-            "entities": total_entities,
-            "relations": total_relations,
-            "docs_processed": len(doc_rows),
+            "entities": entities_count,
+            "relations": relations_count,
         },
         "message": "ok",
     }

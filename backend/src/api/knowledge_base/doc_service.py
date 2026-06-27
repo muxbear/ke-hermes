@@ -11,6 +11,7 @@ from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
+from typing import cast
 
 from fastapi import HTTPException, UploadFile
 from sqlalchemy import func, select, text, update
@@ -160,13 +161,20 @@ class DatabaseProgressObserver(ProgressObserver):
                         )
                     )
                     entity_total = await db.scalar(
-                        select(func.count()).select_from(KnowledgeBaseEntity).where(
+                        select(func.count(func.distinct(KnowledgeBaseEntity.name))).where(
                             KnowledgeBaseEntity.kb_id == ctx.kb_id,
                         )
                     )
                     relation_total = await db.scalar(
-                        select(func.count()).select_from(KnowledgeBaseRelation).where(
-                            KnowledgeBaseRelation.kb_id == ctx.kb_id,
+                        select(func.count()).select_from(
+                            select(
+                                KnowledgeBaseRelation.from_entity,
+                                KnowledgeBaseRelation.to_entity,
+                                KnowledgeBaseRelation.label,
+                            )
+                            .where(KnowledgeBaseRelation.kb_id == ctx.kb_id)
+                            .distinct()
+                            .subquery()
                         )
                     )
 
@@ -513,7 +521,7 @@ async def list_documents(
             indexed_at=r.indexed_at,
             error_message=r.error_message,
             stages=[DocStageInfo(**s) for s in compute_stages(r.status or "queued", r.error_message)],
-            config=r.config,
+            config=cast(IndexConfigSchema | None, r.config),
         ))
 
     return {
@@ -553,7 +561,7 @@ async def get_document(
         indexed_at=doc.indexed_at,
         error_message=doc.error_message,
         stages=[DocStageInfo(**s) for s in compute_stages(doc.status or "queued", doc.error_message)],
-        config=doc.config,
+        config=cast(IndexConfigSchema | None, doc.config),
     )
 
 
@@ -561,9 +569,9 @@ async def delete_document(
     db: AsyncSession, kb_id: str, doc_id: str, user_id: str,
     vector_store: BaseVectorStore | None = None,
 ) -> None:
-    """删除文档——级联删除向量数据和源文件。"""
+    """删除文档——级联删除向量数据、源文件和图谱数据。"""
     from api.knowledge_base.service import _get_kb_or_404
-    await _get_kb_or_404(db, kb_id, user_id)
+    kb = await _get_kb_or_404(db, kb_id, user_id)
 
     doc = (
         await db.execute(
@@ -575,6 +583,8 @@ async def delete_document(
     ).scalar_one_or_none()
     if doc is None:
         raise HTTPException(status_code=404, detail="文档不存在")
+
+    was_indexed = doc.status == "indexed"
 
     # 从向量数据库删除
     if vector_store:
@@ -589,17 +599,48 @@ async def delete_document(
         shutil.rmtree(storage_dir, ignore_errors=True)
 
     # 更新知识库统计
-    kb = (
-        await db.execute(
-            select(KnowledgeBase).where(KnowledgeBase.id == kb_id)
-        )
-    ).scalar_one_or_none()
-    if kb:
-        kb.docs_count = max(0, (kb.docs_count or 0) - 1)
-        kb.size_bytes = max(0, (kb.size_bytes or 0) - (doc.size_bytes or 0))
-        kb.updated_at = datetime.utcnow()
+    kb.docs_count = max(0, (kb.docs_count or 0) - 1)
+    kb.size_bytes = max(0, (kb.size_bytes or 0) - (doc.size_bytes or 0))
+    kb.updated_at = datetime.utcnow()
 
     await db.delete(doc)
+    await db.flush()
+
+    # 如果删除的是已索引文档，按 doc_id 删除实体和关系
+    if was_indexed:
+        from db.models.knowledge_base_entity import KnowledgeBaseEntity
+        from db.models.knowledge_base_relation import KnowledgeBaseRelation
+
+        await db.execute(
+            text("DELETE FROM knowledge_base_relations WHERE kb_id = :kb_id AND doc_id = :doc_id"),
+            {"kb_id": kb_id, "doc_id": doc_id},
+        )
+        await db.execute(
+            text("DELETE FROM knowledge_base_entities WHERE kb_id = :kb_id AND doc_id = :doc_id"),
+            {"kb_id": kb_id, "doc_id": doc_id},
+        )
+        await db.flush()
+
+        # 更新 KB 级去重计数
+        rel_total = await db.scalar(
+            select(func.count()).select_from(
+                select(
+                    KnowledgeBaseRelation.from_entity,
+                    KnowledgeBaseRelation.to_entity,
+                    KnowledgeBaseRelation.label,
+                )
+                .where(KnowledgeBaseRelation.kb_id == kb_id)
+                .distinct()
+                .subquery()
+            )
+        )
+        entity_total = await db.scalar(
+            select(func.count(func.distinct(KnowledgeBaseEntity.name))).where(
+                KnowledgeBaseEntity.kb_id == kb_id,
+            )
+        )
+        kb.entities_count = entity_total or 0
+        kb.relations_count = rel_total or 0
 
 
 async def retry_document(
@@ -653,5 +694,5 @@ async def retry_document(
         indexed_at=doc.indexed_at,
         error_message=doc.error_message,
         stages=[],
-        config=doc.config,
+        config=cast(IndexConfigSchema | None, doc.config),
     )

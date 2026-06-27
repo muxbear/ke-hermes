@@ -6,9 +6,11 @@ import os
 import textwrap
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.rag.loaders import create_default_loader_registry
+from core.rag.splitters import create_chunk_registry
 from db.models.knowledge_base_entity import KnowledgeBaseEntity
 from db.models.knowledge_base_relation import KnowledgeBaseRelation
 
@@ -180,41 +182,142 @@ async def get_graph_data(
     kb_id: str,
     entity_type: str | None = None,
 ) -> dict:
-    """获取知识图谱数据（实体 + 关系）."""
-    entity_stmt = select(KnowledgeBaseEntity).where(KnowledgeBaseEntity.kb_id == kb_id)
+    """获取知识图谱数据（实体 + 关系），聚合跨文档的重复实体/关系。"""
+    entity_stmt = (
+        select(
+            func.min(KnowledgeBaseEntity.id).label("id"),
+            KnowledgeBaseEntity.name,
+            KnowledgeBaseEntity.type,
+            func.sum(KnowledgeBaseEntity.mentions).label("mentions"),
+        )
+        .where(KnowledgeBaseEntity.kb_id == kb_id)
+        .group_by(KnowledgeBaseEntity.name, KnowledgeBaseEntity.type)
+    )
     if entity_type:
         entity_stmt = entity_stmt.where(KnowledgeBaseEntity.type == entity_type)
-    entity_stmt = entity_stmt.order_by(KnowledgeBaseEntity.mentions.desc())
-    entity_rows = (await db.execute(entity_stmt)).scalars().all()
+    entity_stmt = entity_stmt.order_by(text("mentions DESC"))
+    entity_rows = (await db.execute(entity_stmt)).all()
 
-    rel_stmt = select(KnowledgeBaseRelation).where(KnowledgeBaseRelation.kb_id == kb_id)
-    rel_stmt = rel_stmt.order_by(KnowledgeBaseRelation.weight.desc())
-    relation_rows = (await db.execute(rel_stmt)).scalars().all()
+    rel_stmt = (
+        select(
+            func.min(KnowledgeBaseRelation.id).label("id"),
+            KnowledgeBaseRelation.from_entity,
+            KnowledgeBaseRelation.to_entity,
+            KnowledgeBaseRelation.label,
+            func.sum(KnowledgeBaseRelation.weight).label("weight"),
+            func.min(KnowledgeBaseRelation.source_entity_id).label("source_entity_id"),
+            func.min(KnowledgeBaseRelation.target_entity_id).label("target_entity_id"),
+        )
+        .where(KnowledgeBaseRelation.kb_id == kb_id)
+        .group_by(
+            KnowledgeBaseRelation.from_entity,
+            KnowledgeBaseRelation.to_entity,
+            KnowledgeBaseRelation.label,
+        )
+        .order_by(text("weight DESC"))
+    )
+    relation_rows = (await db.execute(rel_stmt)).all()
 
     return {
         "entities": [
-            {"id": e.id, "name": e.name, "type": e.type, "mentions": e.mentions}
-            for e in entity_rows
+            {
+                "id": row.id,
+                "name": row.name,
+                "type": row.type,
+                "mentions": int(row.mentions or 0),
+            }
+            for row in entity_rows
         ],
         "relations": [
             {
-                "id": r.id,
-                "from_entity": r.from_entity,
-                "to_entity": r.to_entity,
-                "label": r.label,
-                "weight": r.weight,
-                "source_entity_id": r.source_entity_id,
-                "target_entity_id": r.target_entity_id,
+                "id": row.id,
+                "from_entity": row.from_entity,
+                "to_entity": row.to_entity,
+                "label": row.label,
+                "weight": float(row.weight or 0),
+                "source_entity_id": row.source_entity_id,
+                "target_entity_id": row.target_entity_id,
             }
-            for r in relation_rows
+            for row in relation_rows
         ],
     }
+
+
+async def rebuild_graph_for_kb(
+    db: AsyncSession,
+    kb_config: dict | None,
+    kb_id: str,
+) -> tuple[int, int]:
+    """清除 KB 下的旧实体和关系，从剩余已索引文档重新抽取。"""
+    from db.models.knowledge_base import KnowledgeBase
+    from db.models.knowledge_base_document import KnowledgeBaseDocument
+
+    await db.execute(
+        text("DELETE FROM knowledge_base_relations WHERE kb_id = :kb_id"),
+        {"kb_id": kb_id},
+    )
+    await db.execute(
+        text("DELETE FROM knowledge_base_entities WHERE kb_id = :kb_id"),
+        {"kb_id": kb_id},
+    )
+    await db.flush()
+
+    doc_rows = (
+        await db.execute(
+            select(KnowledgeBaseDocument).where(
+                KnowledgeBaseDocument.kb_id == kb_id,
+                KnowledgeBaseDocument.status == "indexed",
+            )
+        )
+    ).scalars().all()
+
+    if not doc_rows:
+        kb = (
+            await db.execute(select(KnowledgeBase).where(KnowledgeBase.id == kb_id))
+        ).scalar_one_or_none()
+        if kb:
+            kb.entities_count = 0
+            kb.relations_count = 0
+        return 0, 0
+
+    loader_registry = create_default_loader_registry()
+    chunk_registry = create_chunk_registry(kb_config or {})
+    extractor = GraphExtractionService()
+
+    total_entities = 0
+    total_relations = 0
+
+    for doc in doc_rows:
+        if not doc.storage_path or not os.path.exists(doc.storage_path):
+            logger.warning("File not found for graph rebuild: %s", doc.storage_path)
+            continue
+        try:
+            documents = loader_registry.load(doc.storage_path, doc.type)
+            chunks = chunk_registry.split("recursive", documents)
+            entities, relations = await extractor.extract_entities_and_relations(
+                kb_id, doc.id, chunks,
+            )
+            total_entities += len(entities)
+            total_relations += len(relations)
+        except Exception:
+            logger.exception("Graph rebuild failed for doc=%s", doc.id)
+            continue
+
+    result = await get_graph_data(db, kb_id)
+    kb = (
+        await db.execute(select(KnowledgeBase).where(KnowledgeBase.id == kb_id))
+    ).scalar_one_or_none()
+    if kb:
+        kb.entities_count = len(result["entities"])
+        kb.relations_count = len(result["relations"])
+
+    return total_entities, total_relations
 
 
 async def get_entity_detail(
     db: AsyncSession, kb_id: str, entity_id: str
 ) -> dict | None:
-    """获取实体详情及关联关系."""
+    """获取实体详情及关联关系（聚合跨文档数据）。"""
     entity = (
         await db.execute(
             select(KnowledgeBaseEntity).where(
@@ -226,40 +329,59 @@ async def get_entity_detail(
     if entity is None:
         return None
 
-    relations = (
-        (
-            await db.execute(
-                select(KnowledgeBaseRelation).where(
-                    KnowledgeBaseRelation.kb_id == kb_id,
-                    (KnowledgeBaseRelation.source_entity_id == entity.id)
-                    | (KnowledgeBaseRelation.target_entity_id == entity.id)
-                    | (KnowledgeBaseRelation.from_entity == entity.name)
-                    | (KnowledgeBaseRelation.to_entity == entity.name),
-                )
+    total_mentions = await db.scalar(
+        select(func.sum(KnowledgeBaseEntity.mentions)).where(
+            KnowledgeBaseEntity.kb_id == kb_id,
+            KnowledgeBaseEntity.name == entity.name,
+        )
+    )
+
+    import sqlalchemy as sa
+
+    rel_rows = (
+        await db.execute(
+            select(
+                func.min(KnowledgeBaseRelation.id).label("id"),
+                KnowledgeBaseRelation.from_entity,
+                KnowledgeBaseRelation.to_entity,
+                KnowledgeBaseRelation.label,
+                func.sum(KnowledgeBaseRelation.weight).label("weight"),
+                func.min(KnowledgeBaseRelation.source_entity_id).label("source_entity_id"),
+                func.min(KnowledgeBaseRelation.target_entity_id).label("target_entity_id"),
+            )
+            .where(
+                KnowledgeBaseRelation.kb_id == kb_id,
+                sa.or_(
+                    KnowledgeBaseRelation.from_entity == entity.name,
+                    KnowledgeBaseRelation.to_entity == entity.name,
+                ),
+            )
+            .group_by(
+                KnowledgeBaseRelation.from_entity,
+                KnowledgeBaseRelation.to_entity,
+                KnowledgeBaseRelation.label,
             )
         )
-        .scalars()
-        .all()
-    )
+    ).all()
 
     return {
         "id": entity.id,
         "name": entity.name,
         "type": entity.type,
-        "mentions": entity.mentions,
+        "mentions": int(total_mentions or 0),
         "metadata_": entity.metadata_,
         "source_text": entity.source_text,
         "relations": [
             {
-                "id": r.id,
-                "from_entity": r.from_entity,
-                "to_entity": r.to_entity,
-                "label": r.label,
-                "weight": r.weight,
-                "source_entity_id": r.source_entity_id,
-                "target_entity_id": r.target_entity_id,
+                "id": row.id,
+                "from_entity": row.from_entity,
+                "to_entity": row.to_entity,
+                "label": row.label,
+                "weight": float(row.weight or 0),
+                "source_entity_id": row.source_entity_id,
+                "target_entity_id": row.target_entity_id,
             }
-            for r in relations
+            for row in rel_rows
         ],
     }
 
@@ -352,12 +474,13 @@ class GraphExtractionService:
             len(result.extractions),
         )
 
-        await self._persist(kb_id, entities, relations)
+        await self._persist(kb_id, doc_id, entities, relations)
         return entities, relations
 
     async def _persist(
         self,
         kb_id: str,
+        doc_id: str,
         entities: list[dict],
         relations: list[dict],
     ) -> None:
@@ -380,6 +503,7 @@ class GraphExtractionService:
                         await db.execute(
                             select(KnowledgeBaseEntity).where(
                                 KnowledgeBaseEntity.kb_id == kb_id,
+                                KnowledgeBaseEntity.doc_id == doc_id,
                                 KnowledgeBaseEntity.name == name,
                             )
                         )
@@ -394,6 +518,7 @@ class GraphExtractionService:
                             KnowledgeBaseEntity(
                                 id=ent_id,
                                 kb_id=kb_id,
+                                doc_id=doc_id,
                                 name=name,
                                 type=etype,
                                 mentions=1,
@@ -427,6 +552,7 @@ class GraphExtractionService:
                         await db.execute(
                             select(KnowledgeBaseRelation).where(
                                 KnowledgeBaseRelation.kb_id == kb_id,
+                                KnowledgeBaseRelation.doc_id == doc_id,
                                 KnowledgeBaseRelation.from_entity == from_name,
                                 KnowledgeBaseRelation.to_entity == to_name,
                                 KnowledgeBaseRelation.label == label,
@@ -445,6 +571,7 @@ class GraphExtractionService:
                             KnowledgeBaseRelation(
                                 id=str(uuid.uuid4()),
                                 kb_id=kb_id,
+                                doc_id=doc_id,
                                 from_entity=from_name,
                                 to_entity=to_name,
                                 label=label,

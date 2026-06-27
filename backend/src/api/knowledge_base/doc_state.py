@@ -8,10 +8,11 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Callable, Awaitable
+from typing import TYPE_CHECKING, Any, Callable, Awaitable
 
 if TYPE_CHECKING:
     from api.knowledge_base.doc_service import IndexingPipeline
+    from core.rag.splitters import ChunkStrategyRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +40,8 @@ class IndexingContext:
     entities_count: int = 0
     relations_count: int = 0
 
-    embedding_model: object | None = None
-    chunk_registry: object | None = None
+    embedding_model: Any | None = None
+    chunk_registry: ChunkStrategyRegistry | None = None
 
     on_status_change: Callable[["IndexingContext"], Awaitable[None]] | None = None
 

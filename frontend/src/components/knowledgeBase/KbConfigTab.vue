@@ -14,7 +14,7 @@ const emit = defineEmits<{
   saveAndReindex: [config: IndexConfig]
 }>()
 
-const draft = reactive<IndexConfig>({ ...props.config })
+let draft = reactive<IndexConfig>({ ...props.config })
 const saved = ref(false)
 
 watchEffect(() => {
