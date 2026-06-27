@@ -49,13 +49,13 @@ async def init_graph():
     """初始化检查点和图（在应用启动时调用一次）。"""
     global _graph, _conn_pool, _checkpointer, _store, _sandbox_manager
 
-    backend = settings.CHECKPOINT_BACKEND
+    checkpoint_backend = settings.CHECKPOINT_BACKEND
 
-    if backend == "sqlite":
+    if checkpoint_backend == "sqlite":
         conn = await aiosqlite.connect(settings.CHECKPOINT_DB_PATH)
         _checkpointer = AsyncSqliteSaver(conn)
         _store = InMemoryStore()
-    elif backend == "postgres":
+    elif checkpoint_backend == "postgres":
         _conn_pool = AsyncConnectionPool(
             conninfo=settings.CHECKPOINT_DB_URL,
             open=False,

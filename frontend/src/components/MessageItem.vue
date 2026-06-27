@@ -1,17 +1,21 @@
-<script setup>
+<script setup lang="ts">
 import { computed, ref } from 'vue'
 import { Sparkles, UserCircle, Brain, ChevronDown, ChevronRight } from 'lucide-vue-next'
 import { marked } from 'marked'
-import TracePanel from './TracePanel.vue'
+import { useChatStore } from '@/stores/chat'
+import TraceTree from './TraceTree.vue'
+import type { ChatMessage } from '@/types/chat'
 
-const props = defineProps({
-  message: {
-    type: Object,
-    required: true,
-  },
-})
+const props = defineProps<{
+  message: ChatMessage
+}>()
 
+const chatStore = useChatStore()
 const showReasoning = ref(false)
+
+const hasBlocks = computed(() => {
+  return chatStore.traceEnabled && props.message.blocks && props.message.blocks.length > 0
+})
 
 const renderedContent = computed(() => {
   if (props.message.role === 'user') return props.message.content
@@ -28,12 +32,13 @@ const renderedContent = computed(() => {
     </div>
     <div class="message-body">
       <div class="message-bubble">
-        <TracePanel
-          v-if="message.role === 'assistant' && message.traces && message.traces.length > 0"
-          :traces="message.traces"
-          :streaming="message.streaming"
+        <!-- Trace mode: hierarchical card view -->
+        <TraceTree
+          v-if="hasBlocks"
+          :blocks="message.blocks!"
         />
-        <div v-if="message.role === 'assistant' && message.reasoning" class="reasoning-section">
+        <!-- Normal mode: reasoning section -->
+        <div v-else-if="message.role === 'assistant' && message.reasoning" class="reasoning-section">
           <div class="reasoning-toggle" @click="showReasoning = !showReasoning">
             <Brain :size="12" />
             <span>思考过程</span>
@@ -44,13 +49,14 @@ const renderedContent = computed(() => {
             {{ message.reasoning }}
           </div>
         </div>
+        <!-- Normal mode: markdown content -->
         <div
-          v-if="message.role === 'assistant'"
+          v-if="!hasBlocks && message.role === 'assistant'"
           class="markdown-body"
           v-html="renderedContent"
         ></div>
-        <div v-else>{{ message.content }}</div>
-        <span v-if="message.streaming && !message.content" class="typing-indicator">
+        <div v-if="message.role === 'user'">{{ message.content }}</div>
+        <span v-if="message.streaming && !message.content && !hasBlocks" class="typing-indicator">
           <span class="dot" />
           <span class="dot" />
           <span class="dot" />

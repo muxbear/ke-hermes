@@ -122,9 +122,7 @@ class AgentBuilder:
         """设置系统提示词。"""
         if self._agent_info is None:
             raise RuntimeError("必须先调用 with_agent_from_db()")
-        self._system_prompt = self._agent_info.system_prompt or default or (
-            "你是 ke-hermes 通用智能体，请根据用户的需求委派对应的子智能体进行处理。"
-        )
+        self._system_prompt = self._agent_info.system_prompt
         return self
 
     async def with_subagents(self) -> "AgentBuilder":

@@ -12,9 +12,9 @@ const lastContent = computed(() => {
   return msgs[msgs.length - 1].content
 })
 
-const streamingTracesLen = computed(() => {
+const streamingBlocksLen = computed(() => {
   const last = chatStore.messages[chatStore.messages.length - 1]
-  if (last?.traces) return last.traces.length
+  if (last?.blocks) return last.blocks.length
   return 0
 })
 
@@ -29,7 +29,7 @@ function scrollToBottom() {
 
 watch(() => chatStore.messages.length, scrollToBottom)
 watch(lastContent, scrollToBottom)
-watch(streamingTracesLen, scrollToBottom)
+watch(streamingBlocksLen, scrollToBottom)
 </script>
 
 <template>

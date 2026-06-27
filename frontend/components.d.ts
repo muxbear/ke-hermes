@@ -10,6 +10,7 @@ declare module 'vue' {
     AccountLoginForm: typeof import('./src/components/auth/AccountLoginForm.vue')['default']
     AddConfigDialog: typeof import('./src/components/agent/AddConfigDialog.vue')['default']
     AdminTile: typeof import('./src/components/admin/AdminTile.vue')['default']
+    AgentCard: typeof import('./src/components/AgentCard.vue')['default']
     AgentDetail: typeof import('./src/components/agent/AgentDetail.vue')['default']
     AgentEdge: typeof import('./src/components/agent/AgentEdge.vue')['default']
     AgentFormDialog: typeof import('./src/components/agent/AgentFormDialog.vue')['default']
@@ -97,12 +98,13 @@ declare module 'vue' {
     SkillSelectDialog: typeof import('./src/components/agent/SkillSelectDialog.vue')['default']
     SlidePuzzle: typeof import('./src/components/captcha/SlidePuzzle.vue')['default']
     SystemInfoCard: typeof import('./src/components/admin/SystemInfoCard.vue')['default']
-    ToolCard: typeof import('./src/components/tool/ToolCard.vue')['default']
+    ToolCard: typeof import('./src/components/ToolCard.vue')['default']
     ToolDetailDrawer: typeof import('./src/components/tool/ToolDetailDrawer.vue')['default']
     ToolDialog: typeof import('./src/components/tool/ToolDialog.vue')['default']
     ToolSelectDialog: typeof import('./src/components/agent/ToolSelectDialog.vue')['default']
     TopBar: typeof import('./src/components/TopBar.vue')['default']
     TracePanel: typeof import('./src/components/TracePanel.vue')['default']
+    TraceTree: typeof import('./src/components/TraceTree.vue')['default']
     UpdateLogCard: typeof import('./src/components/admin/UpdateLogCard.vue')['default']
   }
   export interface ComponentCustomProperties {

@@ -132,40 +132,66 @@ function chatAuthHeaders(): Record<string, string> {
   return headers
 }
 
-import type { TraceEntry } from '@/types/chat'
+import type {
+  AgentStartData,
+  AgentEndData,
+  ToolStartData,
+  ToolEndData,
+} from '@/types/chat'
 
-function parseSseDataLine(
-  line: string,
-  onToken: (token: string) => void,
-  onThreadId?: (threadId: string) => void,
-  onTrace?: (entry: Omit<TraceEntry, 'id'>) => void,
-  onError?: (err: Error) => void,
-  onReasoning?: (token: string) => void,
-): void {
+export interface StreamCallbacks {
+  onToken: (agentName: string, content: string) => void
+  onReasoning: (agentName: string, content: string) => void
+  onAgentStart: (data: AgentStartData) => void
+  onAgentEnd: (data: AgentEndData) => void
+  onToolStart: (data: ToolStartData) => void
+  onToolOutput: (callId: string, content: string) => void
+  onToolEnd: (data: ToolEndData) => void
+  onThreadId: (threadId: string) => void
+  onDone: () => void
+  onError: (message: string) => void
+}
+
+type SsePayload = {
+  event: string
+  data: Record<string, unknown>
+}
+
+function parseSseDataLine(line: string, callbacks: StreamCallbacks): void {
   if (!line.startsWith('data: ')) return
   try {
-    const json = JSON.parse(line.slice(6)) as {
-      token?: string
-      thread_id?: string
-      trace?: Omit<TraceEntry, 'id'>
-      error?: string
-      reasoning?: string
-    }
-    if (json.error && onError) {
-      onError(new Error(json.error))
-      return
-    }
-    if (json.reasoning && onReasoning) {
-      onReasoning(json.reasoning)
-    }
-    if (json.token) {
-      onToken(json.token)
-    }
-    if (json.thread_id && onThreadId) {
-      onThreadId(json.thread_id)
-    }
-    if (json.trace && onTrace) {
-      onTrace(json.trace)
+    const payload = JSON.parse(line.slice(6)) as SsePayload
+    const { event, data } = payload
+
+    switch (event) {
+      case 'token':
+        callbacks.onToken(data.agent_name as string, data.content as string)
+        break
+      case 'reasoning':
+        callbacks.onReasoning(data.agent_name as string, data.content as string)
+        break
+      case 'agent_start':
+        callbacks.onAgentStart(data as unknown as AgentStartData)
+        break
+      case 'agent_end':
+        callbacks.onAgentEnd(data as unknown as AgentEndData)
+        break
+      case 'tool_start':
+        callbacks.onToolStart(data as unknown as ToolStartData)
+        break
+      case 'tool_output':
+        callbacks.onToolOutput(data.call_id as string, data.content as string)
+        break
+      case 'tool_end':
+        callbacks.onToolEnd(data as unknown as ToolEndData)
+        break
+      case 'error':
+        callbacks.onError(data.message as string)
+        break
+      case 'done':
+        callbacks.onThreadId(data.thread_id as string)
+        callbacks.onDone()
+        break
     }
   } catch {
     // skip malformed SSE line
@@ -179,17 +205,10 @@ export async function sendStreamRequest(
   message: string,
   options: {
     threadId?: string | null
-    traceEnabled?: boolean
-    onToken: (token: string) => void
-    onReasoning?: (token: string) => void
-    onTrace?: (entry: Omit<TraceEntry, 'id'>) => void
-    onThreadId?: (threadId: string) => void
-    onDone: () => void
-    onError: (err: Error) => void
+    callbacks: StreamCallbacks
   },
 ): Promise<void> {
-  const { threadId, traceEnabled, onToken, onReasoning, onTrace, onThreadId, onDone, onError } =
-    options
+  const { threadId, callbacks } = options
 
   const body: { message: string; thread_id?: string } = { message }
   if (threadId) {
@@ -210,12 +229,20 @@ export async function sendStreamRequest(
 
   const reader = response.body?.getReader()
   if (!reader) {
-    onError(new Error('ReadableStream not supported'))
+    callbacks.onError('ReadableStream not supported')
     return
   }
 
   const decoder = new TextDecoder()
   let buffer = ''
+  let doneReceived = false
+
+  // Wrap onDone so we can track whether the stream completed cleanly
+  const originalOnDone = callbacks.onDone
+  callbacks.onDone = () => {
+    doneReceived = true
+    originalOnDone()
+  }
 
   try {
     while (true) {
@@ -227,35 +254,24 @@ export async function sendStreamRequest(
       buffer = lines.pop() || ''
 
       for (const line of lines) {
-        parseSseDataLine(
-          line,
-          onToken,
-          onThreadId,
-          traceEnabled ? onTrace : undefined,
-          onError,
-          onReasoning,
-        )
+        parseSseDataLine(line, callbacks)
       }
     }
 
     if (buffer.trim()) {
       for (const line of buffer.split('\n')) {
-        parseSseDataLine(
-          line,
-          onToken,
-          onThreadId,
-          traceEnabled ? onTrace : undefined,
-          onError,
-          onReasoning,
-        )
+        parseSseDataLine(line, callbacks)
       }
     }
   } catch (err) {
-    onError(err instanceof Error ? err : new Error(String(err)))
-    return
+    callbacks.onError(err instanceof Error ? err.message : String(err))
+  } finally {
+    // Safety fallback: if the backend closes the connection without a done event,
+    // ensure the frontend doesn't stay in loading state forever
+    if (!doneReceived) {
+      callbacks.onDone()
+    }
   }
-
-  onDone()
 }
 
 /**

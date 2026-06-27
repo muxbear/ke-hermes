@@ -109,51 +109,77 @@ async def chat_stream(
                     version="v3",
                 )
 
+                # Emit main agent start before any consumer output
+                await queue.put({
+                    "event": "agent_start",
+                    "data": {"agent_name": "main", "agent_type": "main", "call_id": "root"}
+                })
+
                 async def consume_messages() -> None:
                     async for message in stream.messages:
                         async for delta in message.reasoning:
-                            await queue.put({"reasoning": delta})
+                            await queue.put({
+                                "event": "reasoning",
+                                "data": {"agent_name": "main", "content": delta},
+                            })
                         async for delta in message.text:
-                            await queue.put({"token": delta})
+                            await queue.put({
+                                "event": "token",
+                                "data": {"agent_name": "main", "content": delta},
+                            })
 
                 async def consume_tool_calls() -> None:
                     async for call in stream.tool_calls:
+                        call_id = str(uuid7())
                         input_str = json.dumps(call.input, ensure_ascii=False, default=str)
                         await queue.put({
-                            "trace": {
-                                "type": "tool_start",
-                                "name": call.tool_name,
-                                "agent": "main",
+                            "event": "tool_start",
+                            "data": {
+                                "tool_name": call.tool_name,
+                                "call_id": call_id,
+                                "agent_name": "main",
                                 "input": input_str,
                             }
                         })
                         async for delta in call.output_deltas:
-                            await queue.put({"token": str(delta)})
+                            await queue.put({
+                                "event": "tool_output",
+                                "data": {"call_id": call_id, "content": str(delta)},
+                            })
                         output_str = str(call.output) if call.output is not None else ""
                         error_str = str(call.error) if call.error is not None else ""
                         await queue.put({
-                            "trace": {
-                                "type": "tool_end",
-                                "name": call.tool_name,
-                                "agent": "main",
+                            "event": "tool_end",
+                            "data": {
+                                "tool_name": call.tool_name,
+                                "call_id": call_id,
                                 "output": error_str or output_str,
                             }
                         })
 
                 async def consume_subagents() -> None:
                     async for subagent in stream.subagents:
+                        call_id = str(uuid7())
                         await queue.put({
-                            "trace": {
-                                "type": "subagent_start",
-                                "name": subagent.name,
+                            "event": "agent_start",
+                            "data": {
+                                "agent_name": subagent.name,
+                                "agent_type": "sub",
+                                "call_id": call_id,
                             }
                         })
                         try:
                             async for message in subagent.messages:
                                 async for delta in message.reasoning:
-                                    await queue.put({"reasoning": delta})
+                                    await queue.put({
+                                        "event": "reasoning",
+                                        "data": {"agent_name": subagent.name, "content": delta},
+                                    })
                                 async for delta in message.text:
-                                    await queue.put({"token": delta})
+                                    await queue.put({
+                                        "event": "token",
+                                        "data": {"agent_name": subagent.name, "content": delta},
+                                    })
                         except Exception as e:
                             subagent_error = getattr(subagent, "error", None) or str(e)
                             subagent_status = getattr(subagent, "status", "failed")
@@ -162,18 +188,20 @@ async def chat_stream(
                                 subagent.name, subagent_status, subagent_error,
                             )
                             await queue.put({
-                                "trace": {
-                                    "type": "subagent_end",
-                                    "name": subagent.name,
+                                "event": "agent_end",
+                                "data": {
+                                    "agent_name": subagent.name,
+                                    "call_id": call_id,
                                     "status": subagent_status,
                                     "error": subagent_error,
                                 }
                             })
                             continue
                         await queue.put({
-                            "trace": {
-                                "type": "subagent_end",
-                                "name": subagent.name,
+                            "event": "agent_end",
+                            "data": {
+                                "agent_name": subagent.name,
+                                "call_id": call_id,
                                 "status": subagent.status,
                             }
                         })
@@ -187,12 +215,25 @@ async def chat_stream(
                         raise result
                     if isinstance(result, BaseException):
                         logger.warning("Stream consumer aborted: %s", result)
+
+                # Emit main agent end after all consumers finish
+                await queue.put({
+                    "event": "agent_end",
+                    "data": {"agent_name": "main", "call_id": "root", "status": "completed"}
+                })
+
             except BadRequestError as e:
                 logger.warning("Model returned BadRequestError in stream: %s", e)
-                await queue.put({"error": "抱歉，您的请求被模型安全审核拦截，请尝试换一种表述方式。"})
+                await queue.put({
+                    "event": "error",
+                    "data": {"message": "抱歉，您的请求被模型安全审核拦截，请尝试换一种表述方式。"},
+                })
             except Exception:
                 logger.exception("Agent stream encountered an unhandled error")
-                await queue.put({"error": "抱歉，服务处理您的请求时发生了错误，请稍后重试。"})
+                await queue.put({
+                    "event": "error",
+                    "data": {"message": "抱歉，服务处理您的请求时发生了错误，请稍后重试。"},
+                })
             finally:
                 await queue.put(None)
 
@@ -218,7 +259,7 @@ async def chat_stream(
 
         await consumer
 
-        yield f"data: {json.dumps({'thread_id': thread_id})}\n\n"
+        yield f"data: {json.dumps({'event': 'done', 'data': {'thread_id': thread_id}}, ensure_ascii=False)}\n\n"
 
         if is_new:
             try:
