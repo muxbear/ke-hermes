@@ -17,6 +17,7 @@ Desktop.ini
 # ========================
 frontend/node_modules/
 frontend/dist/
+frontend/docs/
 frontend/.vite/
 frontend/.nuxt/
 frontend/.output/
@@ -39,6 +40,7 @@ backend/.pyre/
 backend/.pytype/
 backend/htmlcov/
 backend/dist/
+backend/docs/
 backend/build/
 backend/workspace/
 backend/*.egg-info/
@@ -120,7 +122,7 @@ uv.lock
 # ========================
 # Documentation
 # ========================
-docs/_build/
+docs/
 /site
 
 # ========================
