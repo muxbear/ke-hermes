@@ -82,18 +82,19 @@ async def init_graph():
     )
     _sandbox_manager.start_cleanup()
 
-    _graph = await create_main_agent(
-        checkpointer=_checkpointer,
-        store=_store,
-        sandbox_manager=_sandbox_manager,
-    )
-
-    # 启动时将 AgentFile 表内容种子化到 Store，关闭 DB↔Store 同步差距
+    # 1) 将 AgentFile 表种子化到 Store（必须在 agent 创建之前，确保 StoreBackend 可读取）
     from agent.memory.memory_sync import bootstrap_agent_memory
     from db.engine import async_session
 
     async with async_session() as session:
         await bootstrap_agent_memory(_store, session)
+
+    # 2) 创建主智能体（StoreBackend 路由依赖已填充的 Store）
+    _graph = await create_main_agent(
+        checkpointer=_checkpointer,
+        store=_store,
+        sandbox_manager=_sandbox_manager,
+    )
 
 
 async def shutdown_graph():

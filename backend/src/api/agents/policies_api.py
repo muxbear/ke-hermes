@@ -1,6 +1,6 @@
 """组织级只读策略 (policies) 管理 API。
 
-组织级记忆存储在 LangGraph Store namespace=(org_id,) 下，前缀 /policies/。
+组织级记忆存储在 LangGraph Store namespace=(org_id,) 下，前缀 /memories/policies/。
 v1 提供：列出 + 读取 + 写入（管理员）。Files 标签页仅展示，不通过此接口编辑。
 """
 import logging

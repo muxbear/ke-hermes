@@ -13,6 +13,11 @@ Desktop.ini
 *.sublime-workspace
 
 # ========================
+# Playwright
+# ========================
+.Playwright/
+
+# ========================
 # Frontend (Vue + Pinia + Vite + Node.js)
 # ========================
 frontend/node_modules/

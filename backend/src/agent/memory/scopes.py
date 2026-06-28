@@ -1,11 +1,12 @@
 """Memory scope definitions for DeepAgents memory.
 
-记忆按作用域分为四类，对应不同的 LangGraph Store namespace 和虚拟路径前缀：
+记忆按作用域分为四类，对应不同的 LangGraph Store namespace 和虚拟路径前缀，
+统一在 /memories/ 下通过子路由实现多作用域隔离（遵循 DeepAgents 官方文档模式）：
 
-- AGENT:    namespace=(agent_id,)              prefix=/memories/agent/    全用户共享的智能体人设
-- USER:     namespace=(agent_id, user_id)      prefix=/memories/user/     按用户隔离的偏好与摘要
-- MIXTURE:  namespace=(agent_id, user_id)      prefix=/memories/mixture/  自定义文件，按 agent×user 隔离
-- ORG:      namespace=(org_id,)                prefix=/policies/          组织级只读策略
+- AGENT:    namespace=(assistant_id,)                    prefix=/memories/agent/    全用户共享的智能体人设
+- USER:     namespace=(assistant_id, user_id)            prefix=/memories/user/     按用户隔离的偏好与摘要
+- MIXTURE:  namespace=(assistant_id, user_id, "mixture") prefix=/memories/mixture/  自定义文件，按 agent×user 隔离
+- ORG:      namespace=(org_id,)                          prefix=/memories/policies/ 组织级只读策略
 """
 from __future__ import annotations
 
@@ -49,7 +50,7 @@ def scope_path_prefix(scope: MemoryScope) -> str:
     if scope is MemoryScope.MIXTURE:
         return "/memories/mixture/"
     if scope is MemoryScope.ORG:
-        return "/policies/"
+        return "/memories/policies/"
     raise ValueError(f"未知作用域: {scope}")
 
 
@@ -67,8 +68,10 @@ def scope_namespace(
     """
     if scope is MemoryScope.AGENT:
         return (agent_id,)
-    if scope is MemoryScope.USER or scope is MemoryScope.MIXTURE:
+    if scope is MemoryScope.USER:
         return (agent_id, user_id or TEMPLATE_USER_ID)
+    if scope is MemoryScope.MIXTURE:
+        return (agent_id, user_id or TEMPLATE_USER_ID, "mixture")
     if scope is MemoryScope.ORG:
         return (org_id or DEFAULT_ORG_ID,)
     raise ValueError(f"未知作用域: {scope}")

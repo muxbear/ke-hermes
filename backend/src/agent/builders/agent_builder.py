@@ -37,6 +37,7 @@ from agent.memory.scopes import (
     infer_scope,
 )
 from agent.middleware.skill_sandbox_sync import SkillSandboxSyncMiddleware
+from agent.middleware.template_copy import TemplateCopyMiddleware
 from agent.sandbox.sandbox_manager import SandboxManager
 from agent.sandbox.user_aware_sandbox_backend import UserAwareSandboxBackend
 from agent.subagents.subagents_operate import create_subagents
@@ -98,7 +99,7 @@ class AgentBuilder:
         """通过共享的 resolve_model 解析 LLM 实例。"""
         if self._agent_info is None:
             raise RuntimeError("必须先调用 with_agent_from_db()")
-            
+
         self._model = await resolve_model(
             self._agent_info.provider_id,
             self._agent_info.model_id,
@@ -157,42 +158,46 @@ class AgentBuilder:
         return self
 
     def with_backend(self) -> "AgentBuilder":
-        """构建组合后端（sandbox + 三作用域 StoreBackend + /skills/ FilesystemBackend）。
+        """构建组合后端（sandbox + 四作用域 StoreBackend + /skills/ FilesystemBackend）。
 
-        路由前缀按记忆作用域划分：
-        - /memories/agent/    → namespace=(agent_id,)
-        - /memories/user/     → namespace=(agent_id, user_id)
-        - /memories/mixture/  → namespace=(agent_id, user_id)
-        - /policies/          → namespace=(org_id,) 组织级只读
+        所有记忆作用域统一在 /memories/ 下，namespace 使用构建时确定的 agent_id：
+        - /memories/agent/    → namespace=(agent_id,)                   全用户共享
+        - /memories/user/     → namespace=(agent_id, user_id)           按用户隔离
+        - /memories/mixture/  → namespace=(agent_id, user_id, "mixture") 自定义文件
+        - /memories/policies/ → namespace=(org_id,)                     组织级只读
         - /skills/            → FilesystemBackend
         """
         if self._sandbox_backend is None:
             raise RuntimeError("必须先调用 with_sandbox()")
-        agent_id = self._agent_id
 
-        def _org_ns(ctx: Any) -> tuple[str, ...]:
-            org_id = getattr(cast(Any, ctx).runtime.context, "org_id", "")
-            return (org_id or DEFAULT_ORG_ID,)
+        agent_id = self._agent_id
 
         self._backend = CompositeBackend(
             default=self._sandbox_backend,
             routes={
                 "/memories/agent/": StoreBackend(
-                    namespace=lambda ctx: (agent_id,),
+                    namespace=lambda rt: (agent_id,),
                 ),
                 "/memories/user/": StoreBackend(
-                    namespace=lambda ctx: (
+                    namespace=lambda rt: (
                         agent_id,
-                        cast(Any, ctx).runtime.context.user_id,
+                        cast(Any, rt).runtime.context.user_id,
                     ),
                 ),
                 "/memories/mixture/": StoreBackend(
-                    namespace=lambda ctx: (
+                    namespace=lambda rt: (
                         agent_id,
-                        cast(Any, ctx).runtime.context.user_id,
+                        cast(Any, rt).runtime.context.user_id,
+                        "mixture",
                     ),
                 ),
-                "/policies/": StoreBackend(namespace=_org_ns),
+                "/memories/policies/": StoreBackend(
+                    namespace=lambda rt: (
+                        getattr(
+                            cast(Any, rt).runtime.context, "org_id", ""
+                        ) or DEFAULT_ORG_ID,
+                    ),
+                ),
                 "/skills/": FilesystemBackend(
                     root_dir=self._skills_root, virtual_mode=True
                 ),
@@ -216,7 +221,6 @@ class AgentBuilder:
         )
 
         if not files:
-            # 修复 G3：默认文件名从 AGENT.md 改为 AGENTS.md
             self._memory = [build_memory_path(MemoryScope.AGENT, "AGENTS.md")]
             return self
 
@@ -245,16 +249,33 @@ class AgentBuilder:
         return self
 
     def with_middleware(self) -> "AgentBuilder":
-        """创建技能沙盒同步中间件。"""
+        """创建中间件链（模板复制 → 技能沙盒同步）。"""
         if self._sandbox_manager is None:
             raise RuntimeError("必须先调用 with_sandbox()")
-        self._middleware = [
+        self._middleware = []
+
+        # 模板复制中间件：首次对话时将 USER/MIXTURE 模板复制到用户命名空间
+        template_paths = [
+            p
+            for p in self._memory
+            if p.startswith("/memories/user/")
+            or p.startswith("/memories/mixture/")
+        ]
+        if template_paths:
+            self._middleware.append(
+                TemplateCopyMiddleware(
+                    agent_id=self._agent_id,
+                    template_paths=template_paths,
+                )
+            )
+
+        self._middleware.append(
             SkillSandboxSyncMiddleware(
                 sandbox_manager=self._sandbox_manager,
                 skills_root=self._skills_root,
                 agent_id=self._agent_id,
             )
-        ]
+        )
         return self
 
     def build(self, checkpointer=None, store=None):
@@ -282,36 +303,5 @@ class AgentBuilder:
             middleware=self._middleware,  # type: ignore[list-item]
         )
 
-        logger.info("主智能体 '%s' 创建成功", self._agent_info.name)
+        logger.info(f"主智能体 {self._agent_info.name} 创建成功")
         return agent
-
-
-async def create_main_agent_v2(checkpointer=None, store=None, sandbox_manager=None):
-    """使用建造者模式创建主智能体（推荐入口）。
-
-    保持与旧 create_main_agent() 相同的签名，内部使用 AgentBuilder。
-    逐步构建：DB 查询 → 模型解析 → 工具注册 → 提示词 → 子智能体 → sandbox → memory → 中间件 → build。
-
-    Args:
-        checkpointer: LangGraph 检查点实例。
-        store: LangGraph 存储实例。
-        sandbox_manager: 可选 SandboxManager 实例。
-
-    Returns:
-        配置完成的 deep agent 实例。
-    """
-    from db.engine import async_session
-
-    async with async_session() as session:
-        builder = AgentBuilder()
-        await builder.with_agent_from_db(session)
-        await builder.with_memory(session)
-
-    await builder.with_model()
-    await builder.with_tools()
-    builder.with_system_prompt()
-    await builder.with_subagents()
-    builder.with_sandbox(sandbox_manager=sandbox_manager)
-    builder.with_backend()
-    builder.with_middleware()
-    return builder.build(checkpointer=checkpointer, store=store)

@@ -53,10 +53,11 @@ async def sync_agent_file_to_store(
     namespace = scope_namespace(
         scope, agent_id=agent_id, user_id=user_id, org_id=org_id
     )
-    path = build_memory_path(scope, filename)
-    await store.aput(namespace, path, create_file_data(content))
+    # Store key 使用 "/filename"（CompositeBackend 剥离路由前缀后保留前导 /）
+    await store.aput(namespace, f"/{filename}", create_file_data(content))
     logger.debug(
-        "已同步文件 %s (scope=%s) 到 Store namespace=%s", path, scope.value, namespace
+        "已同步文件 %s (scope=%s) 到 Store namespace=%s",
+        filename, scope.value, namespace,
     )
 
 
@@ -73,18 +74,18 @@ async def delete_agent_file_from_store(
     namespace = scope_namespace(
         scope, agent_id=agent_id, user_id=user_id, org_id=org_id
     )
-    path = build_memory_path(scope, filename)
     try:
-        await store.adelete(namespace, path)
+        await store.adelete(namespace, f"/{filename}")
     except Exception:
         logger.warning("从 Store 删除 %s 失败（可能不存在）", path, exc_info=True)
 
 
 async def bootstrap_agent_memory(store: Any, db: AsyncSession) -> None:
-    """应用启动时将 AgentFile 表中所有文件种子化到 Store。
+    """应用启动时将 AgentFile 表中新文件种子化到 Store（幂等：已存在则跳过）。
 
     - AGENT/ORG 作用域：直接写入对应 namespace
     - USER/MIXTURE 作用域：写入 (agent_id, "__template__") 命名空间作为模板
+    - 跳过已存在的文件，保留 Agent 运行时自我修改的内容不被覆盖
     """
     stmt = select(AgentFile)
     rows = (await db.execute(stmt)).scalars().all()
@@ -93,8 +94,24 @@ async def bootstrap_agent_memory(store: Any, db: AsyncSession) -> None:
         return
 
     count = 0
+    skipped = 0
     for row in rows:
         scope = MemoryScope(row.scope) if row.scope else infer_scope(row.filename)
+        namespace = scope_namespace(
+            scope,
+            agent_id=row.agent_id,
+            user_id=TEMPLATE_USER_ID,
+            org_id=row.org_id,
+        )
+
+        # 跳过已存在文件，避免覆盖 Agent 运行时的自我改进
+        try:
+            if await store.aget(namespace, f"/{row.filename}") is not None:
+                skipped += 1
+                continue
+        except Exception:
+            pass  # 查询失败时保守写入
+
         await sync_agent_file_to_store(
             store,
             agent_id=row.agent_id,
@@ -105,7 +122,10 @@ async def bootstrap_agent_memory(store: Any, db: AsyncSession) -> None:
             scope=scope,
         )
         count += 1
-    logger.info("记忆 bootstrap 完成，共同步 %d 个文件到 Store", count)
+    logger.info(
+        "记忆 bootstrap 完成，新增 %d 个文件，跳过 %d 个已存在文件",
+        count, skipped,
+    )
 
 
 __all__ = [
