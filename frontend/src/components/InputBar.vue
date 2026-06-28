@@ -1,15 +1,16 @@
 <script setup>
 import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
-import { Mic, Plus, Send, FileText, Image } from 'lucide-vue-next'
+import { Mic, ArrowUp, Image, Paperclip, Globe, HardDrive, Database } from 'lucide-vue-next'
 import { useChatStore } from '@/stores/chat'
-import { useUiStore } from '@/stores/ui'
 
 const chatStore = useChatStore()
-const uiStore = useUiStore()
 
 const inputText = ref('')
 const inputRef = ref(null)
-const inputBarRef = ref(null)
+const webSearchEnabled = ref(false)
+const fileInputRef = ref(null)
+const imageInputRef = ref(null)
+const popoverMenu = ref(null)
 
 function handleSend() {
   const text = inputText.value.trim()
@@ -35,9 +36,45 @@ function autoResize() {
   el.style.height = Math.min(el.scrollHeight, 120) + 'px'
 }
 
+function toggleWebSearch() {
+  webSearchEnabled.value = !webSearchEnabled.value
+}
+
+function openPopover(type) {
+  popoverMenu.value = popoverMenu.value === type ? null : type
+}
+
+function selectLocalFile() {
+  popoverMenu.value = null
+  fileInputRef.value?.click()
+}
+
+function selectLocalImage() {
+  popoverMenu.value = null
+  imageInputRef.value?.click()
+}
+
+function onFilesSelected(e) {
+  const files = e.target.files
+  if (!files || files.length === 0) return
+  // TODO: 接入后端上传 API
+  console.log('选中附件：', [...files].map(f => f.name))
+  e.target.value = ''
+}
+
+function onImagesSelected(e) {
+  const files = e.target.files
+  if (!files || files.length === 0) return
+  // TODO: 接入后端上传 API
+  console.log('选中图片：', [...files].map(f => f.name))
+  e.target.value = ''
+}
+
 function handleClickOutside(e) {
-  if (inputBarRef.value && !inputBarRef.value.contains(e.target)) {
-    uiStore.closePlusMenu()
+  if (!popoverMenu.value) return
+  const popover = document.querySelector('.upload-popover')
+  if (popover && !popover.contains(e.target)) {
+    popoverMenu.value = null
   }
 }
 
@@ -57,85 +94,117 @@ watch(() => chatStore.loading, (loading) => {
 </script>
 
 <template>
-  <div class="input-bar" ref="inputBarRef">
-    <div class="input-row">
-      <div class="input-field-wrap">
-        <textarea
-          ref="inputRef"
-          v-model="inputText"
-          @keydown="handleKeydown"
-          @input="autoResize"
-          :disabled="chatStore.loading"
-          placeholder="输入消息..."
-          class="input-field"
-          rows="1"
-        />
-        <button class="mic-btn">
-          <Mic :size="16" />
+  <div class="input-bar">
+    <div class="input-area">
+      <textarea
+        ref="inputRef"
+        v-model="inputText"
+        @keydown="handleKeydown"
+        @input="autoResize"
+        :disabled="chatStore.loading"
+        placeholder="输入消息..."
+        class="input-field"
+        rows="2"
+      />
+
+      <div class="input-toolbar">
+        <button
+          class="web-search-btn"
+          :class="{ active: webSearchEnabled }"
+          @click="toggleWebSearch"
+        >
+          <Globe :size="14" />
+          <span>联网搜索</span>
         </button>
-      </div>
-      <div class="plus-wrap">
-        <button class="plus-btn" @click.stop="uiStore.togglePlusMenu">
-          <Plus :size="16" />
-        </button>
-        <div v-if="uiStore.plusMenuOpen" class="plus-menu">
-          <div class="plus-menu-item">
-            <FileText :size="14" />
-            <span>上传附件</span>
+
+        <div class="toolbar-actions">
+          <div class="tool-btn-wrap">
+            <button
+              class="tool-btn"
+              title="快速理解总结文件，支持PDF、Word、Excel、PPT、TXT、Python、Java等，最多10个，最大100MB"
+              @click.stop="openPopover('attachment')"
+            >
+              <Paperclip :size="16" />
+            </button>
+            <div v-if="popoverMenu === 'attachment'" class="upload-popover">
+              <div class="popover-item" @click.stop="selectLocalFile">
+                <HardDrive :size="14" />
+                <span>上传本地文件</span>
+              </div>
+              <div class="popover-item" @click.stop="selectLocalFile">
+                <Database :size="14" />
+                <span>上传知识库文件</span>
+              </div>
+            </div>
+            <input
+              ref="fileInputRef"
+              type="file"
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.py,.java,.csv,.md,.json,.xml,.yaml,.yml"
+              multiple
+              hidden
+              @change="onFilesSelected"
+            />
           </div>
-          <div class="plus-menu-item">
-            <Image :size="14" />
-            <span>上传图片</span>
+
+          <div class="tool-btn-wrap">
+            <button
+              class="tool-btn"
+              title="一键解读图片内容，支持jpg、png、jpeg等，最多10个，最大10MB"
+              @click.stop="openPopover('image')"
+            >
+              <Image :size="16" />
+            </button>
+            <div v-if="popoverMenu === 'image'" class="upload-popover">
+              <div class="popover-item" @click.stop="selectLocalImage">
+                <HardDrive :size="14" />
+                <span>上传本地图片</span>
+              </div>
+              <div class="popover-item" @click.stop="selectLocalImage">
+                <Database :size="14" />
+                <span>上传知识库图片</span>
+              </div>
+            </div>
+            <input
+              ref="imageInputRef"
+              type="file"
+              accept=".jpg,.jpeg,.png,.gif,.webp,.bmp"
+              multiple
+              hidden
+              @change="onImagesSelected"
+            />
           </div>
+
+          <button class="tool-btn" title="点击开启语音输入">
+            <Mic :size="16" />
+          </button>
+          <button
+            class="send-btn"
+            :disabled="!inputText.trim() || chatStore.loading"
+            @click="handleSend"
+          >
+            <ArrowUp :size="18" />
+          </button>
         </div>
       </div>
-      <button
-        class="send-btn"
-        :disabled="!inputText.trim() || chatStore.loading"
-        @click="handleSend"
-      >
-        <Send :size="16" />
-      </button>
     </div>
-
-    <div class="trace-toggle-row">
-      <el-switch
-        v-model="chatStore.traceEnabled"
-        size="small"
-        :disabled="chatStore.loading"
-      />
-      <span class="trace-toggle-label">跟踪调用</span>
-    </div>
-
-    <span class="kb-hint">Enter 发送 · Shift+Enter 换行</span>
   </div>
 </template>
 
 <style scoped>
 .input-bar {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 10px 20px;
+  padding: 12px 20px 16px;
   background: var(--surface-card);
   border-top: 1px solid var(--border-subtle);
 }
 
-.input-row {
+.input-area {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 10px;
-}
-
-.input-field-wrap {
-  flex: 1;
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  padding: 10px 14px;
+  background: #0d1429;
+  border: 1px solid rgba(59, 130, 246, 0.08);
   border-radius: var(--radius-xl);
-  background: var(--surface-secondary);
+  padding: 12px 16px 8px;
 }
 
 .input-field {
@@ -147,8 +216,8 @@ watch(() => chatStore.loading, (loading) => {
   font-family: inherit;
   color: var(--foreground-primary);
   resize: none;
-  line-height: 1.5;
-  min-height: 24px;
+  line-height: 1.6;
+  min-height: 48px;
   max-height: 120px;
 }
 
@@ -160,110 +229,122 @@ watch(() => chatStore.loading, (loading) => {
   opacity: 0.5;
 }
 
-.mic-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-full);
-  border: none;
-  background: var(--surface-secondary);
-  color: var(--foreground-secondary);
+.input-toolbar {
   display: flex;
   align-items: center;
-  justify-content: center;
-  cursor: pointer;
+  justify-content: space-between;
 }
 
-.mic-btn:hover {
-  background: var(--border-subtle);
-}
-
-.plus-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: var(--radius-full);
-  border: none;
-  background: var(--surface-secondary);
-  color: var(--foreground-secondary);
+.toolbar-actions {
   display: flex;
   align-items: center;
-  justify-content: center;
-  cursor: pointer;
+  gap: 4px;
 }
 
-.plus-btn:hover {
-  background: var(--border-subtle);
-}
-
-.send-btn {
-  width: 32px;
-  height: 32px;
+.web-search-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
   border-radius: var(--radius-full);
-  border: none;
+  border: 1px solid var(--border-subtle);
+  background: rgba(59, 130, 246, 0.08);
+  color: var(--foreground-secondary);
+  font-size: var(--font-size-sm);
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.web-search-btn:hover {
+  background: rgba(59, 130, 246, 0.14);
+  color: var(--foreground-primary);
+}
+
+.web-search-btn.active {
   background: var(--accent-primary);
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
+  border-color: var(--accent-primary);
+  color: #fff;
 }
 
-.send-btn:disabled {
-  background: var(--surface-secondary);
-  color: var(--foreground-muted);
-  cursor: not-allowed;
-}
-
-.plus-wrap {
+.tool-btn-wrap {
   position: relative;
 }
 
-.plus-menu {
+.tool-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-full);
+  border: none;
+  background: transparent;
+  color: var(--foreground-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tool-btn:hover {
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--foreground-primary);
+}
+
+.upload-popover {
   position: absolute;
   bottom: calc(100% + 8px);
   right: 0;
-  width: 160px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
   padding: 6px;
   border-radius: var(--radius-lg);
   background: var(--surface-card);
   border: 1px solid var(--border-subtle);
   z-index: 100;
+  min-width: 160px;
 }
 
-.plus-menu-item {
+.popover-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 10px;
+  padding: 8px 12px;
   border-radius: var(--radius-sm);
-  background: var(--surface-secondary);
   color: var(--foreground-secondary);
   font-size: var(--font-size-base);
   cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
 }
 
-.plus-menu-item:hover {
-  background: var(--border-subtle);
+.popover-item:hover {
+  background: var(--surface-secondary);
   color: var(--foreground-primary);
 }
 
-.trace-toggle-row {
+.send-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-full);
+  border: none;
+  background: var(--accent-primary);
+  color: #fff;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 0 4px;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-left: 2px;
 }
 
-.trace-toggle-label {
-  font-size: var(--font-size-xs);
-  color: var(--foreground-muted);
+.send-btn:hover:not(:disabled) {
+  opacity: 0.85;
 }
 
-.kb-hint {
-  font-size: var(--font-size-xs);
+.send-btn:disabled {
+  background: rgba(59, 130, 246, 0.2);
   color: var(--foreground-muted);
-  text-align: center;
+  cursor: not-allowed;
 }
 </style>
