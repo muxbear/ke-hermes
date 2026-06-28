@@ -34,7 +34,6 @@ DEFAULT_SCOPE_BY_FILENAME: dict[str, MemoryScope] = {
 }
 
 DEFAULT_ORG_ID = "default-org"
-TEMPLATE_USER_ID = "__template__"
 
 
 def infer_scope(filename: str) -> MemoryScope:
