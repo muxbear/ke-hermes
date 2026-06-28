@@ -17,7 +17,7 @@ from api.captcha.schemas import (
     SlideVerifyRequest,
     SlideVerifyResponse,
 )
-from core.store import KeyValueStore
+from core.cache import KeyValueCache
 
 logger = logging.getLogger(__name__)
 
@@ -205,7 +205,7 @@ def _draw_slider_piece(width: int, height: int) -> Image.Image:
     return piece
 
 
-async def generate_slide_puzzle(session_id: str, store: KeyValueStore) -> SlidePuzzleData:
+async def generate_slide_puzzle(session_id: str, store: KeyValueCache) -> SlidePuzzleData:
     width, height = 300, 160
     slider_w, slider_h = 50, 40
     y = random.randint(25, height - slider_h - 25)
@@ -223,7 +223,7 @@ async def generate_slide_puzzle(session_id: str, store: KeyValueStore) -> SlideP
     return SlidePuzzleData(bgImage=bg_b64, slideImage=slider_b64, y=y, sessionId=session_id)
 
 
-async def verify_slide(req: SlideVerifyRequest, session_id: str, store: KeyValueStore) -> SlideVerifyResponse:
+async def verify_slide(req: SlideVerifyRequest, session_id: str, store: KeyValueCache) -> SlideVerifyResponse:
     data = await store.get(f"captcha:slide:{session_id}")
     if not data:
         raise HTTPException(status_code=400, detail="Captcha expired, please retry")
@@ -245,7 +245,7 @@ async def verify_slide(req: SlideVerifyRequest, session_id: str, store: KeyValue
         return SlideVerifyResponse(success=False)
 
 
-async def generate_image_captcha(store: KeyValueStore) -> ImageCaptchaData:
+async def generate_image_captcha(store: KeyValueCache) -> ImageCaptchaData:
     width, height = 160, 60
     code = "".join(random.choices(string.ascii_uppercase + string.digits, k=4))
     key = str(uuid.uuid4())
@@ -282,7 +282,7 @@ async def generate_image_captcha(store: KeyValueStore) -> ImageCaptchaData:
     return ImageCaptchaData(image=_img_to_base64(img), key=key)
 
 
-async def verify_image(key: str, code: str, store: KeyValueStore) -> bool:
+async def verify_image(key: str, code: str, store: KeyValueCache) -> bool:
     stored = await store.get(f"captcha:image:{key}")
     if not stored:
         return False

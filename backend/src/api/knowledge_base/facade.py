@@ -133,8 +133,7 @@ class KnowledgeBaseFacade:
         self._search_orchestrator = search_orchestrator
         app.state.search_orchestrator = search_orchestrator
         set_search_orchestrator(search_orchestrator)
-        logger.info("检索编排器已初始化 (modes: %s)",
-                     search_orchestrator._registry.supported_modes)
+        logger.info("检索编排器已初始化 (modes: %s)", search_orchestrator._registry.supported_modes)
 
     @property
     def vector_store(self) -> Any:

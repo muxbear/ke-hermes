@@ -9,7 +9,7 @@ from agent.config import settings
 logger = logging.getLogger(__name__)
 
 
-class KeyValueStore(ABC):
+class KeyValueCache(ABC):
     @abstractmethod
     async def get(self, key: str) -> str | None: ...
 
@@ -29,8 +29,8 @@ class KeyValueStore(ABC):
     async def ttl(self, key: str) -> int: ...
 
 
-class MemoryStore(KeyValueStore):
-    """Thread-safe in-memory store with lazy TTL eviction."""
+class MemoryCache(KeyValueCache):
+    """Thread-safe in-memory cache with lazy TTL eviction."""
 
     def __init__(self):
         self._data: dict[str, tuple[str, float]] = {}
@@ -82,8 +82,8 @@ class MemoryStore(KeyValueStore):
             return max(0, int(remaining))
 
 
-async def create_store(redis_url: str = "") -> KeyValueStore:
-    """Create Redis store if available, otherwise fall back to MemoryStore."""
+async def create_cache(redis_url: str = "") -> KeyValueCache:
+    """如果 Redis 可用，创建 RedisCache，否则回退到 MemoryCache。"""
     if not redis_url:
         redis_url = settings.REDIS_URL
     try:
@@ -91,9 +91,9 @@ async def create_store(redis_url: str = "") -> KeyValueStore:
 
         r = aioredis.from_url(redis_url)
         r.ping()
-        logger.info("Redis connected at %s", redis_url)
+        logger.info(f"从 {redis_url} 连接到 Redis")
 
-        class RedisStore(KeyValueStore):
+        class RedisCache(KeyValueCache):
             def __init__(self, client):
                 self._r = client
 
@@ -116,7 +116,7 @@ async def create_store(redis_url: str = "") -> KeyValueStore:
             async def ttl(self, key: str) -> int:
                 return await self._r.ttl(key)
 
-        return RedisStore(r)
+        return RedisCache(r)
     except Exception as e:
-        logger.warning("Redis unavailable (%s), using in-memory store", e)
-        return MemoryStore()
+        logger.warning("Redis 不可用 (%s), 使用 in-memory store", e)
+        return MemoryCache()

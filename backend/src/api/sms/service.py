@@ -2,7 +2,7 @@ import logging
 
 from pydantic import BaseModel, Field
 
-from core.store import KeyValueStore
+from core.cache import KeyValueCache
 from core.verification import SmsCodeSender
 
 logger = logging.getLogger(__name__)
@@ -14,7 +14,7 @@ class SendSmsRequest(BaseModel):
     captchaRandstr: str
 
 
-async def send_sms(req: SendSmsRequest, store: KeyValueStore) -> dict:
+async def send_sms(req: SendSmsRequest, store: KeyValueCache) -> dict:
     """发送短信验证码——委托给 SmsCodeSender 策略。"""
     sender = SmsCodeSender(store)
     return await sender.send(req.phone, req.captchaTicket, req.captchaRandstr)

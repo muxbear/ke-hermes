@@ -11,13 +11,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.auth.schemas import AuthResponse, AuthTokens, UserInfo
 from api.oauth.providers import get_oauth_provider
 from core.security import create_token_pair
-from core.store import KeyValueStore
+from core.cache import KeyValueCache
 from db.models import User, UserOAuth
 
 logger = logging.getLogger(__name__)
 
 
-async def get_auth_url(provider: str, store: KeyValueStore) -> str:
+async def get_auth_url(provider: str, store: KeyValueCache) -> str:
     """生成第三方 OAuth 授权 URL。"""
     try:
         adapter = get_oauth_provider(provider)
@@ -34,7 +34,7 @@ async def handle_callback(
     provider: str,
     code: str,
     state: str,
-    store: KeyValueStore,
+    store: KeyValueCache,
     db: AsyncSession,
 ) -> AuthResponse:
     """处理 OAuth 回调——验证 state、交换 token、获取并标准化用户信息。"""

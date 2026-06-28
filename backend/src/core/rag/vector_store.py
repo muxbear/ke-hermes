@@ -140,7 +140,7 @@ class MilvusVectorStore(BaseVectorStore):
             collection = Collection(name=collection_name, schema=schema)
 
             # Dense vector index (COSINE)
-            await collection.create_index(
+            collection.create_index(  # pyright: ignore[reportUnusedCoroutine]
                 field_name="embedding",
                 index_params={
                     "metric_type": "COSINE",
@@ -151,7 +151,7 @@ class MilvusVectorStore(BaseVectorStore):
 
             # Scalar indices
             for field_name in ["doc_id", "kb_id"]:
-                await collection.create_index(
+                collection.create_index(  # pyright: ignore[reportUnusedCoroutine]
                     field_name=field_name,
                     index_params={"index_type": "INVERTED"},
                 )

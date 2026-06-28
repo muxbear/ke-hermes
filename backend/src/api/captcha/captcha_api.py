@@ -15,10 +15,10 @@ from api.captcha.service import (
     verify_image,
     verify_slide,
 )
-from api.deps import get_store
+from api.deps import get_cache
 from core.decorators import handle_errors
 from core.response import ApiResponse, error, ok
-from core.store import KeyValueStore
+from core.cache import KeyValueCache
 
 router = APIRouter(prefix="/api/captcha", tags=["captcha"])
 
@@ -45,10 +45,10 @@ def _get_session_id(request: Request, response: Response) -> str:
 async def get_slide(
     request: Request,
     response: Response,
-    store: KeyValueStore = Depends(get_store),
+    cache: KeyValueCache = Depends(get_cache),
 ):
     sid = _get_session_id(request, response)
-    data = await generate_slide_puzzle(sid, store)
+    data = await generate_slide_puzzle(sid, cache)
     return ok(data)
 
 
@@ -57,20 +57,20 @@ async def get_slide(
 async def verify_slide_route(
     req: SlideVerifyRequest,
     request: Request,
-    store: KeyValueStore = Depends(get_store),
+    cache: KeyValueCache = Depends(get_cache),
 ):
     # Prefer sessionId from request body; fall back to cookie
     sid = req.sessionId or request.cookies.get(CAPTCHA_SESSION_COOKIE)
     if not sid:
         return error(400, "Captcha session not found, please refresh")
-    result = await verify_slide(req, sid, store)
+    result = await verify_slide(req, sid, cache)
     return ok(result)
 
 
 @router.get("/image", response_model=ApiResponse[ImageCaptchaData])
 @handle_errors
-async def get_image(store: KeyValueStore = Depends(get_store)):
-    data = await generate_image_captcha(store)
+async def get_image(cache: KeyValueCache = Depends(get_cache)):
+    data = await generate_image_captcha(cache)
     return ok(data)
 
 
@@ -78,7 +78,7 @@ async def get_image(store: KeyValueStore = Depends(get_store)):
 @handle_errors
 async def verify_image_route(
     req: ImageVerifyRequest,
-    store: KeyValueStore = Depends(get_store),
+    cache: KeyValueCache = Depends(get_cache),
 ):
-    success = await verify_image(req.key, req.code, store)
+    success = await verify_image(req.key, req.code, cache)
     return ok({"success": success})

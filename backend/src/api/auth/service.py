@@ -24,7 +24,7 @@ from core.security import (
     hash_password,
     verify_password,
 )
-from core.store import KeyValueStore
+from core.cache import KeyValueCache
 from db.models import LoginRecord, User
 
 logger = logging.getLogger(__name__)
@@ -34,7 +34,7 @@ async def get_public_key_svc() -> str:
     return _get_public_key()
 
 
-async def _get_fail_info(account: str, store: KeyValueStore) -> LoginFailInfo:
+async def _get_fail_info(account: str, store: KeyValueCache) -> LoginFailInfo:
     data = await store.get(f"login:fail:{account}")
     if not data:
         return LoginFailInfo(failCount=0, lockedUntil=None)
@@ -49,7 +49,7 @@ async def _get_fail_info(account: str, store: KeyValueStore) -> LoginFailInfo:
         return LoginFailInfo(failCount=0, lockedUntil=None)
 
 
-async def _check_locked(account: str, store: KeyValueStore):
+async def _check_locked(account: str, store: KeyValueCache):
     info = await _get_fail_info(account, store)
     if info.lockedUntil and time.time() < info.lockedUntil:
         remaining = int(info.lockedUntil - time.time())
@@ -63,7 +63,7 @@ async def _record_login(session: AsyncSession, account: str, success: bool, ip: 
     session.add(LoginRecord(account=account, success=success, ip=ip))
 
 
-async def _incr_fail(account: str, store: KeyValueStore):
+async def _incr_fail(account: str, store: KeyValueCache):
     from agent.config import settings
 
     count = await store.incr(f"login:fail:{account}")
@@ -74,7 +74,7 @@ async def _incr_fail(account: str, store: KeyValueStore):
         await store.set(f"login:fail:{account}", f"{count}:0", ttl=settings.LOGIN_LOCK_MINUTES * 60 * 2)
 
 
-async def _clear_fail(account: str, store: KeyValueStore):
+async def _clear_fail(account: str, store: KeyValueCache):
     await store.delete(f"login:fail:{account}")
 
 
@@ -103,7 +103,7 @@ def _to_auth_response(user: User, token_pair) -> AuthResponse:
 async def account_login(
     req: AccountLoginRequest,
     db: AsyncSession,
-    store: KeyValueStore,
+    store: KeyValueCache,
     ip: str = "",
 ) -> AuthResponse:
     await _check_locked(req.account, store)
@@ -135,7 +135,7 @@ async def account_login(
 async def phone_login(
     req: PhoneLoginRequest,
     db: AsyncSession,
-    store: KeyValueStore,
+    store: KeyValueCache,
 ) -> AuthResponse:
     code = await store.get(f"sms:{req.phone}")
     if not code or code != req.smsCode:
@@ -158,7 +158,7 @@ async def phone_login(
 async def register_phone(
     req: RegisterRequest,
     db: AsyncSession,
-    store: KeyValueStore,
+    store: KeyValueCache,
 ) -> AuthResponse:
     code = await store.get(f"sms:{req.phone}")
     if not code or code != req.smsCode:
@@ -190,7 +190,7 @@ async def register_phone(
 async def register_email(
     req: EmailRegisterRequest,
     db: AsyncSession,
-    store: KeyValueStore,
+    store: KeyValueCache,
 ) -> AuthResponse:
     code = await store.get(f"email:{req.email}")
     if not code or code != req.emailCode:
@@ -237,5 +237,5 @@ async def refresh_token_svc(
     return _to_auth_response(user, token_pair)
 
 
-async def get_fail_count_svc(account: str, store: KeyValueStore) -> LoginFailInfo:
+async def get_fail_count_svc(account: str, store: KeyValueCache) -> LoginFailInfo:
     return await _get_fail_info(account, store)

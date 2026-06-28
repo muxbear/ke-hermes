@@ -13,7 +13,7 @@ from datetime import datetime
 from fastapi import HTTPException
 
 from agent.config import settings
-from core.store import KeyValueStore
+from core.cache import KeyValueCache
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ class VerificationCodeSender(ABC):
     key_prefix: str
     daily_limit: int
 
-    def __init__(self, store: KeyValueStore) -> None:
+    def __init__(self, store: KeyValueCache) -> None:
         self._store = store
 
     async def send(self, identifier: str, captcha_ticket: str = "",

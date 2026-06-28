@@ -1207,6 +1207,28 @@ function getStatusColor(status: string): string {
 
 .add-btn.section--orange:hover { background: rgba(249, 115, 22, 0.08); }
 
+/* scope--* variants for Files tab buttons */
+.add-btn.scope--yellow {
+  border-color: rgba(234, 179, 8, 0.3);
+  color: #eab308;
+}
+
+.add-btn.scope--yellow:hover { background: rgba(234, 179, 8, 0.08); }
+
+.add-btn.scope--blue {
+  border-color: rgba(59, 130, 246, 0.3);
+  color: var(--color-accent);
+}
+
+.add-btn.scope--blue:hover { background: rgba(59, 130, 246, 0.08); }
+
+.add-btn.scope--teal {
+  border-color: rgba(20, 184, 166, 0.3);
+  color: #14b8a6;
+}
+
+.add-btn.scope--teal:hover { background: rgba(20, 184, 166, 0.08); }
+
 /* ---- Tags ---- */
 .tags-wrap {
   display: flex;

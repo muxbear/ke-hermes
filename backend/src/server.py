@@ -20,8 +20,8 @@ logging.basicConfig(level=logging.INFO, format="%(name)s: %(message)s")
 load_dotenv()
 
 from api import router
-from api.deps import set_store
-from core.store import create_store
+from api.deps import set_cache
+from core.cache import create_cache
 from db.engine import init_db
 from agent.graph import init_graph, shutdown_graph
 
@@ -59,8 +59,10 @@ async def lifespan(app: FastAPI):
         await session.commit()
 
     await init_graph()
-    store = await create_store()
-    set_store(store)
+    
+    cache = await create_cache()
+    set_cache(cache)
+
     from core.security import _get_jwt_secret as init_jwt
     init_jwt()
 

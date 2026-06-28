@@ -256,8 +256,8 @@ class IndexingPipeline:
 
     def _get_or_create_chunk_registry(self, config: dict, emb_model):
         """获取或创建带自定义参数的分片注册表。"""
-        chunk_size = config.get("chunk_size", 512)
-        chunk_overlap = config.get("chunk_overlap", 64)
+        chunk_size = config.get("chunk_size", 1024)
+        chunk_overlap = config.get("chunk_overlap", 200)
         cache_key = (chunk_size, chunk_overlap)
         if cache_key not in self._chunk_registry_cache:
             self._chunk_registry_cache[cache_key] = create_chunk_registry(

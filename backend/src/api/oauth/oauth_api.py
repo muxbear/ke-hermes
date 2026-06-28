@@ -2,12 +2,12 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.auth.schemas import AuthResponse
-from api.deps import get_db, get_store
+from api.deps import get_db, get_cache
 from api.oauth.schemas import OAuthCallbackRequest
 from api.oauth.service import get_auth_url, handle_callback
 from core.decorators import handle_errors
 from core.response import ApiResponse, ok
-from core.store import KeyValueStore
+from core.cache import KeyValueCache
 
 router = APIRouter(prefix="/api/oauth", tags=["oauth"])
 
@@ -16,9 +16,9 @@ router = APIRouter(prefix="/api/oauth", tags=["oauth"])
 @handle_errors
 async def auth_url(
     provider: str,
-    store: KeyValueStore = Depends(get_store),
+    cache: KeyValueCache = Depends(get_cache),
 ):
-    url = await get_auth_url(provider, store)
+    url = await get_auth_url(provider, cache)
     return ok({"authUrl": url})
 
 
@@ -27,7 +27,7 @@ async def auth_url(
 async def callback(
     req: OAuthCallbackRequest,
     db: AsyncSession = Depends(get_db),
-    store: KeyValueStore = Depends(get_store),
+    cache: KeyValueCache = Depends(get_cache),
 ):
-    result = await handle_callback(req.provider, req.code, req.state, store, db)
+    result = await handle_callback(req.provider, req.code, req.state, cache, db)
     return ok(result)

@@ -63,7 +63,7 @@ def handle_errors(
 def cached(ttl: int = 60):
     """API 响应缓存装饰器。
 
-    使用全局 KeyValueStore 缓存函数返回值。
+    使用全局 KeyValueCache 缓存函数返回值。
 
     使用方式:
         @cached(ttl=300)
@@ -72,10 +72,10 @@ def cached(ttl: int = 60):
     def decorator(fn: AsyncFunc) -> AsyncFunc:
         @functools.wraps(fn)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
-            from api.deps import get_store
+            from api.deps import get_cache
 
             try:
-                store = await get_store()
+                store = await get_cache()
             except Exception:
                 return await fn(*args, **kwargs)
 
@@ -137,7 +137,7 @@ def retry(max_attempts: int = 3, backoff_factor: float = 2.0):
 
 
 def rate_limit(max_calls: int = 5, period_seconds: int = 60, key_prefix: str = "rate_limit"):
-    """请求频率限制装饰器——基于 KeyValueStore 的滑动窗口计数器。
+    """请求频率限制装饰器——基于 KeyValueCache 的滑动窗口计数器。
 
     使用方式:
         @rate_limit(max_calls=5, period_seconds=60, key_prefix="sms")
@@ -151,7 +151,7 @@ def rate_limit(max_calls: int = 5, period_seconds: int = 60, key_prefix: str = "
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
             from fastapi import HTTPException, Request
 
-            from api.deps import get_store
+            from api.deps import get_cache
 
             # 提取请求对象（约定第一个位置参数或 kwargs 中名为 request 的参数）
             request: Request | None = None
@@ -164,7 +164,7 @@ def rate_limit(max_calls: int = 5, period_seconds: int = 60, key_prefix: str = "
 
             if request is not None:
                 try:
-                    store = await get_store()
+                    store = await get_cache()
                 except Exception:
                     return await fn(*args, **kwargs)
 

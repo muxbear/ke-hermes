@@ -19,10 +19,10 @@ from api.auth.service import (
     register_email,
     register_phone,
 )
-from api.deps import get_client_ip, get_db, get_store
+from api.deps import get_client_ip, get_db, get_cache
 from core.decorators import handle_errors
 from core.response import ApiResponse, ok
-from core.store import KeyValueStore
+from core.cache import KeyValueCache
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -39,9 +39,9 @@ async def login_account(
     req: AccountLoginRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    store: KeyValueStore = Depends(get_store),
+    cache: KeyValueCache = Depends(get_cache),
 ):
-    result = await account_login(req, db, store, ip=get_client_ip(request))
+    result = await account_login(req, db, cache, ip=get_client_ip(request))
     return ok(result)
 
 
@@ -50,9 +50,9 @@ async def login_account(
 async def login_phone(
     req: PhoneLoginRequest,
     db: AsyncSession = Depends(get_db),
-    store: KeyValueStore = Depends(get_store),
+    cache: KeyValueCache = Depends(get_cache),
 ):
-    result = await phone_login(req, db, store)
+    result = await phone_login(req, db, cache)
     return ok(result)
 
 
@@ -61,9 +61,9 @@ async def login_phone(
 async def register_phone_route(
     req: RegisterRequest,
     db: AsyncSession = Depends(get_db),
-    store: KeyValueStore = Depends(get_store),
+    cache: KeyValueCache = Depends(get_cache),
 ):
-    result = await register_phone(req, db, store)
+    result = await register_phone(req, db, cache)
     return ok(result)
 
 
@@ -72,9 +72,9 @@ async def register_phone_route(
 async def register_email_route(
     req: EmailRegisterRequest,
     db: AsyncSession = Depends(get_db),
-    store: KeyValueStore = Depends(get_store),
+    cache: KeyValueCache = Depends(get_cache),
 ):
-    result = await register_email(req, db, store)
+    result = await register_email(req, db, cache)
     return ok(result)
 
 
@@ -96,7 +96,7 @@ async def refresh(
 @router.get("/fail-count")
 async def fail_count(
     account: str,
-    store: KeyValueStore = Depends(get_store),
+    cache: KeyValueCache = Depends(get_cache),
 ):
-    info = await get_fail_count_svc(account, store)
+    info = await get_fail_count_svc(account, cache)
     return ok(info.model_dump())

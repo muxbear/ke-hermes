@@ -3,21 +3,21 @@ from collections.abc import AsyncGenerator
 from fastapi import HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.store import KeyValueStore
+from core.cache import KeyValueCache
 from core.security import decode_token
 from db.engine import get_db as _get_db
 
-_store: KeyValueStore | None = None
+_cache: KeyValueCache | None = None
 
 
-def set_store(store: KeyValueStore) -> None:
-    global _store
-    _store = store
+def set_cache(cache: KeyValueCache) -> None:
+    global _cache
+    _cache = cache
 
 
-async def get_store() -> KeyValueStore:
-    assert _store is not None, "Store not initialized"
-    return _store
+async def get_cache() -> KeyValueCache:
+    assert _cache is not None, "Cache 未被初始化"
+    return _cache
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
