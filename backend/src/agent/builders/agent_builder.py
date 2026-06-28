@@ -24,7 +24,6 @@ from typing import Any, cast
 
 from deepagents import create_deep_agent
 from deepagents.backends import CompositeBackend, FilesystemBackend, StoreBackend
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.common import get_tool_registry, resolve_model
@@ -37,11 +36,11 @@ from agent.memory.scopes import (
     infer_scope,
 )
 from agent.middleware.skill_sandbox_sync import SkillSandboxSyncMiddleware
-from agent.middleware.template_copy import TemplateCopyMiddleware
+
 from agent.sandbox.sandbox_manager import SandboxManager
 from agent.sandbox.user_aware_sandbox_backend import UserAwareSandboxBackend
 from agent.subagents.subagents_operate import create_subagents
-from db.models.agent_file import AgentFile
+
 
 logger = logging.getLogger(__name__)
 
@@ -206,10 +205,10 @@ class AgentBuilder:
         return self
 
     async def with_memory(self, db: AsyncSession) -> "AgentBuilder":
-        """根据智能体文件作用域构建记忆路径列表。
+        """根据智能体文件名推断作用域并构建记忆路径列表。
 
-        从 AgentFile 表读取每个文件的 scope，按 scope 拼接对应前缀路径。
-        若文件无 scope 记录（旧数据），按文件名推断并回填。
+        使用 ``infer_scope()`` 按文件名推断作用域（如 AGENTS.md→agent，
+        USER.md→user，其他→mixture），不再依赖 AgentFile 数据库表。
         """
         if self._agent_info is None:
             raise RuntimeError("必须先调用 with_agent_from_db()")
@@ -224,58 +223,23 @@ class AgentBuilder:
             self._memory = [build_memory_path(MemoryScope.AGENT, "AGENTS.md")]
             return self
 
-        # 查询每个文件的 scope
-        stmt = select(AgentFile).where(
-            AgentFile.agent_id == self._agent_id,
-            AgentFile.filename.in_(files),
-        )
-        rows = (await db.execute(stmt)).scalars().all()
-        scope_by_filename: dict[str, MemoryScope] = {}
-        for row in rows:
-            try:
-                scope_by_filename[row.filename] = (
-                    MemoryScope(row.scope) if row.scope else infer_scope(row.filename)
-                )
-            except ValueError:
-                scope_by_filename[row.filename] = infer_scope(row.filename)
-
         self._memory = [
-            build_memory_path(
-                scope_by_filename.get(f, infer_scope(f)),
-                f,
-            )
+            build_memory_path(infer_scope(f), f)
             for f in files
         ]
         return self
 
     def with_middleware(self) -> "AgentBuilder":
-        """创建中间件链（模板复制 → 技能沙盒同步）。"""
+        """创建中间件链（技能沙盒同步）。"""
         if self._sandbox_manager is None:
             raise RuntimeError("必须先调用 with_sandbox()")
-        self._middleware = []
-
-        # 模板复制中间件：首次对话时将 USER/MIXTURE 模板复制到用户命名空间
-        template_paths = [
-            p
-            for p in self._memory
-            if p.startswith("/memories/user/")
-            or p.startswith("/memories/mixture/")
-        ]
-        if template_paths:
-            self._middleware.append(
-                TemplateCopyMiddleware(
-                    agent_id=self._agent_id,
-                    template_paths=template_paths,
-                )
-            )
-
-        self._middleware.append(
+        self._middleware = [
             SkillSandboxSyncMiddleware(
                 sandbox_manager=self._sandbox_manager,
                 skills_root=self._skills_root,
                 agent_id=self._agent_id,
             )
-        )
+        ]
         return self
 
     def build(self, checkpointer=None, store=None):

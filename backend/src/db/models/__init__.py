@@ -1,5 +1,4 @@
 from db.models.agent import Agent
-from db.models.agent_file import AgentFile
 from db.models.agent_skill import AgentSkill
 from db.models.agent_tool import AgentTool
 from db.models.ai_model import AIModel
@@ -20,7 +19,6 @@ from db.models.user_oauth import UserOAuth
 
 __all__ = [
     "Agent",
-    "AgentFile",
     "AgentSkill",
     "AgentTool",
     "AIModel",

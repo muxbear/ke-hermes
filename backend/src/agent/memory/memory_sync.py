@@ -1,28 +1,19 @@
-"""同步 AgentFile DB 内容到 LangGraph Store。
+"""Store 文件写入/删除辅助函数。
 
-Files 标签页（管理员视图）编辑的内容是「模板/种子」：
-- AGENT/ORG 作用域：DB 内容即运行时内容，全用户共享
-- USER/MIXTURE 作用域：DB 内容作为模板，user_id="__template__" 写入 Store；
-  用户首次对话时由 Agent 自行 edit_file 创建各自实例
-
-运行时 Agent 通过 memory=[...] 路径从 Store 读取，不再直接读 DB（关闭 G2）。
+Admin 编辑文件后通过此模块将内容写入 LangGraph Store（直接写入，无 DB 中间层）。
+USER/MIXTURE 作用域的文件以 user_id="__template__" 写入模板命名空间。
 """
 from __future__ import annotations
 
 import logging
 from typing import Any
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from agent.memory.scopes import (
     TEMPLATE_USER_ID,
     MemoryScope,
-    build_memory_path,
-    infer_scope,
     scope_namespace,
 )
-from db.models.agent_file import AgentFile
+from agent.memory.file_data import create_agent_file_data
 
 logger = logging.getLogger(__name__)
 
@@ -48,15 +39,13 @@ async def sync_agent_file_to_store(
         content: 文件 Markdown/文本内容。
         scope: 记忆作用域。
     """
-    from deepagents.backends.utils import create_file_data
-
     namespace = scope_namespace(
         scope, agent_id=agent_id, user_id=user_id, org_id=org_id
     )
-    # Store key 使用 "/filename"（CompositeBackend 剥离路由前缀后保留前导 /）
-    await store.aput(namespace, f"/{filename}", create_file_data(content))
+    value = create_agent_file_data(content=content, scope=scope)
+    await store.aput(namespace, f"/{filename}", value)
     logger.debug(
-        "已同步文件 %s (scope=%s) 到 Store namespace=%s",
+        "已写入文件 %s (scope=%s) 到 Store namespace=%s",
         filename, scope.value, namespace,
     )
 
@@ -77,60 +66,10 @@ async def delete_agent_file_from_store(
     try:
         await store.adelete(namespace, f"/{filename}")
     except Exception:
-        logger.warning("从 Store 删除 %s 失败（可能不存在）", path, exc_info=True)
-
-
-async def bootstrap_agent_memory(store: Any, db: AsyncSession) -> None:
-    """应用启动时将 AgentFile 表中新文件种子化到 Store（幂等：已存在则跳过）。
-
-    - AGENT/ORG 作用域：直接写入对应 namespace
-    - USER/MIXTURE 作用域：写入 (agent_id, "__template__") 命名空间作为模板
-    - 跳过已存在的文件，保留 Agent 运行时自我修改的内容不被覆盖
-    """
-    stmt = select(AgentFile)
-    rows = (await db.execute(stmt)).scalars().all()
-    if not rows:
-        logger.info("AgentFile 表为空，跳过记忆 bootstrap")
-        return
-
-    count = 0
-    skipped = 0
-    for row in rows:
-        scope = MemoryScope(row.scope) if row.scope else infer_scope(row.filename)
-        namespace = scope_namespace(
-            scope,
-            agent_id=row.agent_id,
-            user_id=TEMPLATE_USER_ID,
-            org_id=row.org_id,
-        )
-
-        # 跳过已存在文件，避免覆盖 Agent 运行时的自我改进
-        try:
-            if await store.aget(namespace, f"/{row.filename}") is not None:
-                skipped += 1
-                continue
-        except Exception:
-            pass  # 查询失败时保守写入
-
-        await sync_agent_file_to_store(
-            store,
-            agent_id=row.agent_id,
-            user_id=TEMPLATE_USER_ID,
-            org_id=row.org_id,
-            filename=row.filename,
-            content=row.content or "",
-            scope=scope,
-        )
-        count += 1
-    logger.info(
-        "记忆 bootstrap 完成，新增 %d 个文件，跳过 %d 个已存在文件",
-        count, skipped,
-    )
+        logger.warning("从 Store 删除 %s 失败（可能不存在）", filename, exc_info=True)
 
 
 __all__ = [
-    "TEMPLATE_USER_ID",
-    "bootstrap_agent_memory",
     "delete_agent_file_from_store",
     "sync_agent_file_to_store",
 ]

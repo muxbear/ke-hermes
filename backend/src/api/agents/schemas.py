@@ -144,8 +144,8 @@ class AgentFileContent(BaseModel):
     description: str = ""
     scope: MemoryScope = MemoryScope.AGENT
     read_only: bool = False
-    created_at: datetime
-    updated_at: datetime
+    created_at: datetime | str
+    updated_at: datetime | str
 
     class Config:
         """Pydantic config for ORM model compatibility."""

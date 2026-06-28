@@ -30,6 +30,7 @@ DEFAULT_SCOPE_BY_FILENAME: dict[str, MemoryScope] = {
     "HEARTBEAT.md": MemoryScope.AGENT,
     "USER.md": MemoryScope.USER,
     "MEMORY.md": MemoryScope.USER,
+    "PREFERENCES.md": MemoryScope.USER,
 }
 
 DEFAULT_ORG_ID = "default-org"
@@ -37,8 +38,12 @@ TEMPLATE_USER_ID = "__template__"
 
 
 def infer_scope(filename: str) -> MemoryScope:
-    """根据文件名推断默认作用域；未匹配的文件默认归入 MIXTURE。"""
-    return DEFAULT_SCOPE_BY_FILENAME.get(filename, MemoryScope.MIXTURE)
+    """根据文件名推断默认作用域（大小写不敏感）；未匹配的文件默认归入 MIXTURE。"""
+    upper = filename.upper()
+    for key, scope in DEFAULT_SCOPE_BY_FILENAME.items():
+        if key.upper() == upper:
+            return scope
+    return MemoryScope.MIXTURE
 
 
 def scope_path_prefix(scope: MemoryScope) -> str:
@@ -63,15 +68,14 @@ def scope_namespace(
 ) -> tuple[str, ...]:
     """返回作用域对应的 Store namespace 元组。
 
-    对于 USER/MIXTURE 作用域，user_id 为空时使用 TEMPLATE_USER_ID，
-    以便管理员保存的模板内容可作为种子被用户首次对话时读取。
+    USER/MIXTURE 作用域直接使用传入的 user_id，不再使用模板哨兵。
     """
     if scope is MemoryScope.AGENT:
         return (agent_id,)
     if scope is MemoryScope.USER:
-        return (agent_id, user_id or TEMPLATE_USER_ID)
+        return (agent_id, user_id)  # type: ignore[arg-type]
     if scope is MemoryScope.MIXTURE:
-        return (agent_id, user_id or TEMPLATE_USER_ID, "mixture")
+        return (agent_id, user_id, "mixture")  # type: ignore[arg-type]
     if scope is MemoryScope.ORG:
         return (org_id or DEFAULT_ORG_ID,)
     raise ValueError(f"未知作用域: {scope}")

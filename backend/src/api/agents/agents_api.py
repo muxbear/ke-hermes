@@ -35,7 +35,7 @@ from api.agents.service import (
     update_agent,
     update_agent_config,
 )
-from api.deps import get_db
+from api.deps import get_current_user_id, get_db
 from core.decorators import handle_errors
 from core.response import ApiResponse, ok
 
@@ -103,20 +103,22 @@ async def agent_update(
 @router.post("/{agent_id}/config", response_model=ApiResponse[AgentInfo])
 @handle_errors
 async def agent_add_config(
-    agent_id: str, req: AgentConfigRequest, db: AsyncSession = Depends(get_db)
+    agent_id: str, req: AgentConfigRequest, db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
 ):
     """为代理添加配置项（工具、技能、提示词、文件、子代理）。"""  # noqa: D415
-    result = await add_agent_config(db, agent_id, req)
+    result = await add_agent_config(db, agent_id, req, user_id=user_id)
     return ok(result)
 
 
 @router.delete("/{agent_id}/config", response_model=ApiResponse[AgentInfo])
 @handle_errors
 async def agent_remove_config(
-    agent_id: str, req: AgentConfigRequest, db: AsyncSession = Depends(get_db)
+    agent_id: str, req: AgentConfigRequest, db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
 ):
     """移除代理的配置项。对于子代理类型，会删除子代理。"""  # noqa: D415
-    result = await remove_agent_config(db, agent_id, req)
+    result = await remove_agent_config(db, agent_id, req, user_id=user_id)
     return ok(result)
 
 
@@ -148,9 +150,10 @@ async def agent_get_file(
     filename: str,
     scope: MemoryScope | None = Query(None, description="记忆作用域"),
     db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
 ):
     """获取代理文件内容。"""  # noqa: D415
-    result = await get_agent_file(db, agent_id, filename, scope)
+    result = await get_agent_file(db, agent_id, filename, scope, user_id=user_id)
     return ok(result)
 
 
@@ -165,9 +168,10 @@ async def agent_save_file(
     req: AgentFileUpdateRequest,
     scope: MemoryScope | None = Query(None, description="记忆作用域"),
     db: AsyncSession = Depends(get_db),
+    user_id: str = Depends(get_current_user_id),
 ):
     """保存代理文件内容。"""  # noqa: D415
-    result = await save_agent_file(db, agent_id, filename, req.content, scope)
+    result = await save_agent_file(db, agent_id, filename, req.content, scope, user_id=user_id)
     return ok(result)
 
 

@@ -8,13 +8,8 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.graph import get_store
-from agent.memory.memory_sync import (
-    delete_agent_file_from_store,
-    sync_agent_file_to_store,
-)
 from agent.memory.scopes import (
     DEFAULT_ORG_ID,
-    TEMPLATE_USER_ID,
     MemoryScope,
     infer_scope,
 )
@@ -32,7 +27,6 @@ from api.agents.schemas import (
     SkillBrief,
 )
 from db.models.agent import Agent
-from db.models.agent_file import AgentFile
 from db.models.agent_skill import AgentSkill
 from db.models.agent_tool import AgentTool
 from db.models.cron_job import CronJob
@@ -59,71 +53,80 @@ DEFAULT_AGENT_TOOLS = ["http_request"]
 async def _get_agent_files_by_scope(
     db: AsyncSession, agent_id: str, files: list[str]
 ) -> dict[str, list[FileBrief]]:
-    """查询 AgentFile 表，按 scope 分组返回 FileBrief。"""
+    """从 LangGraph Store 读取文件元数据，按 scope 分组返回 FileBrief。"""
     if not files:
         return {s.value: [] for s in MemoryScope}
 
-    stmt = select(AgentFile).where(
-        AgentFile.agent_id == agent_id, AgentFile.filename.in_(files)
-    )
-    rows = (await db.execute(stmt)).scalars().all()
-    brief_by_filename: dict[str, FileBrief] = {}
-    for row in rows:
-        try:
-            scope = MemoryScope(row.scope) if row.scope else infer_scope(row.filename)
-        except ValueError:
-            scope = infer_scope(row.filename)
-        brief_by_filename[row.filename] = FileBrief(
-            filename=row.filename,
-            scope=scope,
-            description=row.description or "",
-            read_only=bool(row.read_only),
-        )
+    from agent.graph import get_store
 
-    # 对未在表中找到记录的文件，按文件名推断 scope
-    for f in files:
-        if f not in brief_by_filename:
-            scope = infer_scope(f)
-            brief_by_filename[f] = FileBrief(
-                filename=f,
-                scope=scope,
-                description="",
-                read_only=(scope is MemoryScope.ORG),
-            )
+    try:
+        store = get_store()
+    except RuntimeError:
+        store = None
+
+    briefs: list[FileBrief] = []
+    for filename in files:
+        scope = infer_scope(filename)
+        description = ""
+        read_only = (scope is MemoryScope.ORG)
+
+        if store is not None:
+            # 遍历所有非 ORG 作用域的 namespace 查找文件，
+            # 因为 add_agent_config() 写入的 scope 可能与 infer_scope() 推断不同
+            item = None
+            for candidate_scope in (MemoryScope.AGENT, MemoryScope.USER, MemoryScope.MIXTURE):
+                try:
+                    candidate_ns = _file_namespace(candidate_scope, agent_id=agent_id)
+                    item = await store.aget(candidate_ns, f"/{filename}")
+                    if item is not None:
+                        scope = candidate_scope
+                        break
+                except Exception:
+                    continue
+
+            if item is not None:
+                meta = _extract_file_metadata(item.value)
+                description = str(meta["description"])
+                read_only = bool(meta["read_only"])
+                # stored scope 优先（处理同一文件在多个 namespace 的情况）
+                stored_scope = str(meta.get("scope", ""))
+                if stored_scope:
+                    try:
+                        scope = MemoryScope(stored_scope)
+                    except ValueError:
+                        pass
+
+        briefs.append(FileBrief(
+            filename=filename,
+            scope=scope,
+            description=description,
+            read_only=read_only,
+        ))
 
     grouped: dict[str, list[FileBrief]] = {s.value: [] for s in MemoryScope}
-    for f in files:
-        brief = brief_by_filename[f]
+    for brief in briefs:
         grouped[brief.scope.value].append(brief)
     return grouped
 
 
-async def _sync_file_to_store(
-    agent_id: str,
-    filename: str,
-    content: str,
-    scope: MemoryScope,
-    org_id: str | None = None,
-) -> None:
-    """将文件内容同步到 LangGraph Store。失败仅记录日志，不影响 DB 事务。"""
-    try:
-        store = get_store()
-    except RuntimeError:
-        logger.warning("Store 未初始化，跳过文件 %s 的同步", filename)
-        return
+def _file_namespace(scope: MemoryScope, *, agent_id: str, user_id: str | None = None, org_id: str | None = None) -> tuple[str, ...]:
+    """返回文件作用域对应的 Store namespace（不区分模板/用户）。"""
+    from agent.memory.scopes import DEFAULT_ORG_ID, scope_namespace
+    return scope_namespace(
+        scope, agent_id=agent_id, user_id=user_id, org_id=org_id or DEFAULT_ORG_ID,
+    )
 
-    try:
-        await sync_agent_file_to_store(
-            store,
-            agent_id=agent_id,
-            user_id=TEMPLATE_USER_ID,
-            org_id=org_id or DEFAULT_ORG_ID,
-            filename=filename,
-            content=content,
-            scope=scope,
-        )
-    except Exception:
-        logger.exception("同步文件 %s (scope=%s) 到 Store 失败", filename, scope.value)
+
+def _extract_file_metadata(value: object) -> dict[str, str | bool | None]:
+    """从 Store value 提取文件元数据，缺失时返回默认值。"""
+    from agent.memory.file_data import file_value_to_metadata
+    metadata = file_value_to_metadata(value)
+    return {
+        "description": str(metadata.get("description", "")),
+        "scope": str(metadata.get("scope", "agent")),
+        "read_only": bool(metadata.get("read_only", False)),
+        "org_id": str(metadata["org_id"]) if metadata.get("org_id") else None,
+    }
 
 
 async def _get_sub_agent_ids(db: AsyncSession, agent_id: str) -> list[str]:
@@ -408,18 +411,24 @@ async def clone_agent(db: AsyncSession, agent_id: str) -> AgentInfo:
                     skill.name, agent_id, cloned.id,
                 )
 
-    # Clone file contents
+    # Clone file contents from Store
     src_files = source.files if isinstance(source.files, list) else []
     if src_files:
-        src_contents_stmt = select(AgentFile).where(AgentFile.agent_id == agent_id)
-        src_rows = (await db.execute(src_contents_stmt)).scalars().all()
-        for src_row in src_rows:
-            if src_row.filename in src_files:
-                db.add(AgentFile(
-                    agent_id=cloned.id,
-                    filename=src_row.filename,
-                    content=src_row.content,
-                ))
+        try:
+            store = get_store()
+        except RuntimeError:
+            store = None
+        if store is not None:
+            for f in src_files:
+                scope = infer_scope(f)
+                src_ns = _file_namespace(scope, agent_id=agent_id)
+                dst_ns = _file_namespace(scope, agent_id=cloned.id)
+                try:
+                    item = await store.aget(src_ns, f"/{f}")
+                    if item is not None and item.value is not None:
+                        await store.aput(dst_ns, f"/{f}", item.value)
+                except Exception:
+                    logger.warning("克隆文件 %s 到新 agent %s 失败", f, cloned.id, exc_info=True)
 
     sub_ids = await _get_sub_agent_ids(db, cloned.id)
     skills = await _get_agent_skill_briefs(db, cloned.id)
@@ -457,7 +466,7 @@ async def update_agent(db: AsyncSession, agent_id: str, req: AgentUpdateRequest)
 
 
 async def add_agent_config(
-    db: AsyncSession, agent_id: str, req: AgentConfigRequest
+    db: AsyncSession, agent_id: str, req: AgentConfigRequest, *, user_id: str | None = None,
 ) -> AgentInfo:
     """Add a config item (tool/prompt/file/subagent) to an agent."""
     stmt = select(Agent).where(Agent.id == agent_id)
@@ -497,7 +506,7 @@ async def add_agent_config(
             current.append(req.value)
             setattr(agent, column, current)
 
-        # When adding a file, create an AgentFile record with description + scope
+        # 添加文件时写入空种子到 Store
         if req.type == "file":
             scope = req.scope or infer_scope(req.value)
             if scope is MemoryScope.ORG:
@@ -505,30 +514,20 @@ async def add_agent_config(
                     status_code=400,
                     detail="组织级文件请走专用 /policies/ 接口",
                 )
-            existing = (await db.execute(
-                select(AgentFile).where(
-                    AgentFile.agent_id == agent_id,
-                    AgentFile.filename == req.value,
-                    AgentFile.scope == scope.value,
-                )
-            )).scalar_one_or_none()
-            if existing is not None:
-                if req.description:
-                    existing.description = req.description
-            else:
-                db.add(AgentFile(
-                    agent_id=agent_id,
-                    filename=req.value,
-                    content="",
-                    description=req.description,
-                    scope=scope.value,
-                    read_only=False,
-                ))
-                await db.flush()
-                # 同步空种子到 Store
-                await _sync_file_to_store(
-                    agent_id, req.value, "", scope
-                )
+            # 写入空种子到 Store（USER/MIXTURE 使用实际 user_id）
+            try:
+                store = get_store()
+                ns_user_id = user_id if scope in (MemoryScope.USER, MemoryScope.MIXTURE) else None
+                namespace = _file_namespace(scope, agent_id=agent_id, user_id=ns_user_id)
+                existing = await store.aget(namespace, f"/{req.value}")
+                if existing is None:
+                    from agent.memory.file_data import create_agent_file_data
+                    value = create_agent_file_data(
+                        content="", description=req.description, scope=scope,
+                    )
+                    await store.aput(namespace, f"/{req.value}", value)
+            except RuntimeError:
+                pass
 
     await db.flush()
     sub_ids = await _get_sub_agent_ids(db, agent_id)
@@ -538,7 +537,7 @@ async def add_agent_config(
 
 
 async def remove_agent_config(
-    db: AsyncSession, agent_id: str, req: AgentConfigRequest
+    db: AsyncSession, agent_id: str, req: AgentConfigRequest, *, user_id: str | None = None,
 ) -> AgentInfo:
     """Remove a config item from an agent. For subagent type, deletes the sub-agent."""
     stmt = select(Agent).where(Agent.id == agent_id)
@@ -570,29 +569,18 @@ async def remove_agent_config(
         if isinstance(current, list) and req.value in current:
             current = [v for v in current if v != req.value]
             setattr(agent, column, current)
-        # Clean up orphaned file content row when removing a file config
+        # 从 Store 删除文件
         if req.type == "file":
-            scope = req.scope or infer_scope(req.value)
-            # 删除所有 scope 下的同名文件（保险起见）
-            del_stmt = delete(AgentFile).where(
-                AgentFile.agent_id == agent_id, AgentFile.filename == req.value
-            )
-            await db.execute(del_stmt)
-            # 从 Store 删除
             try:
                 store = get_store()
-                await delete_agent_file_from_store(
-                    store,
-                    agent_id=agent_id,
-                    user_id=TEMPLATE_USER_ID,
-                    org_id=DEFAULT_ORG_ID,
-                    filename=req.value,
-                    scope=scope,
-                )
+                scope = req.scope or infer_scope(req.value)
+                ns_user_id = user_id if scope in (MemoryScope.USER, MemoryScope.MIXTURE) else None
+                namespace = _file_namespace(scope, agent_id=agent_id, user_id=ns_user_id)
+                await store.adelete(namespace, f"/{req.value}")
+            except RuntimeError:
+                pass
             except Exception:
-                logger.warning(
-                    "从 Store 删除文件 %s 失败", req.value, exc_info=True
-                )
+                logger.warning("从 Store 删除文件 %s 失败", req.value, exc_info=True)
 
     await db.flush()
     sub_ids = await _get_sub_agent_ids(db, agent_id)
@@ -602,7 +590,7 @@ async def remove_agent_config(
 
 
 async def update_agent_config(
-    db: AsyncSession, agent_id: str, req: AgentConfigUpdateRequest
+    db: AsyncSession, agent_id: str, req: AgentConfigUpdateRequest, *, user_id: str | None = None,
 ) -> AgentInfo:
     """Update a config item (rename file / change description)."""
     stmt = select(Agent).where(Agent.id == agent_id)
@@ -628,32 +616,25 @@ async def update_agent_config(
             current[idx] = new_name
             setattr(agent, column, current)
 
-        # Update description in agent_files
+        # 在 Store 中重命名或更新描述
         lookup_name = new_name if new_name else req.value
-        file_stmt = select(AgentFile).where(
-            AgentFile.agent_id == agent_id,
-            AgentFile.filename == req.value,
-            AgentFile.scope == scope.value,
-        )
-        row = (await db.execute(file_stmt)).scalar_one_or_none()
-        if row is not None:
-            if new_name and new_name != req.value:
-                row.filename = new_name
-            row.description = req.description
-            content = row.content or ""
-            new_scope = req.scope or infer_scope(lookup_name)
-            row.scope = new_scope.value
-            await db.flush()
-            await _sync_file_to_store(agent_id, lookup_name, content, new_scope)
-        elif req.description:
-            new_scope = req.scope or infer_scope(lookup_name)
-            db.add(AgentFile(
-                agent_id=agent_id,
-                filename=lookup_name,
-                content="",
-                description=req.description,
-                scope=new_scope.value,
-            ))
+        try:
+            store = get_store()
+            ns_user_id = user_id if scope in (MemoryScope.USER, MemoryScope.MIXTURE) else None
+            namespace = _file_namespace(scope, agent_id=agent_id, user_id=ns_user_id)
+            item = await store.aget(namespace, f"/{req.value}")
+            if item is not None:
+                value = dict(item.value) if isinstance(item.value, dict) else {}
+                if req.description:
+                    value["description"] = req.description
+                if new_name and new_name != req.value:
+                    # 复制到新 key，删除旧 key
+                    await store.aput(namespace, f"/{new_name}", value)
+                    await store.adelete(namespace, f"/{req.value}")
+                else:
+                    await store.aput(namespace, f"/{req.value}", value)
+        except RuntimeError:
+            pass
 
     await db.flush()
     sub_ids = await _get_sub_agent_ids(db, agent_id)
@@ -667,8 +648,12 @@ async def get_agent_file(
     agent_id: str,
     filename: str,
     scope: MemoryScope | None = None,
+    *,
+    user_id: str | None = None,
 ) -> AgentFileContent:
-    """Get file content for a given agent and filename. Auto-creates empty record on first access."""
+    """从 LangGraph Store 读取文件内容。不存在时返回空内容 + 默认元数据。"""
+    from agent.memory.file_data import file_value_to_agent_file_content
+
     stmt = select(Agent).where(Agent.id == agent_id)
     agent = (await db.execute(stmt)).scalar_one_or_none()
     if agent is None:
@@ -679,43 +664,30 @@ async def get_agent_file(
         raise HTTPException(status_code=404, detail="File not found in agent config")
 
     resolved_scope = scope or infer_scope(filename)
-    file_stmt = select(AgentFile).where(
-        AgentFile.agent_id == agent_id,
-        AgentFile.filename == filename,
-        AgentFile.scope == resolved_scope.value,
-    )
-    row = (await db.execute(file_stmt)).scalar_one_or_none()
-    if row is None:
-        # 兜底：查找任意 scope 下的同名文件
-        fallback_stmt = select(AgentFile).where(
-            AgentFile.agent_id == agent_id, AgentFile.filename == filename
-        )
-        row = (await db.execute(fallback_stmt)).scalar_one_or_none()
-    if row is None:
-        row = AgentFile(
-            agent_id=agent_id,
-            filename=filename,
-            content="",
-            scope=resolved_scope.value,
-            read_only=(resolved_scope is MemoryScope.ORG),
-        )
-        db.add(row)
-        await db.flush()
 
     try:
-        row_scope = MemoryScope(row.scope) if row.scope else resolved_scope
-    except ValueError:
-        row_scope = resolved_scope
+        store = get_store()
+    except RuntimeError:
+        store = None
 
-    return AgentFileContent(
-        filename=row.filename,
-        content=row.content or "",
-        description=row.description or "",
-        scope=row_scope,
-        read_only=bool(row.read_only) or row_scope is MemoryScope.ORG,
-        created_at=row.created_at,
-        updated_at=row.updated_at,
-    )
+    value = None
+    found_scope = resolved_scope
+    if store is not None:
+        # 遍历所有非 ORG 作用域查找文件
+        for candidate_scope in (MemoryScope.AGENT, MemoryScope.USER, MemoryScope.MIXTURE):
+            try:
+                ns_user_id = user_id if candidate_scope in (MemoryScope.USER, MemoryScope.MIXTURE) else None
+                candidate_ns = _file_namespace(candidate_scope, agent_id=agent_id, user_id=ns_user_id)
+                item = await store.aget(candidate_ns, f"/{filename}")
+                if item is not None:
+                    value = item.value
+                    found_scope = candidate_scope
+                    break
+            except Exception:
+                continue
+
+    result = file_value_to_agent_file_content(value, filename, default_scope=found_scope)
+    return AgentFileContent(**result)
 
 
 async def save_agent_file(
@@ -724,8 +696,12 @@ async def save_agent_file(
     filename: str,
     content: str,
     scope: MemoryScope | None = None,
+    *,
+    user_id: str | None = None,
 ) -> AgentFileContent:
-    """Save file content for a given agent and filename (upsert)."""
+    """将文件内容直接写入 LangGraph Store（upsert）。"""
+    from agent.memory.file_data import create_agent_file_data, file_value_to_agent_file_content, file_value_to_content
+
     stmt = select(Agent).where(Agent.id == agent_id)
     agent = (await db.execute(stmt)).scalar_one_or_none()
     if agent is None:
@@ -742,60 +718,73 @@ async def save_agent_file(
             detail="组织级只读文件不可通过此接口修改，请走 /policies/ 接口",
         )
 
-    file_stmt = select(AgentFile).where(
-        AgentFile.agent_id == agent_id,
-        AgentFile.filename == filename,
-        AgentFile.scope == resolved_scope.value,
+    value = create_agent_file_data(
+        content=content, description="", scope=resolved_scope, read_only=False,
     )
-    row = (await db.execute(file_stmt)).scalar_one_or_none()
-    if row is None:
-        row = AgentFile(
-            agent_id=agent_id,
-            filename=filename,
-            content=content,
-            scope=resolved_scope.value,
-            read_only=False,
-        )
-        db.add(row)
-    else:
-        row.content = content
-        row.scope = resolved_scope.value
 
-    await db.flush()
-    # 同步到 Store
-    await _sync_file_to_store(agent_id, filename, content, resolved_scope)
+    try:
+        store = get_store()
+        ns_user_id = user_id if resolved_scope in (MemoryScope.USER, MemoryScope.MIXTURE) else None
+        namespace = _file_namespace(resolved_scope, agent_id=agent_id, user_id=ns_user_id)
+        await store.aput(namespace, f"/{filename}", value)
+    except RuntimeError:
+        logger.warning("Store 未初始化，文件 %s 仅写入内存", filename)
+    except Exception:
+        logger.exception("写入文件 %s 到 Store 失败", filename)
 
-    return AgentFileContent(
-        filename=row.filename,
-        content=row.content or "",
-        description=row.description or "",
-        scope=resolved_scope,
-        read_only=False,
-        created_at=row.created_at,
-        updated_at=row.updated_at,
-    )
+    result = file_value_to_agent_file_content(value, filename, default_scope=resolved_scope)
+    return AgentFileContent(**result)
 
 
 async def list_agent_file_descriptions(
     db: AsyncSession, agent_id: str
 ) -> list[dict]:
-    """Return {filename, description, scope, readOnly} for all files of an agent."""
+    """从 agents.files 清单 + Store 元数据返回文件描述列表。"""
     stmt = select(Agent).where(Agent.id == agent_id)
     agent = (await db.execute(stmt)).scalar_one_or_none()
     if agent is None:
         raise HTTPException(status_code=404, detail="Agent not found")
 
-    file_stmt = select(AgentFile).where(AgentFile.agent_id == agent_id)
-    rows = (await db.execute(file_stmt)).scalars().all()
-    return [
-        {
-            "filename": row.filename,
-            "description": row.description or "",
-            "scope": row.scope or infer_scope(row.filename).value,
-            "readOnly": bool(row.read_only),
-        }
-        for row in rows
-    ]
+    files = agent.files if isinstance(agent.files, list) else []
+
+    try:
+        store = get_store()
+    except RuntimeError:
+        store = None
+
+    result = []
+    for f in files:
+        scope = infer_scope(f)
+        description = ""
+        read_only = (scope is MemoryScope.ORG)
+        if store is not None:
+            # 遍历所有非 ORG 作用域查找文件
+            for candidate_scope in (MemoryScope.AGENT, MemoryScope.USER, MemoryScope.MIXTURE):
+                try:
+                    candidate_ns = _file_namespace(candidate_scope, agent_id=agent_id)
+                    item = await store.aget(candidate_ns, f"/{f}")
+                    if item is not None:
+                        meta = _extract_file_metadata(item.value)
+                        description = str(meta.get("description", ""))
+                        read_only = bool(meta.get("read_only", read_only))
+                        stored_scope = str(meta.get("scope", ""))
+                        if stored_scope:
+                            try:
+                                scope = MemoryScope(stored_scope)
+                            except ValueError:
+                                pass
+                        else:
+                            scope = candidate_scope
+                        break
+                except Exception:
+                    continue
+        result.append({
+            "filename": f,
+            "description": description,
+            "scope": scope.value,
+            "readOnly": read_only,
+        })
+    return result
 
 
 # ── Agent-Skill helpers ───────────────────────────────────────────────────
