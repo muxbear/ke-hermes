@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { Mic, ArrowUp, Image, Paperclip, Globe, HardDrive, Database } from 'lucide-vue-next'
 import { useChatStore } from '@/stores/chat'
