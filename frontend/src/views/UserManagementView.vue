@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ChevronLeft,
@@ -27,11 +27,27 @@ import type { Department, SystemUser, CreateUserRequest, UserStatus } from '@/ty
 const router = useRouter()
 const store = useUserManagementStore()
 
-onMounted(() => {
-  store.fetchAll()
+onMounted(async () => {
+  await store.fetchAll()
 })
 
 const expandedDeptIds = ref<Set<string>>(new Set())
+
+// 默认展开到第 2 级节点
+watch(() => store.departments, (depts) => {
+  if (depts.length === 0) return
+  const ids = new Set<string>()
+  function collect(ds: Department[], depth: number) {
+    for (const d of ds) {
+      ids.add(d.id)
+      if (depth < 1 && d.children.length > 0) {
+        collect(d.children, depth + 1)
+      }
+    }
+  }
+  collect(depts, 0)
+  expandedDeptIds.value = ids
+})
 
 function handleDeptSelect(id: string) {
   store.selectDepartment(id)
@@ -56,11 +72,26 @@ const form = ref<CreateUserRequest>({
   status: 'active',
 })
 
+// 将部门树扁平化，用于弹窗下拉选择
+const flatDepts = computed(() => {
+  const result: Department[] = []
+  function walk(ds: Department[]) {
+    for (const d of ds) {
+      result.push(d)
+      if (d.children.length > 0) walk(d.children)
+    }
+  }
+  walk(store.departments)
+  return result
+})
+
 function openCreateDialog() {
   dialogMode.value = 'create'
   editUserId.value = null
   form.value = {
-    name: '', employeeId: '', deptId: '', position: '',
+    name: '', employeeId: '',
+    deptId: store.selectedDeptId ?? '',
+    position: '',
     email: '', phone: '', status: 'active',
   }
   dialogVisible.value = true
@@ -119,6 +150,23 @@ const statusConfig: Record<UserStatus, { label: string; cls: string; icon: typeo
 function handleBack() {
   router.push('/admin')
 }
+
+// ─── 分页 ───────────────────────────────────────────────
+const currentPage = ref(1)
+const pageSize = ref(10)
+const pageSizeOptions = [10, 20, 50]
+
+const totalFiltered = computed(() => store.filteredUsers.length)
+
+const paginatedUsers = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  return store.filteredUsers.slice(start, start + pageSize.value)
+})
+
+// 筛选条件变化时重置到第 1 页
+watch([() => store.selectedDeptId, () => store.searchQuery], () => {
+  currentPage.value = 1
+})
 </script>
 
 <template>
@@ -189,7 +237,7 @@ function handleBack() {
         <!-- 卡片视图 -->
         <div v-else-if="store.viewMode === 'card'" class="user-grid">
           <div
-            v-for="user in store.filteredUsers"
+            v-for="user in paginatedUsers"
             :key="user.id"
             class="user-card"
             :class="{ active: store.selectedUser?.id === user.id }"
@@ -224,7 +272,7 @@ function handleBack() {
               </button>
             </div>
           </div>
-          <div v-if="store.filteredUsers.length === 0" class="empty-state">
+          <div v-if="totalFiltered === 0" class="empty-state">
             暂无用户数据
           </div>
         </div>
@@ -246,7 +294,7 @@ function handleBack() {
             </thead>
             <tbody>
               <tr
-                v-for="user in store.filteredUsers"
+                v-for="user in paginatedUsers"
                 :key="user.id"
                 :class="{ active: store.selectedUser?.id === user.id }"
                 @click="store.selectUser(user)"
@@ -275,8 +323,35 @@ function handleBack() {
               </tr>
             </tbody>
           </table>
-          <div v-if="store.filteredUsers.length === 0" class="empty-state">
+          <div v-if="totalFiltered === 0" class="empty-state">
             暂无用户数据
+          </div>
+        </div>
+
+        <!-- 分页 -->
+        <div v-if="totalFiltered > 0" class="pagination-bar">
+          <div class="page-info">
+            共 {{ totalFiltered }} 条
+          </div>
+          <div class="page-controls">
+            <select v-model.number="pageSize" class="page-size-select">
+              <option v-for="s in pageSizeOptions" :key="s" :value="s">{{ s }} 条/页</option>
+            </select>
+            <button
+              class="page-btn"
+              :disabled="currentPage <= 1"
+              @click="currentPage--"
+            >
+              ‹
+            </button>
+            <span class="page-current">{{ currentPage }} / {{ Math.ceil(totalFiltered / pageSize) || 1 }}</span>
+            <button
+              class="page-btn"
+              :disabled="currentPage >= Math.ceil(totalFiltered / pageSize)"
+              @click="currentPage++"
+            >
+              ›
+            </button>
           </div>
         </div>
       </main>
@@ -303,7 +378,7 @@ function handleBack() {
               <label>部门</label>
               <select v-model="form.deptId">
                 <option value="">请选择部门</option>
-                <option v-for="d in store.departments" :key="d.id" :value="d.id">
+                <option v-for="d in flatDepts" :key="d.id" :value="d.id">
                   {{ d.name }}
                 </option>
               </select>
@@ -738,4 +813,52 @@ function handleBack() {
 }
 .dialog-submit:hover { filter: brightness(1.1); }
 .dialog-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+
+/* === 分页 === */
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--border-subtle);
+  margin-top: 16px;
+}
+.page-info {
+  font-size: var(--font-size-sm);
+  color: var(--foreground-muted);
+}
+.page-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.page-size-select {
+  padding: 4px 8px;
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--foreground-primary);
+  font-size: var(--font-size-xs);
+  outline: none;
+  cursor: pointer;
+}
+.page-btn {
+  width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--foreground-primary);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background var(--transition-duration);
+}
+.page-btn:hover:not(:disabled) { background: rgba(59,130,246,0.1); }
+.page-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+.page-current {
+  font-size: var(--font-size-sm);
+  color: var(--foreground-primary);
+  min-width: 60px;
+  text-align: center;
+}
 </style>

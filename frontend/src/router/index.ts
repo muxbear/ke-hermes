@@ -98,6 +98,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/MenuConfigView.vue'),
         meta: { title: '菜单配置' },
       },
+      {
+        path: 'admin/org',
+        name: 'admin-org',
+        component: () => import('@/views/OrgDeptView.vue'),
+        meta: { title: '机构部门' },
+      },
     ],
   },
   {

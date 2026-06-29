@@ -81,6 +81,7 @@ declare module 'vue' {
     MessageItem: typeof import('./src/components/MessageItem.vue')['default']
     MessageList: typeof import('./src/components/MessageList.vue')['default']
     OAuthPanel: typeof import('./src/components/auth/OAuthPanel.vue')['default']
+    OrgTreeNode: typeof import('./src/components/admin/OrgTreeNode.vue')['default']
     PasswordInput: typeof import('./src/components/common/PasswordInput.vue')['default']
     PatchUpdateCard: typeof import('./src/components/admin/PatchUpdateCard.vue')['default']
     PermissionTreeNode: typeof import('./src/components/admin/PermissionTreeNode.vue')['default']

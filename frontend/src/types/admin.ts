@@ -154,6 +154,43 @@ export const BTN_VARIANT_LABEL: Record<BtnVariant, { label: string; color: strin
   ghost: { label: '幽灵', color: 'bg-zinc-500/15 text-zinc-300 border-zinc-500/30' },
 }
 
+// ─── 机构部门 ─────────────────────────────────────────────────────────────────
+
+export type OrgType = 'group' | 'center' | 'dept' | 'team'
+
+export type OrgStatus = 'active' | 'inactive'
+
+export interface OrgNode {
+  id: string
+  name: string
+  code: string
+  parentId: string | null
+  type: OrgType
+  level: number
+  leader: string
+  phone: string
+  email: string
+  address: string
+  desc: string
+  employeeCount: number
+  sort: number
+  createdAt: string
+  status: OrgStatus
+}
+
+export interface OrgTypeConfig {
+  label: string
+  icon: string
+  cls: string
+}
+
+export const ORG_TYPE_CONFIG: Record<OrgType, OrgTypeConfig> = {
+  group:  { label: '集团/公司',  icon: 'Building2', cls: 'badge-blue' },
+  center: { label: '中心/事业部', icon: 'Briefcase', cls: 'badge-purple' },
+  dept:   { label: '部门',       icon: 'Layers',    cls: 'badge-cyan' },
+  team:   { label: '小组/团队',  icon: 'Users',     cls: 'badge-emerald' },
+}
+
 // ─── 角色覆盖 ─────────────────────────────────────────────────────────────────
 
 export interface RoleCoverage {

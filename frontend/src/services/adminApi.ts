@@ -1,4 +1,5 @@
-// 管理后台 API 服务（Mock 数据）
+// 管理后台 API 服务
+import instance from './request'
 import type {
   AdminTileConfig,
   SystemStats,
@@ -12,21 +13,29 @@ import type {
   PermType,
   DataResource,
   DataScope,
+  OrgNode,
 } from '@/types/admin'
 
-function delay(ms = 300): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms))
+// ─── Helpers ───────────────────────────────────────────────────────────────────
+
+function toSnakeCase(obj: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(obj)) {
+    if (value === undefined) continue
+    const snakeKey = key.replace(/[A-Z]/g, (m) => '_' + m.toLowerCase())
+    result[snakeKey] = value
+  }
+  return result
 }
 
-// ─── 管理仪表盘 Mock ──────────────────────────────────────────────────────────
+// ─── 管理仪表盘 (仍为 mock — 后续可迁移) ──────────────────────────────────────
 
 export async function fetchAdminTiles(): Promise<AdminTileConfig[]> {
-  await delay()
   return [
     { id: 'system', icon: 'Settings', title: '系统设置', description: '站点信息、时区、语言、备份与基础安全策略。', gradient: 'from-blue-500/20 to-blue-500/5', group: 'basic' },
     { id: 'menu-config', icon: 'LayoutList', title: '菜单配置', description: '管理系统功能菜单及页面操作权限（按钮、开关），与角色权限联动。', route: '/admin/menu-config', gradient: 'from-cyan-500/20 to-cyan-500/5', group: 'basic' },
     { id: 'notifications', icon: 'Bell', title: '通知配置', description: '邮件、Webhook、IM 渠道与告警规则。', gradient: 'from-amber-500/20 to-amber-500/5', group: 'basic' },
-    { id: 'billing', icon: 'CreditCard', title: '计费与配额', description: '按租户/模型设置 Token 上限与计费方案。', gradient: 'from-emerald-500/20 to-emerald-500/5', group: 'basic' },
+    { id: 'org', icon: 'Building2', title: '机构部门', description: '管理机构信息、部门层级与组织架构。', route: '/admin/org', gradient: 'from-emerald-500/20 to-emerald-500/5', group: 'basic' },
     { id: 'users', icon: 'Users', title: '人员管理', description: '维护账号、部门与组织架构，分配负责人。', route: '/admin/users', gradient: 'from-violet-500/20 to-violet-500/5', group: 'people' },
     { id: 'rbac', icon: 'ShieldCheck', title: '角色权限', description: 'RBAC 角色定义、菜单与数据权限粒度配置。', route: '/admin/rbac', gradient: 'from-fuchsia-500/20 to-fuchsia-500/5', group: 'people' },
     { id: 'api-keys', icon: 'Key', title: '密钥管理', description: 'API Key 颁发、轮换、过期与调用审计。', gradient: 'from-indigo-500/20 to-indigo-500/5', group: 'people' },
@@ -41,12 +50,10 @@ export async function fetchAdminTiles(): Promise<AdminTileConfig[]> {
 }
 
 export async function fetchSystemStats(): Promise<SystemStats> {
-  await delay(250)
   return { version: 'v0.0.1', uptime: 12, onlineInstances: 8, registeredUsers: 142, activeAlerts: 3 }
 }
 
 export async function fetchUpdateLogs(): Promise<UpdateLogEntry[]> {
-  await delay(200)
   return [
     { tag: 'v0.0.1', date: '2026-06-08', title: 'ke-hermes 首个开发预览版上线', primary: true },
     { tag: 'Beta', date: '2026-05-22', title: '新增 DeepSeek 提供商与定时任务模块' },
@@ -54,109 +61,60 @@ export async function fetchUpdateLogs(): Promise<UpdateLogEntry[]> {
   ]
 }
 
-// ─── 人员管理 Mock ─────────────────────────────────────────────────────────────
+// ─── 机构部门 API ──────────────────────────────────────────────────────────────
 
-let departments: Department[] = [
-  { id: 'd1', name: '公司总部', parentId: null, managerId: null, description: '公司组织架构根节点', memberCount: 142, children: [] },
-  { id: 'd2', name: '技术部', parentId: 'd1', managerId: 'u2', description: '负责产品研发、架构设计和技术运维', memberCount: 48, children: [] },
-  { id: 'd3', name: '产品部', parentId: 'd1', managerId: null, description: '负责产品规划、需求分析和用户体验设计', memberCount: 22, children: [] },
-  { id: 'd4', name: '运营部', parentId: 'd1', managerId: null, description: '负责市场运营、品牌推广和用户增长', memberCount: 18, children: [] },
-  { id: 'd5', name: '前端组', parentId: 'd2', managerId: 'u1', description: 'Web 前端和移动端开发', memberCount: 16, children: [] },
-  { id: 'd6', name: '后端组', parentId: 'd2', managerId: null, description: '服务端开发、API 和中间件', memberCount: 20, children: [] },
-  { id: 'd7', name: 'AI 组', parentId: 'd2', managerId: null, description: '大模型应用、RAG 和智能体开发', memberCount: 12, children: [] },
-  { id: 'd8', name: '设计组', parentId: 'd3', managerId: null, description: 'UI/UX 设计和视觉规范', memberCount: 6, children: [] },
-  { id: 'd9', name: '市场部', parentId: 'd4', managerId: null, description: '品牌宣传和内容运营', memberCount: 10, children: [] },
-  { id: 'd10', name: '客服部', parentId: 'd4', managerId: null, description: '客户支持和售后服务', memberCount: 8, children: [] },
-]
-
-// 建立父子关系引用（children）
-function buildDepartmentTree(): Department[] {
-  const map = new Map<string, Department>()
-  const roots: Department[] = []
-  for (const d of departments) {
-    map.set(d.id, { ...d, children: [] })
-  }
-  for (const d of map.values()) {
-    if (d.parentId && map.has(d.parentId)) {
-      map.get(d.parentId)!.children.push(d)
-    } else if (!d.parentId) {
-      roots.push(d)
-    }
-  }
-  return roots
+export async function fetchOrgNodes(): Promise<OrgNode[]> {
+  const res = await instance.get('/departments')
+  return res.data.data
 }
 
-let users: SystemUser[] = [
-  { id: 'u1', name: '王科', employeeId: 'EMP001', deptId: 'd5', position: '前端组长', email: 'wangke@example.com', phone: '13800001001', status: 'active', joinDate: '2025-08-01' },
-  { id: 'u2', name: '李明', employeeId: 'EMP002', deptId: 'd2', position: '技术总监', email: 'liming@example.com', phone: '13800001002', status: 'active', joinDate: '2025-06-15' },
-  { id: 'u3', name: '张薇', deptId: 'd7', employeeId: 'EMP003', position: 'AI 工程师', email: 'zhangwei@example.com', phone: '13800001003', status: 'active', joinDate: '2026-01-10' },
-  { id: 'u4', name: '赵强', employeeId: 'EMP004', deptId: 'd6', position: '后端工程师', email: 'zhaoqiang@example.com', phone: '13800001004', status: 'inactive', joinDate: '2025-10-20' },
-  { id: 'u5', name: '孙丽', employeeId: 'EMP005', deptId: 'd8', position: 'UI 设计师', email: 'sunli@example.com', phone: '13800001005', status: 'active', joinDate: '2026-02-15' },
-  { id: 'u6', name: '周杰', employeeId: 'EMP006', deptId: 'd3', position: '产品经理', email: 'zhoujie@example.com', phone: '13800001006', status: 'active', joinDate: '2025-09-01' },
-  { id: 'u7', name: '吴芳', employeeId: 'EMP007', deptId: 'd9', position: '市场专员', email: 'wufang@example.com', phone: '13800001007', status: 'pending', joinDate: '2026-06-01' },
-  { id: 'u8', name: '郑浩', employeeId: 'EMP008', deptId: 'd10', position: '客服主管', email: 'zhenghao@example.com', phone: '13800001008', status: 'active', joinDate: '2025-11-15' },
-  { id: 'u9', name: '陈敏', employeeId: 'EMP009', deptId: 'd5', position: '前端工程师', email: 'chenmin@example.com', phone: '13800001009', status: 'active', joinDate: '2026-03-01' },
-  { id: 'u10', name: '刘洋', employeeId: 'EMP010', deptId: 'd6', position: '后端工程师', email: 'liuyang@example.com', phone: '13800001010', status: 'active', joinDate: '2025-08-20' },
-  { id: 'u11', name: '黄蕾', employeeId: 'EMP011', deptId: 'd8', position: '交互设计师', email: 'huanglei@example.com', phone: '13800001011', status: 'active', joinDate: '2026-04-15' },
-  { id: 'u12', name: '马超', employeeId: 'EMP012', deptId: 'd7', position: '算法工程师', email: 'machao@example.com', phone: '13800001012', status: 'inactive', joinDate: '2025-12-01' },
-]
+export async function createOrgNode(data: Omit<OrgNode, 'id' | 'createdAt'>): Promise<OrgNode> {
+  const res = await instance.post('/departments', toSnakeCase(data as Record<string, unknown>))
+  return res.data.data
+}
+
+export async function updateOrgNode(data: OrgNode): Promise<OrgNode | null> {
+  const res = await instance.put(`/departments/${data.id}`, toSnakeCase(data as Record<string, unknown>))
+  return res.data.data
+}
+
+export async function deleteOrgNodes(ids: string[]): Promise<boolean> {
+  const res = await instance.delete('/departments', { data: { ids } })
+  return res.data.code === 0
+}
+
+// ─── 部门树 (人员管理侧栏) ────────────────────────────────────────────────────
 
 export async function fetchDepartments(): Promise<Department[]> {
-  await delay()
-  return buildDepartmentTree()
+  const res = await instance.get('/departments/tree')
+  return res.data.data
 }
 
+// ─── 人员管理 API ─────────────────────────────────────────────────────────────
+
 export async function fetchUsers(deptId?: string): Promise<SystemUser[]> {
-  await delay()
-  if (deptId) return users.filter((u) => u.deptId === deptId)
-  return [...users]
+  const res = await instance.get('/personnel', {
+    params: deptId ? { dept_id: deptId } : undefined,
+  })
+  return res.data.data
 }
 
 export async function createUser(data: CreateUserRequest): Promise<SystemUser> {
-  await delay(400)
-  const newUser: SystemUser = {
-    id: `u${Date.now()}`,
-    name: data.name,
-    employeeId: data.employeeId,
-    deptId: data.deptId,
-    position: data.position,
-    email: data.email,
-    phone: data.phone,
-    status: data.status,
-    joinDate: new Date().toISOString().slice(0, 10),
-  }
-  users.unshift(newUser)
-  // 更新部门人数
-  const dept = departments.find((d) => d.id === data.deptId)
-  if (dept) dept.memberCount++
-  return { ...newUser }
+  const res = await instance.post('/personnel', toSnakeCase(data as Record<string, unknown>))
+  return res.data.data
 }
 
 export async function updateUser(data: UpdateUserRequest): Promise<SystemUser | null> {
-  await delay(300)
-  const idx = users.findIndex((u) => u.id === data.id)
-  if (idx === -1) return null
-  const oldDeptId = users[idx].deptId
-  users[idx] = { ...users[idx], ...data }
-  // 更新部门人数
-  if (data.deptId && data.deptId !== oldDeptId) {
-    const oldDept = departments.find((d) => d.id === oldDeptId)
-    if (oldDept) oldDept.memberCount--
-    const newDept = departments.find((d) => d.id === data.deptId)
-    if (newDept) newDept.memberCount++
-  }
-  return { ...users[idx] }
+  const res = await instance.put(
+    `/personnel/${data.id}`,
+    toSnakeCase({ ...data, id: undefined } as Record<string, unknown>),
+  )
+  return res.data.data
 }
 
 export async function deleteUser(id: string): Promise<boolean> {
-  await delay(300)
-  const idx = users.findIndex((u) => u.id === id)
-  if (idx === -1) return false
-  const deptId = users[idx].deptId
-  users.splice(idx, 1)
-  const dept = departments.find((d) => d.id === deptId)
-  if (dept) dept.memberCount--
-  return true
+  const res = await instance.delete(`/personnel/${id}`)
+  return res.data.code === 0
 }
 
 // ─── RBAC Mock ───────────────────────────────────────────────────────────────
@@ -221,7 +179,6 @@ export const DATA_RESOURCES: DataResource[] = [
   { id: 'data-log', label: '审计日志', desc: '操作审计与安全事件', icon: 'ScrollText' },
 ]
 
-// 默认角色权限（permKey -> Set）
 export const DEFAULT_ROLE_PERMS: Record<string, { perms: Set<string>; dataScope: Record<string, DataScope> }> = {
   super_admin: {
     perms: new Set(PERM_RESOURCES.map((r) => r.permKey)),
@@ -249,7 +206,7 @@ export function isSuperAdmin(key: string): boolean {
   return key === 'super_admin'
 }
 
-// ─── RBAC API ─────────────────────────────────────────────────────────────────
+// ─── RBAC API (Mock) ────────────────────────────────────────────────────────
 
 let rolePermSets: Record<string, PermRoleState> = {}
 
@@ -270,22 +227,18 @@ function initRolePerms(): void {
 }
 
 export async function fetchRoles(): Promise<RoleDef[]> {
-  await delay()
   return [...roles]
 }
 
 export async function fetchPermissionResources(): Promise<PermResource[]> {
-  await delay()
   return [...PERM_RESOURCES]
 }
 
 export async function fetchDataResources(): Promise<DataResource[]> {
-  await delay()
   return [...DATA_RESOURCES]
 }
 
 export async function fetchRolePerms(roleId: string): Promise<PermRoleState> {
-  await delay()
   initRolePerms()
   const state = rolePermSets[roleId]
   return state ? { granted: new Set(state.granted), dataScope: { ...state.dataScope } } : { granted: new Set(), dataScope: {} }
@@ -296,13 +249,11 @@ export async function saveRolePerms(
   granted: string[],
   dataScope: Record<string, DataScope>,
 ): Promise<boolean> {
-  await delay(400)
   rolePermSets[roleId] = { granted: new Set(granted), dataScope: { ...dataScope } }
   return true
 }
 
 export async function createRole(data: { name: string; description: string; copyFrom: string }): Promise<RoleDef> {
-  await delay(400)
   const newRole: RoleDef = {
     id: `r-${Date.now()}`,
     key: `custom_${Date.now()}`,
@@ -324,7 +275,6 @@ export async function createRole(data: { name: string; description: string; copy
 }
 
 export async function deleteRole(id: string): Promise<boolean> {
-  await delay(300)
   const role = roles.find((r) => r.id === id)
   if (!role || role.isBuiltin) return false
   roles = roles.filter((r) => r.id !== id)
@@ -332,17 +282,15 @@ export async function deleteRole(id: string): Promise<boolean> {
   return true
 }
 
-// ─── 菜单配置 API ─────────────────────────────────────────────────────────────
+// ─── 菜单配置 API (Mock) ───────────────────────────────────────────────────
 
 let menuResources: PermResource[] = [...PERM_RESOURCES]
 
 export async function fetchMenuResources(): Promise<PermResource[]> {
-  await delay()
   return [...menuResources]
 }
 
 export async function createMenuResource(data: Partial<PermResource> & { label: string; permKey: string; type: PermType }): Promise<PermResource> {
-  await delay(400)
   const newRes: PermResource = {
     id: `${data.type}-${Date.now()}`,
     parentId: data.parentId ?? null,
@@ -363,7 +311,6 @@ export async function createMenuResource(data: Partial<PermResource> & { label: 
 }
 
 export async function updateMenuResource(data: Partial<PermResource> & { id: string }): Promise<PermResource | null> {
-  await delay(300)
   const idx = menuResources.findIndex((r) => r.id === data.id)
   if (idx === -1) return null
   menuResources[idx] = { ...menuResources[idx], ...data }
@@ -371,10 +318,8 @@ export async function updateMenuResource(data: Partial<PermResource> & { id: str
 }
 
 export async function deleteMenuResource(id: string): Promise<boolean> {
-  await delay(300)
   const resource = menuResources.find((r) => r.id === id)
   if (!resource || resource.isBuiltin) return false
-  // 递归删除子资源
   const idsToDelete = new Set<string>([id])
   let changed = true
   while (changed) {
@@ -391,7 +336,6 @@ export async function deleteMenuResource(id: string): Promise<boolean> {
 }
 
 export async function fetchRoleCoverages(permKey: string): Promise<RoleCoverageResult[]> {
-  await delay(200)
   initRolePerms()
   return roles.map((role) => {
     const state = rolePermSets[role.id]
