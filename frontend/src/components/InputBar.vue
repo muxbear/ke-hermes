@@ -218,7 +218,7 @@ watch(() => chatStore.loading, (loading) => {
 
 <style scoped>
 .input-bar {
-  padding: 12px 20px 16px;
+  padding: 12px 24px 16px;
   background: var(--surface-card);
   border-top: 1px solid var(--border-subtle);
 }
