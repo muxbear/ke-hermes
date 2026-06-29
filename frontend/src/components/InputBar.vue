@@ -230,7 +230,7 @@ watch(() => chatStore.loading, (loading) => {
   background: #0d1429;
   border: 1px solid rgba(59, 130, 246, 0.08);
   border-radius: var(--radius-xl);
-  padding: 12px 16px 8px;
+  padding: 12px 0 8px;
 }
 
 .input-field {
@@ -245,6 +245,16 @@ watch(() => chatStore.loading, (loading) => {
   line-height: 1.6;
   min-height: 48px;
   max-height: 120px;
+  padding: 0 16px;
+}
+
+.attachment-bar {
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+.input-toolbar {
+  padding: 0 16px;
 }
 
 .input-field::placeholder {
