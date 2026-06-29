@@ -90,3 +90,18 @@ export interface TraceEntry {
   output?: string
   status?: string
 }
+
+// ---- Attachment ----
+
+export type AttachmentStatus = 'uploading' | 'success' | 'failed'
+
+export interface Attachment {
+  id: string
+  serverId?: string
+  file: File
+  filename: string
+  size: number
+  mimeType: string
+  status: AttachmentStatus
+  progress: number
+}
