@@ -19,6 +19,7 @@ declare module 'vue' {
     AgentNode: typeof import('./src/components/agent/AgentNode.vue')['default']
     AgreementCheckbox: typeof import('./src/components/auth/AgreementCheckbox.vue')['default']
     AppShell: typeof import('./src/components/AppShell.vue')['default']
+    AttachmentBar: typeof import('./src/components/AttachmentBar.vue')['default']
     AuthLayout: typeof import('./src/components/auth/AuthLayout.vue')['default']
     BrandPanel: typeof import('./src/components/auth/BrandPanel.vue')['default']
     CaptchaModal: typeof import('./src/components/captcha/CaptchaModal.vue')['default']
