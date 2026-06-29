@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
+import { storeToRefs } from 'pinia'
 import { Mic, ArrowUp, Image, Paperclip, Globe, HardDrive, Database } from 'lucide-vue-next'
 import { useChatStore } from '@/stores/chat'
 import AttachmentBar from './AttachmentBar.vue'
 
 const chatStore = useChatStore()
+const { attachments } = storeToRefs(chatStore)
 
 const inputText = ref('')
 const inputRef = ref(null)

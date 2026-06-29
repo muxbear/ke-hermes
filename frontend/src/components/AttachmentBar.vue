@@ -1,11 +1,20 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useChatStore } from '@/stores/chat'
-import { X, Plus, AlertTriangle, FileText, Image } from 'lucide-vue-next'
+import { X, Plus, AlertTriangle, FileText } from 'lucide-vue-next'
 
 const chatStore = useChatStore()
+const { attachments } = storeToRefs(chatStore)
+
+const hasAttachments = computed(() => attachments.value.length > 0)
 
 function isImage(mimeType: string): boolean {
   return mimeType.startsWith('image/')
+}
+
+function getPreviewUrl(file: File): string {
+  return URL.createObjectURL(file)
 }
 
 function triggerUpload() {
@@ -15,44 +24,34 @@ function triggerUpload() {
 </script>
 
 <template>
-  <div v-if="chatStore.attachments.length > 0" class="attachment-bar">
+  <div v-if="hasAttachments" class="attachment-bar">
     <div
-      v-for="att in chatStore.attachments"
+      v-for="att in attachments"
       :key="att.id"
       class="attachment-item"
       :class="{ failed: att.status === 'failed' }"
       @click="att.status === 'failed' && chatStore.retryUpload(att.id)"
     >
       <div class="attachment-preview">
-        <!-- Image thumbnail -->
         <img
-          v-if="isImage(att.mimeType) && att.status === 'success'"
-          :src="URL.createObjectURL(att.file)"
+          v-if="isImage(att.mimeType)"
+          :src="getPreviewUrl(att.file)"
           class="attachment-thumb"
+          :class="{ 'thumb-dimmed': att.status !== 'success' }"
           alt=""
         />
-        <img
-          v-else-if="isImage(att.mimeType) && att.status !== 'success'"
-          :src="URL.createObjectURL(att.file)"
-          class="attachment-thumb thumb-dimmed"
-          alt=""
-        />
-        <!-- File type icon placeholder -->
         <div v-else class="attachment-icon-placeholder">
           <FileText :size="20" />
         </div>
 
-        <!-- Progress overlay -->
         <div v-if="att.status === 'uploading'" class="progress-overlay">
           <span class="progress-text">{{ att.progress }}%</span>
         </div>
 
-        <!-- Failed badge -->
         <div v-if="att.status === 'failed'" class="failed-badge">
           <AlertTriangle :size="14" />
         </div>
 
-        <!-- Hover delete button (only for non-uploading) -->
         <button
           v-if="att.status !== 'uploading'"
           class="delete-btn"
@@ -65,7 +64,6 @@ function triggerUpload() {
       <span class="attachment-name">{{ att.filename }}</span>
     </div>
 
-    <!-- Add-more button -->
     <button class="attachment-item add-more-btn" @click="triggerUpload">
       <div class="attachment-preview add-more-preview">
         <Plus :size="20" />
