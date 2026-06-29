@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
@@ -26,6 +27,7 @@ class ChatRequest(BaseModel):
     user_id: str | None = 'user_123' # TODO
     thread_id: str | None = None
     message: str = Field(min_length=1)
+    attachment_ids: list[str] | None = None
 
 
 class ChatResponse(BaseModel):
@@ -37,6 +39,21 @@ class StreamToken(BaseModel):
     token: str
 
 
+async def _resolve_attachment_paths(
+    db: AsyncSession, attachment_ids: list[str]
+) -> list[str]:
+    """Resolve attachment IDs to absolute file paths on disk."""
+    from api.attachment.repository import get_attachments_by_ids
+
+    attachments = await get_attachments_by_ids(db, attachment_ids)
+    workspace = Path(__file__).resolve().parent.parent.parent / "workspace"
+    return [
+        str(workspace / a.file_path)
+        for a in attachments
+        if a.status == "success"
+    ]
+
+
 @router.post("/chat", response_model=ChatResponse)
 async def chat(
     req: ChatRequest,
@@ -45,6 +62,11 @@ async def chat(
 ):
     is_new = not req.thread_id
     thread_id = req.thread_id or str(uuid7())
+
+    attachment_paths: list[str] = []
+    if req.attachment_ids:
+        attachment_paths = await _resolve_attachment_paths(db, req.attachment_ids)
+
     config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
     context = Context(
         server_info="ke_hermes_server",
@@ -53,8 +75,15 @@ async def chat(
     )
 
     try:
+        effective_message = req.message
+        if attachment_paths:
+            paths_text = "\n".join(f"- {p}" for p in attachment_paths)
+            effective_message = (
+                f"用户上传了以下附件文件，请根据用户指令处理这些文件：\n{paths_text}\n\n用户消息：{req.message}"
+            )
+
         result = await get_graph().ainvoke(
-            {"messages": [HumanMessage(content=req.message)]},
+            {"messages": [HumanMessage(content=effective_message)]},
             config=config,
             context=context
         )
@@ -90,6 +119,11 @@ async def chat_stream(
     db: AsyncSession = Depends(get_db)):
     is_new = not req.thread_id
     thread_id = req.thread_id or str(uuid7())
+
+    attachment_paths: list[str] = []
+    if req.attachment_ids:
+        attachment_paths = await _resolve_attachment_paths(db, req.attachment_ids)
+
     config: RunnableConfig = {"configurable": {"thread_id": thread_id}, "recursion_limit": 50}
     context = Context(
         server_info="ke_hermes_server",
@@ -97,13 +131,20 @@ async def chat_stream(
         org_id="default-org",  # TODO: 从 JWT claims 或 User 表读取真实 org_id
     )
 
+    effective_message = req.message
+    if attachment_paths:
+        paths_text = "\n".join(f"- {p}" for p in attachment_paths)
+        effective_message = (
+            f"用户上传了以下附件文件，请根据用户指令处理这些文件：\n{paths_text}\n\n用户消息：{req.message}"
+        )
+
     async def event_generator():
         queue: asyncio.Queue[dict | None] = asyncio.Queue()
 
         async def consume_all() -> None:
             try:
                 stream = await get_graph().astream_events(
-                    {"messages": [HumanMessage(content=req.message)]},
+                    {"messages": [HumanMessage(content=effective_message)]},
                     config=config,
                     context=context,
                     version="v3",
