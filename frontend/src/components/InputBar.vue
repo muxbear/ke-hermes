@@ -218,7 +218,7 @@ watch(() => chatStore.loading, (loading) => {
 
 <style scoped>
 .input-bar {
-  padding: 0 0 16px;
+  padding: 12px 24px 16px;
   background: var(--surface-card);
   border-top: 1px solid var(--border-subtle);
 }
@@ -227,11 +227,10 @@ watch(() => chatStore.loading, (loading) => {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin: 12px 24px 0;
   background: #0d1429;
   border: 1px solid rgba(59, 130, 246, 0.08);
   border-radius: var(--radius-xl);
-  padding: 12px 16px 8px 16px;
+  padding: 12px 16px 8px;
 }
 
 .input-field {
