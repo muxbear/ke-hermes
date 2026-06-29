@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from api.accounts import router as accounts_router
 from api.agent import router as agent_router
+from api.attachment import router as attachment_router
 from api.agents import router as agents_router
 from api.auth import router as auth_router
 from api.captcha import router as captcha_router
@@ -26,6 +27,7 @@ from api.tools import router as tools_router
 router = APIRouter()
 router.include_router(accounts_router)
 router.include_router(agent_router)
+router.include_router(attachment_router)
 router.include_router(agents_router)
 router.include_router(auth_router)
 router.include_router(captcha_router)
