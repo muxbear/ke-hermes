@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Sparkles, UserCircle, Brain, ChevronDown, ChevronRight } from 'lucide-vue-next'
+import { Sparkles, UserCircle, Brain, ChevronDown, ChevronRight, FileText } from 'lucide-vue-next'
 import { marked } from 'marked'
 import { useChatStore } from '@/stores/chat'
 import TraceTree from './TraceTree.vue'
@@ -22,6 +22,16 @@ const renderedContent = computed(() => {
   if (!props.message.content) return ''
   return marked.parse(props.message.content, { breaks: true })
 })
+
+function isImage(mimeType: string): boolean {
+  return mimeType.startsWith('image/')
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
 </script>
 
 <template>
@@ -55,7 +65,18 @@ const renderedContent = computed(() => {
           class="markdown-body"
           v-html="renderedContent"
         ></div>
-        <div v-if="message.role === 'user'">{{ message.content }}</div>
+        <div v-if="message.role === 'user'">
+          <!-- Attachment thumbnails -->
+          <div v-if="message.attachments && message.attachments.length > 0" class="user-attachments">
+            <div v-for="(att, i) in message.attachments" :key="i" class="user-attachment-item">
+              <img v-if="isImage(att.mimeType)" :src="att.thumbnailUrl" class="user-att-thumb" alt="" />
+              <FileText v-else :size="24" />
+              <span class="user-att-name">{{ att.filename }}</span>
+              <span class="user-att-size">{{ formatFileSize(att.size) }}</span>
+            </div>
+          </div>
+          {{ message.content }}
+        </div>
         <span v-if="message.streaming && !message.content && !hasBlocks" class="typing-indicator">
           <span class="dot" />
           <span class="dot" />
@@ -312,5 +333,45 @@ const renderedContent = computed(() => {
 
 .markdown-body :deep(em) {
   font-style: italic;
+}
+
+.user-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.user-attachment-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 64px;
+  padding: 4px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.user-att-thumb {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.user-att-name {
+  font-size: 9px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+  text-align: center;
+  opacity: 0.85;
+}
+
+.user-att-size {
+  font-size: 8px;
+  opacity: 0.6;
 }
 </style>

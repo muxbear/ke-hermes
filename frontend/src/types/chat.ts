@@ -61,6 +61,13 @@ export type ExecutionBlock =
 
 // ---- Chat message ----
 
+export interface AttachmentDisplayInfo {
+  filename: string
+  mimeType: string
+  size: number
+  thumbnailUrl: string
+}
+
 export interface ChatMessage {
   id: number
   role: 'user' | 'assistant'
@@ -69,6 +76,8 @@ export interface ChatMessage {
   streaming: boolean
   /** Execution blocks — only populated when traceEnabled is on */
   blocks?: ExecutionBlock[]
+  /** Attachments to display in the message area */
+  attachments?: AttachmentDisplayInfo[]
 }
 
 // ---- Legacy (kept for backward compat, no longer emitted by backend) ----

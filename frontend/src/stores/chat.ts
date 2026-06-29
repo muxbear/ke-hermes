@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { sendStreamRequest } from '@/services/request'
 import { useUiStore } from '@/stores/ui'
-import type { ChatMessage, ExecutionBlock } from '@/types/chat'
+import type { ChatMessage, ExecutionBlock, AttachmentDisplayInfo } from '@/types/chat'
 import type { StreamCallbacks } from '@/services/request'
 import type { Attachment } from '@/types/chat'
 import { uploadAttachment, deleteAttachment } from '@/services/attachmentApi'
@@ -16,6 +16,7 @@ export const useChatStore = defineStore('chat', () => {
   const traceEnabled = ref(false)
   const attachments = ref<Attachment[]>([])
   let nextId = 1
+  let abortController: AbortController | null = null
 
   function generateId(): string {
     return crypto.randomUUID()
@@ -245,25 +246,56 @@ export const useChatStore = defineStore('chat', () => {
     }
   }
 
+  function buildAttachmentDisplayInfo(): AttachmentDisplayInfo[] {
+    return attachments.value
+      .filter((a) => a.status === 'success')
+      .map((a) => ({
+        filename: a.filename,
+        mimeType: a.mimeType,
+        size: a.size,
+        thumbnailUrl: URL.createObjectURL(a.file),
+      }))
+  }
+
+  function clearAttachments() {
+    attachments.value = []
+  }
+
   async function sendMessage(text: string) {
     if (loading.value || !text.trim()) return
 
     loading.value = true
-    addMessage('user', text.trim())
+
+    // Capture attachment display info before clearing
+    const displayInfo = buildAttachmentDisplayInfo()
+    const attIds = [...activeAttachmentIds.value]
+
+    // Clear input-area attachments
+    clearAttachments()
+
+    // Add user message with attachment display info
+    const userMsg = addMessage('user', text.trim())
+    if (displayInfo.length > 0) {
+      const idx = messages.value.findIndex((m) => m.id === userMsg.id)
+      if (idx !== -1) {
+        messages.value[idx] = { ...messages.value[idx], attachments: displayInfo }
+      }
+    }
+
     const assistantMsg = addMessage('assistant', '', true)
 
     const callbacks = traceEnabled.value
       ? buildTraceCallbacks(assistantMsg.id)
       : buildNormalCallbacks(assistantMsg.id)
 
+    abortController = new AbortController()
+
     try {
       await sendStreamRequest(text.trim(), {
         threadId: threadId.value,
         callbacks,
-        attachmentIds:
-          activeAttachmentIds.value.length > 0
-            ? [...activeAttachmentIds.value]
-            : undefined,
+        attachmentIds: attIds.length > 0 ? attIds : undefined,
+        signal: abortController.signal,
       })
     } catch {
       const entry = byId(assistantMsg.id)
@@ -275,6 +307,16 @@ export const useChatStore = defineStore('chat', () => {
           streaming: false,
         }
       }
+      loading.value = false
+    } finally {
+      abortController = null
+    }
+  }
+
+  function stopGeneration() {
+    if (abortController) {
+      abortController.abort()
+      abortController = null
       loading.value = false
     }
   }
@@ -376,6 +418,7 @@ export const useChatStore = defineStore('chat', () => {
     activeAttachmentIds,
     sendMessage,
     clearMessages,
+    stopGeneration,
     loadConversation,
     uploadFile,
     removeAttachment,

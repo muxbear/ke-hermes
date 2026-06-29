@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { storeToRefs } from 'pinia'
-import { Mic, ArrowUp, Image, Paperclip, Globe, HardDrive, Database } from 'lucide-vue-next'
+import { Mic, ArrowUp, Image, Paperclip, Globe, HardDrive, Database, Square } from 'lucide-vue-next'
 import { useChatStore } from '@/stores/chat'
 import AttachmentBar from './AttachmentBar.vue'
 
@@ -204,11 +204,20 @@ watch(() => chatStore.loading, (loading) => {
             <Mic :size="16" />
           </button>
           <button
+            v-if="!chatStore.loading"
             class="send-btn"
-            :disabled="!inputText.trim() || chatStore.loading"
+            :disabled="!inputText.trim()"
             @click="handleSend"
           >
             <ArrowUp :size="18" />
+          </button>
+          <button
+            v-else
+            class="stop-btn"
+            @click="chatStore.stopGeneration()"
+            title="停止生成"
+          >
+            <Square :size="14" />
           </button>
         </div>
       </div>
@@ -382,5 +391,24 @@ watch(() => chatStore.loading, (loading) => {
   background: rgba(59, 130, 246, 0.2);
   color: var(--foreground-muted);
   cursor: not-allowed;
+}
+
+.stop-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-full);
+  border: none;
+  background: var(--accent-primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-left: 2px;
+}
+
+.stop-btn:hover {
+  background: #dc2626;
 }
 </style>

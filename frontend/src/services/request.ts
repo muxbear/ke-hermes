@@ -207,9 +207,10 @@ export async function sendStreamRequest(
     threadId?: string | null
     callbacks: StreamCallbacks
     attachmentIds?: string[]
+    signal?: AbortSignal
   },
 ): Promise<void> {
-  const { threadId, callbacks, attachmentIds } = options
+  const { threadId, callbacks, attachmentIds, signal } = options
 
   const body: { message: string; thread_id?: string; attachment_ids?: string[] } = { message }
   if (threadId) {
@@ -224,6 +225,7 @@ export async function sendStreamRequest(
     method: 'POST',
     headers: chatAuthHeaders(),
     body: JSON.stringify(body),
+    signal,
   })
 
   if (!response.ok) {
