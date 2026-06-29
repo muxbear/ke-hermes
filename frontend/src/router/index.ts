@@ -104,6 +104,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/OrgDeptView.vue'),
         meta: { title: '机构部门' },
       },
+      {
+        path: 'admin/accounts',
+        name: 'admin-accounts',
+        component: () => import('@/views/AccountManagementView.vue'),
+        meta: { title: '账号管理' },
+      },
     ],
   },
   {

@@ -15,28 +15,28 @@ from api.personnel.schemas import (
 )
 from core.security import hash_password
 from db.models.personnel import Personnel
-from db.models.user import User
+from db.models.user import Account
 
 logger = logging.getLogger(__name__)
 
 
 class AccountFactory:
-    """Creates or links a User account when creating personnel."""
+    """Creates or links a Account account when creating personnel."""
 
     def __init__(self, repo: PersonnelRepository) -> None:
         """Initialize with a personnel repository."""
         self.repo = repo
 
     async def ensure_account(
-        self, email: str, phone: str, employee_id: str, user_id: str | None
-    ) -> tuple[User | None, str]:
+        self, email: str, phone: str, employee_id: str, account_id: str | None
+    ) -> tuple[Account | None, str]:
         """Create or link a user account. Returns (user, temp_password)."""
-        # If user_id is explicitly provided, use it directly
-        if user_id:
-            existing_personnel = await self.repo.get_by_user_id(user_id)
+        # If account_id is explicitly provided, use it directly
+        if account_id:
+            existing_personnel = await self.repo.get_by_account_id(account_id)
             if existing_personnel:
                 raise HTTPException(status_code=409, detail="该认证用户已关联到其他人员")
-            return None, ""  # caller creates personnel with this user_id
+            return None, ""  # caller creates personnel with this account_id
 
         # Check for existing user by email or phone
         user_by_email = await self.repo.get_user_by_email(email) if email else None
@@ -45,12 +45,12 @@ class AccountFactory:
         if user_by_email and user_by_phone and user_by_email.id != user_by_phone.id:
             raise HTTPException(
                 status_code=409,
-                detail="邮箱和手机号分别匹配到不同账号，请手动指定 user_id",
+                detail="邮箱和手机号分别匹配到不同账号，请手动指定 account_id",
             )
 
         existing_user = user_by_email or user_by_phone
         if existing_user:
-            existing_personnel = await self.repo.get_by_user_id(existing_user.id)
+            existing_personnel = await self.repo.get_by_account_id(existing_user.id)
             if existing_personnel:
                 raise HTTPException(status_code=409, detail="该认证用户已关联到其他人员")
             return existing_user, ""
@@ -59,7 +59,7 @@ class AccountFactory:
         temp_password = self._generate_password()
         username = await self._generate_username(employee_id)
 
-        user = User(
+        user = Account(
             username=username,
             nickname="",
             password_hash=hash_password(temp_password),
@@ -114,9 +114,9 @@ class PersonnelService:
             if not await self._dept_exists(req.dept_id):
                 raise HTTPException(status_code=404, detail="所属部门不存在")
 
-        # Validate explicit user_id
-        if req.user_id:
-            existing_personnel = await self.repo.get_by_user_id(req.user_id)
+        # Validate explicit account_id
+        if req.account_id:
+            existing_personnel = await self.repo.get_by_account_id(req.account_id)
             if existing_personnel:
                 raise HTTPException(status_code=409, detail="该认证用户已关联到其他人员")
 
@@ -127,23 +127,23 @@ class PersonnelService:
             join_date = date.fromisoformat(req.join_date)
 
         # Handle account creation via AccountFactory
-        user_id = req.user_id
+        account_id = req.account_id
         temp_password = ""
         account_created = False
 
-        if req.create_account and not req.user_id:
+        if req.create_account and not req.account_id:
             linked_user, temp_password = await self.account_factory.ensure_account(
                 email=req.email,
                 phone=req.phone,
                 employee_id=req.employee_id,
-                user_id=None,
+                account_id=None,
             )
             if linked_user:
-                user_id = linked_user.id
+                account_id = linked_user.id
                 account_created = temp_password != ""
 
         personnel = Personnel(
-            user_id=user_id or None,
+            account_id=account_id or None,
             dept_id=req.dept_id or None,
             name=req.name,
             employee_id=req.employee_id,
@@ -198,14 +198,14 @@ class PersonnelService:
             updates["join_date"] = (
                 date.fromisoformat(req.join_date) if req.join_date else None
             )
-        if req.user_id is not None:
-            if req.user_id:
-                existing_personnel = await self.repo.get_by_user_id(req.user_id)
+        if req.account_id is not None:
+            if req.account_id:
+                existing_personnel = await self.repo.get_by_account_id(req.account_id)
                 if existing_personnel and existing_personnel.id != personnel_id:
                     raise HTTPException(status_code=409, detail="该认证用户已关联到其他人员")
-                updates["user_id"] = req.user_id
+                updates["account_id"] = req.account_id
             else:
-                updates["user_id"] = None
+                updates["account_id"] = None
 
         if not updates:
             raise HTTPException(status_code=400, detail="没有要更新的字段")
@@ -255,7 +255,7 @@ class PersonnelService:
             status=p.status,
             join_date=p.join_date.isoformat() if p.join_date else "",
             avatar=p.avatar or "",
-            user_id=p.user_id,
+            account_id=p.account_id,
             account_created=False,
             username="",
             temp_password="",

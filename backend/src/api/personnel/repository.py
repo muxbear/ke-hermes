@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models.department import Department
 from db.models.personnel import Personnel
-from db.models.user import User
+from db.models.user import Account
 
 logger = logging.getLogger(__name__)
 
@@ -44,10 +44,10 @@ class PersonnelRepository:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def get_by_user_id(self, user_id: str) -> Personnel | None:
+    async def get_by_account_id(self, account_id: str) -> Personnel | None:
         """Check if a user is already linked to a personnel record."""
         result = await self.db.execute(
-            select(Personnel).where(Personnel.user_id == user_id)
+            select(Personnel).where(Personnel.account_id == account_id)
         )
         return result.scalar_one_or_none()
 
@@ -82,30 +82,30 @@ class PersonnelRepository:
             .values(manager_id=None)
         )
 
-    # ── User / Account helpers ──────────────────────────────────
+    # ── Account / Account helpers ──────────────────────────────────
 
-    async def get_user_by_email(self, email: str) -> User | None:
+    async def get_user_by_email(self, email: str) -> Account | None:
         """Find a user by email (for account linking)."""
         if not email:
             return None
-        result = await self.db.execute(select(User).where(User.email == email))
+        result = await self.db.execute(select(Account).where(Account.email == email))
         return result.scalar_one_or_none()
 
-    async def get_user_by_phone(self, phone: str) -> User | None:
+    async def get_user_by_phone(self, phone: str) -> Account | None:
         """Find a user by phone (for account linking)."""
         if not phone:
             return None
-        result = await self.db.execute(select(User).where(User.phone == phone))
+        result = await self.db.execute(select(Account).where(Account.phone == phone))
         return result.scalar_one_or_none()
 
-    async def get_user_by_username(self, username: str) -> User | None:
+    async def get_user_by_username(self, username: str) -> Account | None:
         """Check if a username is already taken."""
         result = await self.db.execute(
-            select(User).where(User.username == username)
+            select(Account).where(Account.username == username)
         )
         return result.scalar_one_or_none()
 
-    async def create_user(self, user: User) -> User:
+    async def create_user(self, user: Account) -> Account:
         """Create a new auth user."""
         self.db.add(user)
         await self.db.flush()

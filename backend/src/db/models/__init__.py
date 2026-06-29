@@ -16,7 +16,7 @@ from db.models.personnel import Personnel
 from db.models.provider import Provider
 from db.models.skill import Skill
 from db.models.tool import Tool
-from db.models.user import User
+from db.models.user import Account
 from db.models.user_oauth import UserOAuth
 
 __all__ = [
@@ -38,6 +38,6 @@ __all__ = [
     "Provider",
     "Skill",
     "Tool",
-    "User",
+    "Account",
     "UserOAuth",
 ]

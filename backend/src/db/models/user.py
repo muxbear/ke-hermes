@@ -7,8 +7,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 from db.base import Base
 
 
-class User(Base):
-    __tablename__ = "users"
+class Account(Base):
+    __tablename__ = "accounts"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     username: Mapped[str] = mapped_column(String(64), unique=True, nullable=True)

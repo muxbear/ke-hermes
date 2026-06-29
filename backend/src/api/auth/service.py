@@ -25,7 +25,7 @@ from core.security import (
     verify_password,
 )
 from core.cache import KeyValueCache
-from db.models import LoginRecord, User
+from db.models import LoginRecord, Account
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +78,7 @@ async def _clear_fail(account: str, store: KeyValueCache):
     await store.delete(f"login:fail:{account}")
 
 
-def _user_to_info(user: User) -> UserInfo:
+def _user_to_info(user: Account) -> UserInfo:
     return UserInfo(
         id=user.id,
         nickname=user.nickname or "",
@@ -89,7 +89,7 @@ def _user_to_info(user: User) -> UserInfo:
     )
 
 
-def _to_auth_response(user: User, token_pair) -> AuthResponse:
+def _to_auth_response(user: Account, token_pair) -> AuthResponse:
     return AuthResponse(
         tokens=AuthTokens(
             accessToken=token_pair.accessToken,
@@ -115,8 +115,8 @@ async def account_login(
         raise
 
     result = await db.execute(
-        select(User).where(
-            (User.username == req.account) | (User.phone == req.account) | (User.email == req.account)
+        select(Account).where(
+            (Account.username == req.account) | (Account.phone == req.account) | (Account.email == req.account)
         )
     )
     user = result.scalar_one_or_none()
@@ -142,11 +142,11 @@ async def phone_login(
         raise HTTPException(status_code=400, detail="Invalid or expired SMS code")
     await store.delete(f"sms:{req.phone}")
 
-    result = await db.execute(select(User).where(User.phone == req.phone))
+    result = await db.execute(select(Account).where(Account.phone == req.phone))
     user = result.scalar_one_or_none()
 
     if not user:
-        user = User(phone=req.phone, nickname=f"User{req.phone[-4:]}")
+        user = Account(phone=req.phone, nickname=f"Account{req.phone[-4:]}")
         db.add(user)
         await db.flush()
         await db.refresh(user)
@@ -165,7 +165,7 @@ async def register_phone(
         raise HTTPException(status_code=400, detail="Invalid or expired SMS code")
     await store.delete(f"sms:{req.phone}")
 
-    existing = await db.execute(select(User).where(User.phone == req.phone))
+    existing = await db.execute(select(Account).where(Account.phone == req.phone))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Phone already registered")
 
@@ -174,7 +174,7 @@ async def register_phone(
     except HTTPException:
         raise HTTPException(status_code=400, detail="Invalid password encryption")
 
-    user = User(
+    user = Account(
         phone=req.phone,
         nickname=req.nickname,
         password_hash=hash_password(plain_password),
@@ -197,7 +197,7 @@ async def register_email(
         raise HTTPException(status_code=400, detail="Invalid or expired email code")
     await store.delete(f"email:{req.email}")
 
-    existing = await db.execute(select(User).where(User.email == req.email))
+    existing = await db.execute(select(Account).where(Account.email == req.email))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="Email already registered")
 
@@ -206,7 +206,7 @@ async def register_email(
     except HTTPException:
         raise HTTPException(status_code=400, detail="Invalid password encryption")
 
-    user = User(
+    user = Account(
         email=req.email,
         nickname=req.nickname,
         password_hash=hash_password(plain_password),
@@ -228,10 +228,10 @@ async def refresh_token_svc(
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    result = await db.execute(select(User).where(User.id == user_id))
+    result = await db.execute(select(Account).where(Account.id == user_id))
     user = result.scalar_one_or_none()
     if not user:
-        raise HTTPException(status_code=401, detail="User not found")
+        raise HTTPException(status_code=401, detail="Account not found")
 
     token_pair = create_token_pair(user.id)
     return _to_auth_response(user, token_pair)

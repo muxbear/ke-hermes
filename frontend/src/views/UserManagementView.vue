@@ -18,11 +18,14 @@ import {
   XCircle,
   Clock,
   MoreHorizontal,
+  Link2,
+  Eye,
 } from 'lucide-vue-next'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserManagementStore } from '@/stores/userManagement'
 import DepartmentTreeNode from '@/components/admin/DepartmentTreeNode.vue'
-import type { Department, SystemUser, CreateUserRequest, UserStatus } from '@/types/admin'
+import { fetchAccounts, fetchAccount } from '@/services/adminApi'
+import type { Department, SystemUser, CreateUserRequest, UserStatus, AccountInfo } from '@/types/admin'
 
 const router = useRouter()
 const store = useUserManagementStore()
@@ -138,6 +141,69 @@ async function handleDeleteUser(user: SystemUser) {
     ElMessage.success('用户已删除')
   } catch {
     // cancelled
+  }
+}
+
+// ─── 绑定账号 ───────────────────────────────────────────────
+const bindVisible = ref(false)
+const bindPersonnelId = ref<string | null>(null)
+const bindSearch = ref('')
+const bindAccounts = ref<AccountInfo[]>([])
+const bindLoading = ref(false)
+const bindSelected = ref<string | null>(null)
+
+async function openBindDialog(user: SystemUser) {
+  bindPersonnelId.value = user.id
+  bindSearch.value = ''
+  bindAccounts.value = []
+  bindSelected.value = null
+  bindVisible.value = true
+  await searchAccounts()
+}
+
+async function searchAccounts() {
+  bindLoading.value = true
+  try {
+    const res = await fetchAccounts({ search: bindSearch.value || undefined, page: 1, pageSize: 20 })
+    bindAccounts.value = res.items
+  } finally {
+    bindLoading.value = false
+  }
+}
+
+async function handleBindSubmit() {
+  if (!bindPersonnelId.value || !bindSelected.value) return
+  const account = bindAccounts.value.find(a => a.id === bindSelected.value)
+  if (!account) return
+
+  try {
+    await ElMessageBox.confirm(
+      `确定将人员绑定到账号「${account.username}」吗？`,
+      '确认绑定',
+      { confirmButtonText: '确定', cancelButtonText: '取消', type: 'info' },
+    )
+    await store.handleUpdateUser({ id: bindPersonnelId.value, account_id: account.id } as any)
+    ElMessage.success(`已绑定账号「${account.username}」`)
+    bindVisible.value = false
+  } catch { /* cancelled */ }
+}
+
+// ─── 查看详情（右侧抽屉）────────────────────────────────────
+const detailVisible = ref(false)
+const detailUser = ref<SystemUser | null>(null)
+const detailAccount = ref<AccountInfo | null>(null)
+const detailLoading = ref(false)
+
+async function openDetail(user: SystemUser) {
+  detailUser.value = user
+  detailAccount.value = null
+  detailVisible.value = true
+  if (user.accountId) {
+    detailLoading.value = true
+    try {
+      detailAccount.value = await fetchAccount(user.accountId)
+    } catch { /* ignore */ }
+    finally { detailLoading.value = false }
   }
 }
 
@@ -264,12 +330,10 @@ watch([() => store.selectedDeptId, () => store.searchQuery], () => {
               </span>
             </div>
             <div class="user-card-actions">
-              <button class="action-btn" @click.stop="openEditDialog(user)">
-                <Edit2 :size="14" />
-              </button>
-              <button class="action-btn danger" @click.stop="handleDeleteUser(user)">
-                <Trash2 :size="14" />
-              </button>
+              <button class="action-btn" title="查看详情" @click.stop="openDetail(user)"><Eye :size="14" /></button>
+              <button class="action-btn" title="绑定账号" @click.stop="openBindDialog(user)"><Link2 :size="14" /></button>
+              <button class="action-btn" title="编辑" @click.stop="openEditDialog(user)"><Edit2 :size="14" /></button>
+              <button class="action-btn danger" title="删除" @click.stop="handleDeleteUser(user)"><Trash2 :size="14" /></button>
             </div>
           </div>
           <div v-if="totalFiltered === 0" class="empty-state">
@@ -312,12 +376,10 @@ watch([() => store.selectedDeptId, () => store.searchQuery], () => {
                 <td>{{ user.joinDate }}</td>
                 <td>
                   <div class="row-actions">
-                    <button class="action-btn" @click.stop="openEditDialog(user)">
-                      <Edit2 :size="14" />
-                    </button>
-                    <button class="action-btn danger" @click.stop="handleDeleteUser(user)">
-                      <Trash2 :size="14" />
-                    </button>
+                    <button class="action-btn" title="详情" @click.stop="openDetail(user)"><Eye :size="14" /></button>
+                    <button class="action-btn" title="绑定账号" @click.stop="openBindDialog(user)"><Link2 :size="14" /></button>
+                    <button class="action-btn" title="编辑" @click.stop="openEditDialog(user)"><Edit2 :size="14" /></button>
+                    <button class="action-btn danger" title="删除" @click.stop="handleDeleteUser(user)"><Trash2 :size="14" /></button>
                   </div>
                 </td>
               </tr>
@@ -409,6 +471,123 @@ watch([() => store.selectedDeptId, () => store.searchQuery], () => {
             <button class="dialog-submit" @click="handleSubmit" :disabled="store.saving">
               {{ store.saving ? '保存中...' : '保存' }}
             </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- 绑定账号弹窗 -->
+    <Teleport to="body">
+      <div v-if="bindVisible" class="dialog-overlay" @click.self="bindVisible = false">
+        <div class="dialog-panel">
+          <div class="dialog-header">
+            <h3><Link2 :size="16" /> 绑定账号</h3>
+            <button class="dialog-close" @click="bindVisible = false">&times;</button>
+          </div>
+          <div class="dialog-body">
+            <div class="bind-search">
+              <input v-model="bindSearch" type="text" class="bind-search-input" placeholder="搜索用户名、昵称、邮箱..."
+                @keyup.enter="searchAccounts" />
+              <button class="add-btn" @click="searchAccounts">搜索</button>
+            </div>
+            <div v-if="bindLoading" class="loading-state">搜索中...</div>
+            <div v-else class="bind-list">
+              <div
+                v-for="a in bindAccounts"
+                :key="a.id"
+                :class="['bind-item', { selected: bindSelected === a.id }]"
+                @click="bindSelected = a.id"
+              >
+                <div class="bind-item-info">
+                  <span class="bind-username">{{ a.username }}</span>
+                  <span class="bind-nickname">{{ a.nickname || '-' }}</span>
+                </div>
+                <span class="bind-email">{{ a.email || '-' }}</span>
+              </div>
+              <div v-if="bindAccounts.length === 0" class="empty-state">未找到匹配账号</div>
+            </div>
+          </div>
+          <div class="dialog-footer">
+            <button class="dialog-cancel" @click="bindVisible = false">取消</button>
+            <button class="dialog-submit" :disabled="!bindSelected" @click="handleBindSubmit">确定</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- 人员详情右侧抽屉 -->
+    <Teleport to="body">
+      <div v-if="detailVisible" class="drawer-overlay" @click.self="detailVisible = false">
+        <div class="drawer-panel">
+          <div class="drawer-header">
+            <h3>人员详情</h3>
+            <button class="dialog-close" @click="detailVisible = false">&times;</button>
+          </div>
+          <div v-if="detailUser" class="drawer-body">
+            <div class="drawer-avatar">
+              <span class="drawer-avatar-text">{{ detailUser.name.charAt(0) }}</span>
+            </div>
+            <h2 class="drawer-name">{{ detailUser.name }}</h2>
+            <div class="drawer-status">
+              <span :class="['status-tag', statusConfig[detailUser.status].cls]">
+                {{ statusConfig[detailUser.status].label }}
+              </span>
+            </div>
+            <div class="drawer-divider" />
+            <div class="drawer-fields">
+              <div class="drawer-field">
+                <span class="drawer-label">工号</span>
+                <span class="drawer-value mono">{{ detailUser.employeeId }}</span>
+              </div>
+              <div class="drawer-field">
+                <span class="drawer-label">部门</span>
+                <span class="drawer-value">{{ store.findDeptName(detailUser.deptId) }}</span>
+              </div>
+              <div class="drawer-field">
+                <span class="drawer-label">职位</span>
+                <span class="drawer-value">{{ detailUser.position || '-' }}</span>
+              </div>
+              <div class="drawer-field">
+                <span class="drawer-label">邮箱</span>
+                <span class="drawer-value">{{ detailUser.email || '-' }}</span>
+              </div>
+              <div class="drawer-field">
+                <span class="drawer-label">手机号</span>
+                <span class="drawer-value">{{ detailUser.phone || '-' }}</span>
+              </div>
+              <div class="drawer-field">
+                <span class="drawer-label">入职日期</span>
+                <span class="drawer-value">{{ detailUser.joinDate || '-' }}</span>
+              </div>
+            </div>
+            <div class="drawer-divider" />
+            <div class="drawer-section-title">关联账号</div>
+            <div v-if="detailLoading" class="loading-state">加载中...</div>
+            <div v-else-if="detailAccount" class="drawer-account">
+              <div class="drawer-field">
+                <span class="drawer-label">用户名</span>
+                <span class="drawer-value">{{ detailAccount.username }}</span>
+              </div>
+              <div class="drawer-field">
+                <span class="drawer-label">昵称</span>
+                <span class="drawer-value">{{ detailAccount.nickname || '-' }}</span>
+              </div>
+              <div class="drawer-field">
+                <span class="drawer-label">邮箱</span>
+                <span class="drawer-value">{{ detailAccount.email || '-' }}</span>
+              </div>
+              <div class="drawer-field">
+                <span class="drawer-label">手机</span>
+                <span class="drawer-value">{{ detailAccount.phone || '-' }}</span>
+              </div>
+              <div class="drawer-field">
+                <span class="drawer-label">状态</span>
+                <span :class="['status-tag', detailAccount.isActive ? 'active' : 'inactive']">
+                  {{ detailAccount.isActive ? '正常' : '已禁用' }}
+                </span>
+              </div>
+            </div>
+            <div v-else class="drawer-no-account">未绑定账号</div>
           </div>
         </div>
       </div>
@@ -861,4 +1040,60 @@ watch([() => store.selectedDeptId, () => store.searchQuery], () => {
   min-width: 60px;
   text-align: center;
 }
+
+/* Bind Account Dialog */
+.bind-search { display: flex; gap: 8px; margin-bottom: 14px; }
+.bind-search-input {
+  flex: 1; padding: 8px 12px;
+  background: var(--surface-primary); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md); color: var(--foreground-primary);
+  font-size: var(--font-size-sm); outline: none;
+}
+.bind-search-input:focus { border-color: var(--accent-primary); }
+.bind-list { max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.bind-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px; border-radius: var(--radius-md); cursor: pointer;
+  border: 1px solid transparent;
+  transition: all var(--transition-duration);
+}
+.bind-item:hover { background: rgba(59,130,246,0.06); }
+.bind-item.selected { background: rgba(59,130,246,0.1); border-color: rgba(59,130,246,0.3); }
+.bind-item-info { display: flex; flex-direction: column; gap: 2px; }
+.bind-username { font-size: var(--font-size-sm); color: var(--foreground-primary); }
+.bind-nickname { font-size: var(--font-size-xs); color: var(--foreground-muted); }
+.bind-email { font-size: var(--font-size-xs); color: var(--foreground-muted); }
+
+/* Right Drawer */
+.drawer-overlay { position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,0.3); }
+.drawer-panel {
+  position: fixed; top: 0; right: 0; height: 100%; width: 380px; max-width: 90vw;
+  background: var(--color-modal-bg); border-left: 1px solid var(--border-subtle);
+  box-shadow: -4px 0 24px rgba(0,0,0,0.3);
+  display: flex; flex-direction: column;
+  animation: slideIn 0.25s ease;
+}
+@keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+.drawer-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 18px 20px; border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+.drawer-header h3 { font-size: var(--font-size-md); margin: 0; color: var(--foreground-primary); }
+.drawer-body { flex: 1; overflow-y: auto; padding: 24px 20px; }
+.drawer-avatar {
+  width: 56px; height: 56px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-primary), rgba(168,85,247,0.8));
+  display: flex; align-items: center; justify-content: center; margin-bottom: 12px;
+}
+.drawer-avatar-text { color: #fff; font-size: 22px; font-weight: var(--font-weight-medium); }
+.drawer-name { font-size: var(--font-size-lg); color: var(--foreground-primary); margin: 0 0 8px; }
+.drawer-status { margin-bottom: 16px; }
+.drawer-divider { height: 1px; background: var(--border-subtle); margin: 16px 0; }
+.drawer-fields { display: flex; flex-direction: column; gap: 12px; }
+.drawer-field { display: flex; flex-direction: column; gap: 3px; }
+.drawer-label { font-size: var(--font-size-xs); color: var(--foreground-muted); }
+.drawer-value { font-size: var(--font-size-sm); color: var(--foreground-primary); }
+.drawer-section-title { font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); color: var(--foreground-primary); margin-bottom: 8px; }
+.drawer-no-account { font-size: var(--font-size-sm); color: var(--foreground-muted); padding: 12px 0; }
 </style>

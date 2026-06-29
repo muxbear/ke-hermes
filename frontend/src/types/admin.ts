@@ -58,6 +58,7 @@ export interface SystemUser {
   status: UserStatus
   joinDate: string
   avatar?: string
+  accountId?: string | null
 }
 
 export interface CreateUserRequest {
@@ -72,6 +73,7 @@ export interface CreateUserRequest {
 
 export interface UpdateUserRequest extends Partial<CreateUserRequest> {
   id: string
+  account_id?: string | null
 }
 
 // ─── RBAC 角色 ────────────────────────────────────────────────────────────────
@@ -152,6 +154,49 @@ export const BTN_VARIANT_LABEL: Record<BtnVariant, { label: string; color: strin
   default: { label: '默认', color: 'bg-slate-500/15 text-slate-300 border-slate-500/30' },
   danger: { label: '危险', color: 'bg-rose-500/15 text-rose-300 border-rose-500/30' },
   ghost: { label: '幽灵', color: 'bg-zinc-500/15 text-zinc-300 border-zinc-500/30' },
+}
+
+// ─── 账号管理 ─────────────────────────────────────────────────────────────────
+
+export interface AccountInfo {
+  id: string
+  username: string
+  nickname: string
+  email: string
+  phone: string
+  avatar: string
+  isActive: boolean
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AccountCreateRequest {
+  username: string
+  nickname: string
+  password: string
+  email: string
+  phone: string
+  isActive: boolean
+}
+
+export interface AccountUpdateRequest {
+  username?: string
+  nickname?: string
+  email?: string
+  phone?: string
+  isActive?: boolean
+}
+
+export interface AccountListResponse {
+  items: AccountInfo[]
+  total: number
+  page: number
+  pageSize: number
+}
+
+export interface AccountResetPasswordResponse {
+  id: string
+  tempPassword: string
 }
 
 // ─── 机构部门 ─────────────────────────────────────────────────────────────────

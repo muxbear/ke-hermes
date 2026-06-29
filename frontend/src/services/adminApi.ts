@@ -14,6 +14,11 @@ import type {
   DataResource,
   DataScope,
   OrgNode,
+  AccountInfo,
+  AccountCreateRequest,
+  AccountUpdateRequest,
+  AccountListResponse,
+  AccountResetPasswordResponse,
 } from '@/types/admin'
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
@@ -38,14 +43,10 @@ export async function fetchAdminTiles(): Promise<AdminTileConfig[]> {
     { id: 'org', icon: 'Building2', title: '机构部门', description: '管理机构信息、部门层级与组织架构。', route: '/admin/org', gradient: 'from-emerald-500/20 to-emerald-500/5', group: 'basic' },
     { id: 'users', icon: 'Users', title: '人员管理', description: '维护账号、部门与组织架构，分配负责人。', route: '/admin/users', gradient: 'from-violet-500/20 to-violet-500/5', group: 'people' },
     { id: 'rbac', icon: 'ShieldCheck', title: '角色权限', description: 'RBAC 角色定义、菜单与数据权限粒度配置。', route: '/admin/rbac', gradient: 'from-fuchsia-500/20 to-fuchsia-500/5', group: 'people' },
-    { id: 'api-keys', icon: 'Key', title: '密钥管理', description: 'API Key 颁发、轮换、过期与调用审计。', gradient: 'from-indigo-500/20 to-indigo-500/5', group: 'people' },
-    { id: 'audit', icon: 'ScrollText', title: '审计日志', description: '登录、配置变更、模型调用全量操作追溯。', gradient: 'from-rose-500/20 to-rose-500/5', group: 'people' },
-    { id: 'ai-config', icon: 'Cpu', title: 'AI 配置', description: '默认模型、提示词模板、安全围栏与速率限制。', gradient: 'from-blue-500/20 to-purple-500/10', group: 'extension' },
-    { id: 'feature-config', icon: 'ToggleRight', title: '功能配置', description: '对话、知识库、定时任务等模块的高级参数。', gradient: 'from-sky-500/20 to-sky-500/5', group: 'extension' },
+    { id: 'api-keys', icon: 'UserRoundCog', title: '账号管理', description: '管理系统账号、登录策略与密码安全设置。', route: '/admin/accounts', gradient: 'from-indigo-500/20 to-indigo-500/5', group: 'people' },
     { id: 'plugins', icon: 'Puzzle', title: '插件管理', description: '浏览、安装、启停官方与第三方插件。', gradient: 'from-teal-500/20 to-teal-500/5', group: 'extension' },
     { id: 'integrations', icon: 'Plug', title: '第三方集成', description: 'SSO、对象存储、向量库、企业 IM 接入。', gradient: 'from-orange-500/20 to-orange-500/5', group: 'extension' },
-    { id: 'data', icon: 'DatabaseBackup', title: '数据管理', description: '数据导入导出、备份恢复与租户级清理。', gradient: 'from-lime-500/20 to-lime-500/5', group: 'extension' },
-    { id: 'devops', icon: 'Code2', title: '二次开发', description: '开放接口、SDK、Webhook 与 DevOps 资源。', gradient: 'from-pink-500/20 to-pink-500/5', group: 'extension' },
+    { id: 'audit', icon: 'ScrollText', title: '审计日志', description: '登录、配置变更、模型调用全量操作追溯。', gradient: 'from-rose-500/20 to-rose-500/5', group: 'extension' },
   ]
 }
 
@@ -115,6 +116,58 @@ export async function updateUser(data: UpdateUserRequest): Promise<SystemUser | 
 export async function deleteUser(id: string): Promise<boolean> {
   const res = await instance.delete(`/personnel/${id}`)
   return res.data.code === 0
+}
+
+// ─── 账号管理 API ─────────────────────────────────────────────────────────────
+
+export async function fetchAccounts(
+  params: { search?: string; page?: number; pageSize?: number } = {},
+): Promise<AccountListResponse> {
+  const res = await instance.get('/accounts', { params })
+  return res.data.data
+}
+
+export async function fetchAccount(id: string): Promise<AccountInfo> {
+  const res = await instance.get(`/accounts/${id}`)
+  return res.data.data
+}
+
+export async function createAccount(data: AccountCreateRequest): Promise<AccountInfo> {
+  const res = await instance.post('/accounts', toSnakeCase(data as Record<string, unknown>))
+  return res.data.data
+}
+
+export async function updateAccount(
+  id: string,
+  data: AccountUpdateRequest,
+): Promise<AccountInfo> {
+  const res = await instance.put(
+    `/accounts/${id}`,
+    toSnakeCase(data as Record<string, unknown>),
+  )
+  return res.data.data
+}
+
+export async function deleteAccount(id: string): Promise<{ deleted: boolean }> {
+  const res = await instance.delete(`/accounts/${id}`)
+  return res.data.data
+}
+
+export async function toggleAccountStatus(id: string): Promise<AccountInfo> {
+  const res = await instance.post(`/accounts/${id}/toggle-status`)
+  return res.data.data
+}
+
+export async function unlockAccount(id: string): Promise<{ unlocked: boolean }> {
+  const res = await instance.post(`/accounts/${id}/unlock`)
+  return res.data.data
+}
+
+export async function resetAccountPassword(
+  id: string,
+): Promise<AccountResetPasswordResponse> {
+  const res = await instance.post(`/accounts/${id}/reset-password`)
+  return res.data.data
 }
 
 // ─── RBAC Mock ───────────────────────────────────────────────────────────────

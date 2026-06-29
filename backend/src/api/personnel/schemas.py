@@ -28,7 +28,7 @@ class PersonnelCreateRequest(BaseModel):
     status: str = Field(default="active", pattern=r"^(active|inactive|pending)$")
     join_date: str = ""
     avatar: str = ""
-    user_id: str | None = None
+    account_id: str | None = None
     create_account: bool = False
 
 
@@ -44,7 +44,15 @@ class PersonnelUpdateRequest(BaseModel):
     status: str | None = Field(default=None, pattern=r"^(active|inactive|pending)$")
     join_date: str | None = None
     avatar: str | None = None
-    user_id: str | None = None
+    account_id: str | None = None
+
+
+# ── Account binding request ───────────────────────────────────
+
+class BindAccountRequest(BaseModel):
+    """Bind or unbind an account to a personnel record."""
+
+    account_id: str | None = None  # None = unbind
 
 
 # ── Response schemas ───────────────────────────────────────────
@@ -64,7 +72,7 @@ class PersonnelResponse(CamelCaseModel):
     status: str
     join_date: str = Field(default="", serialization_alias="joinDate")
     avatar: str = ""
-    user_id: str | None = Field(default=None, serialization_alias="userId")
+    account_id: str | None = Field(default=None, serialization_alias="accountId")
     account_created: bool = Field(default=False, serialization_alias="accountCreated")
     username: str = ""
     temp_password: str = Field(default="", serialization_alias="tempPassword")

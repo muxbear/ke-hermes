@@ -12,7 +12,7 @@ from api.auth.schemas import AuthResponse, AuthTokens, UserInfo
 from api.oauth.providers import get_oauth_provider
 from core.security import create_token_pair
 from core.cache import KeyValueCache
-from db.models import User, UserOAuth
+from db.models import Account, UserOAuth
 
 logger = logging.getLogger(__name__)
 
@@ -89,12 +89,12 @@ async def handle_callback(
     oauth_record = result.scalar_one_or_none()
 
     if oauth_record:
-        user_result = await db.execute(select(User).where(User.id == oauth_record.user_id))
+        user_result = await db.execute(select(Account).where(Account.id == oauth_record.user_id))
         user = user_result.scalar_one_or_none()
         if not user:
             raise HTTPException(status_code=500, detail="Linked user not found")
     else:
-        user = User(
+        user = Account(
             nickname=info.nickname or f"{provider}_user",
             avatar=info.avatar,
             email=info.email,

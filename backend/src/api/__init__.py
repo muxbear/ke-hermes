@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from api.accounts import router as accounts_router
 from api.agent import router as agent_router
 from api.agents import router as agents_router
 from api.auth import router as auth_router
@@ -23,6 +24,7 @@ from api.sms import router as sms_router
 from api.tools import router as tools_router
 
 router = APIRouter()
+router.include_router(accounts_router)
 router.include_router(agent_router)
 router.include_router(agents_router)
 router.include_router(auth_router)
