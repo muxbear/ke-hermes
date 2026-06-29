@@ -118,8 +118,8 @@ watch(() => chatStore.loading, (loading) => {
 
 <template>
   <div class="input-bar">
-    <AttachmentBar />
     <div class="input-area">
+      <AttachmentBar />
       <textarea
         ref="inputRef"
         v-model="inputText"

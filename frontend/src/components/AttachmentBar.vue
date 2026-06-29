@@ -77,7 +77,7 @@ function triggerUpload() {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 0 0 8px;
+  padding-bottom: 8px;
   flex-wrap: wrap;
 }
 
