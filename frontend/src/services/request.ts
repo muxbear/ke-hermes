@@ -206,13 +206,17 @@ export async function sendStreamRequest(
   options: {
     threadId?: string | null
     callbacks: StreamCallbacks
+    attachmentIds?: string[]
   },
 ): Promise<void> {
-  const { threadId, callbacks } = options
+  const { threadId, callbacks, attachmentIds } = options
 
-  const body: { message: string; thread_id?: string } = { message }
+  const body: { message: string; thread_id?: string; attachment_ids?: string[] } = { message }
   if (threadId) {
     body.thread_id = threadId
+  }
+  if (attachmentIds && attachmentIds.length > 0) {
+    body.attachment_ids = attachmentIds
   }
 
   const baseURL = import.meta.env.VITE_API_BASE_URL || '/api'

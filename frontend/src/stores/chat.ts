@@ -1,9 +1,11 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { sendStreamRequest } from '@/services/request'
 import { useUiStore } from '@/stores/ui'
 import type { ChatMessage, ExecutionBlock } from '@/types/chat'
 import type { StreamCallbacks } from '@/services/request'
+import type { Attachment } from '@/types/chat'
+import { uploadAttachment, deleteAttachment } from '@/services/attachmentApi'
 
 export type { ChatMessage }
 
@@ -12,7 +14,12 @@ export const useChatStore = defineStore('chat', () => {
   const loading = ref(false)
   const threadId = ref<string | null>(null)
   const traceEnabled = ref(false)
+  const attachments = ref<Attachment[]>([])
   let nextId = 1
+
+  function generateId(): string {
+    return crypto.randomUUID()
+  }
 
   function addMessage(role: 'user' | 'assistant', content = '', streaming = false): ChatMessage {
     const msg: ChatMessage = { id: nextId++, role, content, streaming }
@@ -253,6 +260,10 @@ export const useChatStore = defineStore('chat', () => {
       await sendStreamRequest(text.trim(), {
         threadId: threadId.value,
         callbacks,
+        attachmentIds:
+          activeAttachmentIds.value.length > 0
+            ? [...activeAttachmentIds.value]
+            : undefined,
       })
     } catch {
       const entry = byId(assistantMsg.id)
@@ -273,6 +284,65 @@ export const useChatStore = defineStore('chat', () => {
     loading.value = false
     threadId.value = null
   }
+
+  async function uploadFile(file: File): Promise<void> {
+    const id = generateId()
+    const att: Attachment = {
+      id,
+      file,
+      filename: file.name,
+      size: file.size,
+      mimeType: file.type || 'application/octet-stream',
+      status: 'uploading',
+      progress: 0,
+    }
+    attachments.value.push(att)
+
+    try {
+      const result = await uploadAttachment(file, (percent) => {
+        const idx = attachments.value.findIndex((a) => a.id === id)
+        if (idx !== -1) {
+          attachments.value[idx] = { ...attachments.value[idx], progress: percent }
+        }
+      })
+      const idx = attachments.value.findIndex((a) => a.id === id)
+      if (idx !== -1) {
+        attachments.value[idx] = {
+          ...attachments.value[idx],
+          serverId: result.id,
+          status: 'success',
+          progress: 100,
+        }
+      }
+    } catch {
+      const idx = attachments.value.findIndex((a) => a.id === id)
+      if (idx !== -1) {
+        attachments.value[idx] = { ...attachments.value[idx], status: 'failed' }
+      }
+    }
+  }
+
+  function removeAttachment(id: string): void {
+    const att = attachments.value.find((a) => a.id === id)
+    if (att?.serverId) {
+      deleteAttachment(att.serverId).catch(() => {})
+    }
+    attachments.value = attachments.value.filter((a) => a.id !== id)
+  }
+
+  async function retryUpload(id: string): Promise<void> {
+    const idx = attachments.value.findIndex((a) => a.id === id)
+    if (idx === -1) return
+    const file = attachments.value[idx].file
+    attachments.value = attachments.value.filter((a) => a.id !== id)
+    await uploadFile(file)
+  }
+
+  const activeAttachmentIds = computed<string[]>(() => {
+    return attachments.value
+      .filter((a) => a.status === 'success' && a.serverId)
+      .map((a) => a.serverId!)
+  })
 
   async function loadConversation(tid: string) {
     const { fetchConversationMessages } = await import('@/services/conversationApi')
@@ -302,8 +372,13 @@ export const useChatStore = defineStore('chat', () => {
     loading,
     threadId,
     traceEnabled,
+    attachments,
+    activeAttachmentIds,
     sendMessage,
     clearMessages,
     loadConversation,
+    uploadFile,
+    removeAttachment,
+    retryUpload,
   }
 })
