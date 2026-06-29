@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Sparkles, UserCircle, Brain, ChevronDown, ChevronRight, FileText } from 'lucide-vue-next'
+import { Sparkles, UserCircle, Brain, ChevronDown, ChevronRight } from 'lucide-vue-next'
 import { marked } from 'marked'
 import { useChatStore } from '@/stores/chat'
 import TraceTree from './TraceTree.vue'
@@ -31,6 +31,11 @@ function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function fileExtension(filename: string): string {
+  const i = filename.lastIndexOf('.')
+  return i > 0 ? filename.slice(i + 1).toUpperCase().slice(0, 4) : 'FILE'
 }
 </script>
 
@@ -66,13 +71,16 @@ function formatFileSize(bytes: number): string {
           v-html="renderedContent"
         ></div>
         <div v-if="message.role === 'user'">
-          <!-- Attachment thumbnails -->
           <div v-if="message.attachments && message.attachments.length > 0" class="user-attachments">
-            <div v-for="(att, i) in message.attachments" :key="i" class="user-attachment-item">
-              <img v-if="isImage(att.mimeType)" :src="att.thumbnailUrl" class="user-att-thumb" alt="" />
-              <FileText v-else :size="24" />
-              <span class="user-att-name">{{ att.filename }}</span>
-              <span class="user-att-size">{{ formatFileSize(att.size) }}</span>
+            <div v-for="(att, i) in message.attachments" :key="i" class="user-att-item">
+              <div class="user-att-icon">
+                <img v-if="isImage(att.mimeType)" :src="att.thumbnailUrl" alt="" />
+                <span v-else class="user-att-ext">{{ fileExtension(att.filename) }}</span>
+              </div>
+              <div class="user-att-info">
+                <span class="user-att-name">{{ att.filename }}</span>
+                <span class="user-att-size">{{ formatFileSize(att.size) }}</span>
+              </div>
             </div>
           </div>
           {{ message.content }}
@@ -337,41 +345,65 @@ function formatFileSize(bytes: number): string {
 
 .user-attachments {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 8px;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-.user-attachment-item {
+.user-att-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.user-att-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.15);
+  flex-shrink: 0;
+}
+
+.user-att-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.user-att-ext {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  letter-spacing: 0.5px;
+}
+
+.user-att-info {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  width: 64px;
-  padding: 4px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.user-att-thumb {
-  width: 40px;
-  height: 40px;
-  object-fit: cover;
-  border-radius: 4px;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
 }
 
 .user-att-name {
-  font-size: 9px;
+  font-size: 12px;
+  font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  width: 100%;
-  text-align: center;
-  opacity: 0.85;
 }
 
 .user-att-size {
-  font-size: 8px;
-  opacity: 0.6;
+  font-size: 10px;
+  opacity: 0.5;
 }
 </style>
