@@ -126,7 +126,7 @@
   --border-medium: var(--color-border-input);
 
   /* === Layout (保持不变) === */
-  --sidebar-width: 220px;
+  --sidebar-width: 240px;
   --sidebar-collapsed-width: 56px;
   --right-panel-width: 280px;
   --right-panel-collapsed-width: 40px;
