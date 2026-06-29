@@ -2,6 +2,7 @@ from db.models.agent import Agent
 from db.models.agent_skill import AgentSkill
 from db.models.agent_tool import AgentTool
 from db.models.ai_model import AIModel
+from db.models.chat_attachment import ChatAttachment
 from db.models.conversation import Conversation
 from db.models.cron_job import CronJob
 from db.models.department import Department
@@ -20,6 +21,7 @@ from db.models.user import Account
 from db.models.user_oauth import UserOAuth
 
 __all__ = [
+    "ChatAttachment",
     "Agent",
     "AgentSkill",
     "AgentTool",
