@@ -2,6 +2,7 @@
 import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
 import { Mic, ArrowUp, Image, Paperclip, Globe, HardDrive, Database } from 'lucide-vue-next'
 import { useChatStore } from '@/stores/chat'
+import AttachmentBar from './AttachmentBar.vue'
 
 const chatStore = useChatStore()
 
@@ -115,6 +116,7 @@ watch(() => chatStore.loading, (loading) => {
 
 <template>
   <div class="input-bar">
+    <AttachmentBar />
     <div class="input-area">
       <textarea
         ref="inputRef"

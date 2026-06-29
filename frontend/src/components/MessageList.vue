@@ -2,7 +2,6 @@
 import { ref, watch, nextTick, computed } from 'vue'
 import { useChatStore } from '@/stores/chat'
 import MessageItem from './MessageItem.vue'
-import AttachmentBar from './AttachmentBar.vue'
 
 const chatStore = useChatStore()
 const scrollContainer = ref(null)
@@ -35,7 +34,6 @@ watch(streamingBlocksLen, scrollToBottom)
 
 <template>
   <div class="message-list" ref="scrollContainer">
-    <AttachmentBar />
     <MessageItem v-for="msg in chatStore.messages" :key="msg.id" :message="msg" />
   </div>
 </template>
