@@ -44,12 +44,12 @@ function openPopover(type) {
   popoverMenu.value = popoverMenu.value === type ? null : type
 }
 
-function selectLocalFile() {
+function triggerFileInput() {
   popoverMenu.value = null
   fileInputRef.value?.click()
 }
 
-function selectLocalImage() {
+function triggerImageInput() {
   popoverMenu.value = null
   imageInputRef.value?.click()
 }
@@ -57,17 +57,37 @@ function selectLocalImage() {
 function onFilesSelected(e) {
   const files = e.target.files
   if (!files || files.length === 0) return
-  // TODO: 接入后端上传 API
-  console.log('选中附件：', [...files].map(f => f.name))
+  for (const file of files) {
+    chatStore.uploadFile(file)
+  }
   e.target.value = ''
 }
 
 function onImagesSelected(e) {
   const files = e.target.files
   if (!files || files.length === 0) return
-  // TODO: 接入后端上传 API
-  console.log('选中图片：', [...files].map(f => f.name))
+  for (const file of files) {
+    chatStore.uploadFile(file)
+  }
   e.target.value = ''
+}
+
+function onPaste(e: ClipboardEvent) {
+  const items = e.clipboardData?.items
+  if (!items) return
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i]
+    if (item.type.startsWith('image/')) {
+      e.preventDefault()
+      const blob = item.getAsFile()
+      if (blob) {
+        const timestamp = Date.now()
+        const ext = item.type.split('/')[1] || 'png'
+        const file = new File([blob], `paste-${timestamp}.${ext}`, { type: item.type })
+        chatStore.uploadFile(file)
+      }
+    }
+  }
 }
 
 function handleClickOutside(e) {
@@ -101,6 +121,7 @@ watch(() => chatStore.loading, (loading) => {
         v-model="inputText"
         @keydown="handleKeydown"
         @input="autoResize"
+        @paste="onPaste"
         :disabled="chatStore.loading"
         placeholder="输入消息..."
         class="input-field"
@@ -127,11 +148,11 @@ watch(() => chatStore.loading, (loading) => {
               <Paperclip :size="16" />
             </button>
             <div v-if="popoverMenu === 'attachment'" class="upload-popover">
-              <div class="popover-item" @click.stop="selectLocalFile">
+              <div class="popover-item" @click.stop="triggerFileInput">
                 <HardDrive :size="14" />
                 <span>上传本地文件</span>
               </div>
-              <div class="popover-item" @click.stop="selectLocalFile">
+              <div class="popover-item" @click.stop="triggerFileInput">
                 <Database :size="14" />
                 <span>上传知识库文件</span>
               </div>
@@ -139,7 +160,8 @@ watch(() => chatStore.loading, (loading) => {
             <input
               ref="fileInputRef"
               type="file"
-              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.py,.java,.csv,.md,.json,.xml,.yaml,.yml"
+              data-attachment-input
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.py,.java,.csv,.md,.json,.xml,.yaml,.yml,.png,.jpg,.jpeg,.gif,.webp,.bmp"
               multiple
               hidden
               @change="onFilesSelected"
@@ -155,11 +177,11 @@ watch(() => chatStore.loading, (loading) => {
               <Image :size="16" />
             </button>
             <div v-if="popoverMenu === 'image'" class="upload-popover">
-              <div class="popover-item" @click.stop="selectLocalImage">
+              <div class="popover-item" @click.stop="triggerImageInput">
                 <HardDrive :size="14" />
                 <span>上传本地图片</span>
               </div>
-              <div class="popover-item" @click.stop="selectLocalImage">
+              <div class="popover-item" @click.stop="triggerImageInput">
                 <Database :size="14" />
                 <span>上传知识库图片</span>
               </div>
